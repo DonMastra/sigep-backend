@@ -1,0 +1,38 @@
+# Git
+.gradle/
+build/
+out/
+*.class
+*.jar
+*.war
+*.ear
+!gradle-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+.classpath
+.project
+.settings/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Application
+application-local.properties
+application-dev.properties
+application-prod.properties
+
+# Secrets
+*.key
+*.pem
+*.env
+
