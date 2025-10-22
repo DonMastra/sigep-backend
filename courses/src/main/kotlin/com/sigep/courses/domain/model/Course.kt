@@ -1,7 +1,6 @@
 package com.sigep.courses.domain.model
 
 import com.sigep.common.domain.AggregateRoot
-import com.sigep.students.domain.model.Student
 import jakarta.persistence.*
 import java.time.LocalDateTime
 
@@ -37,13 +36,8 @@ data class Course(
     @OneToMany(mappedBy = "course", cascade = [CascadeType.ALL], orphanRemoval = true)
     val schedules: MutableList<CourseSchedule> = mutableListOf(),
 
-    @ManyToMany
-    @JoinTable(
-        name = "course_enrollments",
-        joinColumns = [JoinColumn(name = "course_id")],
-        inverseJoinColumns = [JoinColumn(name = "student_id")]
-    )
-    val students: MutableSet<Student> = mutableSetOf(), // Changed from Long to Student entity
+    @OneToMany(mappedBy = "course", cascade = [CascadeType.ALL])
+    val enrollments: MutableList<Enrollment> = mutableListOf(), // Changed from students to enrollments
 
     @Column(nullable = false)
     val createdAt: LocalDateTime = LocalDateTime.now(),

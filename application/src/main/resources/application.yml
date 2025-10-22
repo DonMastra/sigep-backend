@@ -1,0 +1,121 @@
+# Application Configuration
+spring:
+  application:
+    name: sigep-backend
+
+  # PostgreSQL Configuration
+  datasource:
+    url: jdbc:postgresql://localhost:5432/sigep_db
+    username: sigep_user
+    password: sigep_password
+    driver-class-name: org.postgresql.Driver
+
+  # JPA/Hibernate Configuration
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        use_sql_comments: true
+        jdbc:
+          batch_size: 20
+        order_inserts: true
+        order_updates: true
+
+  # Redis Configuration
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: ""
+      timeout: 60000
+
+  cache:
+    type: redis
+    redis:
+      time-to-live: 600000
+
+  # Session Configuration
+  session:
+    timeout: 30m
+
+  # Jackson Configuration
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    time-zone: UTC
+    default-property-inclusion: non_null
+
+  # File Upload Configuration
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 10MB
+      max-request-size: 10MB
+
+# Server Configuration
+server:
+  port: 8080
+  servlet:
+    context-path: /
+    session:
+      timeout: 30m
+
+# JWT Configuration
+jwt:
+  secret: mySecretKeyForJWTTokenGenerationShouldBeAtLeast256BitsLongForHS512Algorithm
+  expiration: 86400000
+  refresh-expiration: 604800000
+
+# Application-specific Configuration
+app:
+  cors:
+    allowed-origins: http://localhost:4200,https://sigep.edu.mx
+  security:
+    rate-limit:
+      enabled: true
+      capacity: 100
+      refill-tokens: 100
+      refill-duration-minutes: 1
+
+# CORS Configuration (legacy)
+cors:
+  allowed-origins: http://localhost:4200,https://sigep.edu.mx
+  allowed-methods: GET,POST,PUT,DELETE,PATCH,OPTIONS
+  allowed-headers: "*"
+  max-age: 3600
+
+# Actuator Configuration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+# Logging Configuration
+logging:
+  level:
+    root: INFO
+    com.sigep: DEBUG
+    org.springframework.security: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+
+# API Documentation
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+

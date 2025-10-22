@@ -14,7 +14,7 @@ interface CourseRepository : JpaRepository<Course, Long> {
     fun findByTeacherId(teacherId: Long, pageable: Pageable): Page<Course>
     fun findByLevel(level: String, pageable: Pageable): Page<Course>
 
-    @Query("SELECT c FROM Course c WHERE :studentId MEMBER OF c.students")
-    fun findByStudentId(studentId: Long, pageable: Pageable): Page<Course>
+    @Query("SELECT c FROM Course c WHERE LOWER(c.name) LIKE LOWER(CONCAT('%', :search, '%')) OR LOWER(c.description) LIKE LOWER(CONCAT('%', :search, '%'))")
+    fun searchCourses(search: String, pageable: Pageable): Page<Course>
 }
 
