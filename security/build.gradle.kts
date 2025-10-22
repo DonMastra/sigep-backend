@@ -27,4 +27,7 @@ dependencies {
 
     // Rate limiting
     implementation("com.bucket4j:bucket4j-core:8.10.1")
+
+    // Swagger/OpenAPI for API documentation
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.2.0")
 }

@@ -9,6 +9,7 @@ include("security")
 // Bounded Context modules
 include("students")
 include("courses")
+include("staff")
 include("scheduling")
 include("payments")
 include("exams")

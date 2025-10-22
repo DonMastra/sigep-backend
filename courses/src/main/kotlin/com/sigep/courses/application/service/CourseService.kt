@@ -1,9 +1,8 @@
 package com.sigep.courses.application.service
 
 import com.sigep.common.application.dto.PageResponse
-import com.sigep.common.application.dto.PaginationInfo
-import com.sigep.common.application.exception.BusinessException
-import com.sigep.common.application.exception.ResourceNotFoundException
+import com.sigep.common.domain.exception.ResourceNotFoundException
+import com.sigep.common.domain.exception.BusinessException
 import com.sigep.courses.application.dto.*
 import com.sigep.courses.domain.model.*
 import com.sigep.courses.domain.repository.CourseRepository
@@ -43,13 +42,11 @@ class CourseService(
         val coursesPage = courseRepository.findAll(pageable)
 
         return PageResponse(
-            items = coursesPage.content.map { it.toDto() },
-            pagination = PaginationInfo(
-                page = page,
-                limit = size,
-                total = coursesPage.totalElements,
-                totalPages = coursesPage.totalPages
-            )
+            content = coursesPage.content.map { it.toDto() },
+            page = coursesPage.number,
+            size = coursesPage.size,
+            totalElements = coursesPage.totalElements,
+            totalPages = coursesPage.totalPages
         )
     }
 
@@ -60,13 +57,11 @@ class CourseService(
         val coursesPage = courseRepository.searchCourses(search, pageable)
 
         return PageResponse(
-            items = coursesPage.content.map { it.toDto() },
-            pagination = PaginationInfo(
-                page = page,
-                limit = size,
-                total = coursesPage.totalElements,
-                totalPages = coursesPage.totalPages
-            )
+            content = coursesPage.content.map { it.toDto() },
+            page = coursesPage.number,
+            size = coursesPage.size,
+            totalElements = coursesPage.totalElements,
+            totalPages = coursesPage.totalPages
         )
     }
 
@@ -77,13 +72,11 @@ class CourseService(
         val coursesPage = courseRepository.findByTeacherId(teacherId, pageable)
 
         return PageResponse(
-            items = coursesPage.content.map { it.toDto() },
-            pagination = PaginationInfo(
-                page = page,
-                limit = size,
-                total = coursesPage.totalElements,
-                totalPages = coursesPage.totalPages
-            )
+            content = coursesPage.content.map { it.toDto() },
+            page = coursesPage.number,
+            size = coursesPage.size,
+            totalElements = coursesPage.totalElements,
+            totalPages = coursesPage.totalPages
         )
     }
 

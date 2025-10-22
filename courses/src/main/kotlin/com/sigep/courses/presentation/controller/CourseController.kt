@@ -4,6 +4,7 @@ import com.sigep.common.application.dto.ApiResponse
 import com.sigep.common.application.dto.PageResponse
 import com.sigep.courses.application.dto.*
 import com.sigep.courses.application.service.CourseService
+import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.*
 
 @RestController
 @RequestMapping("/api/v1/courses")
+@Tag(name = "Courses", description = "API for managing courses available in the Institute")
 class CourseController(
     private val courseService: CourseService
 ) {
