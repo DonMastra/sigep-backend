@@ -10,6 +10,7 @@ dependencies {
     implementation(project(":security"))
     implementation(project(":students"))
     implementation(project(":courses"))
+    implementation(project(":staff"))
     implementation(project(":scheduling"))
     implementation(project(":payments"))
     implementation(project(":exams"))

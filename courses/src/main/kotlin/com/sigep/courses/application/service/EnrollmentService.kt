@@ -1,8 +1,7 @@
 package com.sigep.courses.application.service
 
 import com.sigep.common.application.dto.PageResponse
-import com.sigep.common.application.dto.PaginationInfo
-import com.sigep.common.application.exception.ResourceNotFoundException
+import com.sigep.common.domain.exception.ResourceNotFoundException
 import com.sigep.courses.application.dto.EnrollmentDto
 import com.sigep.courses.application.dto.StudentEnrollmentHistoryDto
 import com.sigep.courses.application.dto.UpdateEnrollmentRequest
@@ -38,13 +37,11 @@ class EnrollmentService(
         val enrollmentsPage = enrollmentRepository.findByStudentId(studentId, pageable)
 
         return PageResponse(
-            items = enrollmentsPage.content.map { it.toDto() },
-            pagination = PaginationInfo(
-                page = page,
-                limit = size,
-                total = enrollmentsPage.totalElements,
-                totalPages = enrollmentsPage.totalPages
-            )
+            content = enrollmentsPage.content.map { it.toDto() },
+            page = enrollmentsPage.number,
+            size = enrollmentsPage.size,
+            totalElements = enrollmentsPage.totalElements,
+            totalPages = enrollmentsPage.totalPages
         )
     }
 
@@ -71,13 +68,11 @@ class EnrollmentService(
         val enrollmentsPage = enrollmentRepository.findByCourseId(courseId, pageable)
 
         return PageResponse(
-            items = enrollmentsPage.content.map { it.toDto() },
-            pagination = PaginationInfo(
-                page = page,
-                limit = size,
-                total = enrollmentsPage.totalElements,
-                totalPages = enrollmentsPage.totalPages
-            )
+            content = enrollmentsPage.content.map { it.toDto() },
+            page = enrollmentsPage.number,
+            size = enrollmentsPage.size,
+            totalElements = enrollmentsPage.totalElements,
+            totalPages = enrollmentsPage.totalPages
         )
     }
 

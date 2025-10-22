@@ -1,9 +1,8 @@
 package com.sigep.students.application.service
 
 import com.sigep.common.application.dto.PageResponse
-import com.sigep.common.application.dto.PaginationInfo
-import com.sigep.common.application.exception.DuplicateResourceException
-import com.sigep.common.application.exception.ResourceNotFoundException
+import com.sigep.common.domain.exception.ResourceNotFoundException
+import com.sigep.common.domain.exception.DuplicateResourceException
 import com.sigep.students.application.dto.CreateStudentRequest
 import com.sigep.students.application.dto.StudentDto
 import com.sigep.students.application.dto.UpdateStudentRequest
@@ -45,13 +44,11 @@ class StudentService(
         val studentsPage = studentRepository.findAll(pageable)
 
         return PageResponse(
-            items = studentsPage.content.map { it.toDto() },
-            pagination = PaginationInfo(
-                page = page,
-                limit = size,
-                total = studentsPage.totalElements,
-                totalPages = studentsPage.totalPages
-            )
+            content = studentsPage.content.map { it.toDto() },
+            page = studentsPage.number,
+            size = studentsPage.size,
+            totalElements = studentsPage.totalElements,
+            totalPages = studentsPage.totalPages
         )
     }
 
@@ -62,13 +59,11 @@ class StudentService(
         val studentsPage = studentRepository.searchStudents(search, pageable)
 
         return PageResponse(
-            items = studentsPage.content.map { it.toDto() },
-            pagination = PaginationInfo(
-                page = page,
-                limit = size,
-                total = studentsPage.totalElements,
-                totalPages = studentsPage.totalPages
-            )
+            content = studentsPage.content.map { it.toDto() },
+            page = studentsPage.number,
+            size = studentsPage.size,
+            totalElements = studentsPage.totalElements,
+            totalPages = studentsPage.totalPages
         )
     }
 
@@ -151,13 +146,11 @@ class StudentService(
         val studentsPage = studentRepository.findByGuardianId(guardianId, pageable)
 
         return PageResponse(
-            items = studentsPage.content.map { it.toDto() },
-            pagination = PaginationInfo(
-                page = page,
-                limit = size,
-                total = studentsPage.totalElements,
-                totalPages = studentsPage.totalPages
-            )
+            content = studentsPage.content.map { it.toDto() },
+            page = studentsPage.number,
+            size = studentsPage.size,
+            totalElements = studentsPage.totalElements,
+            totalPages = studentsPage.totalPages
         )
     }
 

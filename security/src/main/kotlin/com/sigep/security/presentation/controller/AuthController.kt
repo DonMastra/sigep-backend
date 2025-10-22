@@ -3,6 +3,7 @@ package com.sigep.security.presentation.controller
 import com.sigep.common.application.dto.ApiResponse
 import com.sigep.security.application.dto.*
 import com.sigep.security.application.service.AuthService
+import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -10,6 +11,7 @@ import org.springframework.web.bind.annotation.*
 
 @RestController
 @RequestMapping("/api/v1/auth")
+@Tag(name = "Auth", description = "API for managing authentication flow")
 class AuthController(
     private val authService: AuthService
 ) {

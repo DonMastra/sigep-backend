@@ -4,14 +4,10 @@ package com.sigep.common.application.dto
  * Paginated response wrapper
  */
 data class PageResponse<T>(
-    val items: List<T>,
-    val pagination: PaginationInfo
-)
-
-data class PaginationInfo(
+    val content: List<T>,
     val page: Int,
-    val limit: Int,
-    val total: Long,
+    val size: Int,
+    val totalElements: Long,
     val totalPages: Int
 )
 
