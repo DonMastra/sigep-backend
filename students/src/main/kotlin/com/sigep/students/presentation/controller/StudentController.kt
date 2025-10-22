@@ -6,20 +6,28 @@ import com.sigep.students.application.dto.CreateStudentRequest
 import com.sigep.students.application.dto.StudentDto
 import com.sigep.students.application.dto.UpdateStudentRequest
 import com.sigep.students.application.service.StudentService
+import com.sigep.security.application.annotation.RequireAdmin
+import com.sigep.security.application.annotation.RequireAdminOrTeacher
+import com.sigep.security.application.annotation.RequireStaffOrGuardian
+import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.security.SecurityRequirement
+import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
-import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.web.bind.annotation.*
 
 @RestController
 @RequestMapping("/api/v1/students")
+@Tag(name = "Students", description = "API for managing students")
+@SecurityRequirement(name = "Bearer Authentication")
 class StudentController(
     private val studentService: StudentService
 ) {
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
+    @RequireAdminOrTeacher
+    @Operation(summary = "Get all students", description = "Retrieve a paginated list of all students")
     fun getAllStudents(
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(defaultValue = "10") limit: Int,
@@ -31,14 +39,16 @@ class StudentController(
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER', 'GUARDIAN')")
+    @RequireStaffOrGuardian
+    @Operation(summary = "Get student by ID", description = "Retrieve a specific student by their ID")
     fun getStudentById(@PathVariable id: Long): ResponseEntity<ApiResponse<StudentDto>> {
         val student = studentService.getStudentById(id)
         return ResponseEntity.ok(ApiResponse.success(student))
     }
 
     @GetMapping("/search")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
+    @RequireAdminOrTeacher
+    @Operation(summary = "Search students", description = "Search students by name, email or document number")
     fun searchStudents(
         @RequestParam query: String,
         @RequestParam(defaultValue = "0") page: Int,
@@ -49,7 +59,8 @@ class StudentController(
     }
 
     @GetMapping("/guardian/{guardianId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER', 'GUARDIAN')")
+    @RequireStaffOrGuardian
+    @Operation(summary = "Get students by guardian", description = "Retrieve all students assigned to a specific guardian")
     fun getStudentsByGuardian(
         @PathVariable guardianId: Long,
         @RequestParam(defaultValue = "0") page: Int,
@@ -60,7 +71,8 @@ class StudentController(
     }
 
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @RequireAdmin
+    @Operation(summary = "Create student", description = "Create a new student (Admin only)")
     fun createStudent(@Valid @RequestBody request: CreateStudentRequest): ResponseEntity<ApiResponse<StudentDto>> {
         val student = studentService.createStudent(request)
         return ResponseEntity
@@ -69,7 +81,8 @@ class StudentController(
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @RequireAdmin
+    @Operation(summary = "Update student", description = "Update student information (Admin only)")
     fun updateStudent(
         @PathVariable id: Long,
         @Valid @RequestBody request: UpdateStudentRequest
@@ -79,9 +92,21 @@ class StudentController(
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @RequireAdmin
+    @Operation(summary = "Delete student", description = "Delete a student (Admin only)")
     fun deleteStudent(@PathVariable id: Long): ResponseEntity<ApiResponse<Unit>> {
         studentService.deleteStudent(id)
         return ResponseEntity.ok(ApiResponse.successNoContent("Student deleted successfully"))
+    }
+
+    @GetMapping("/{id}/courses")
+    @RequireStaffOrGuardian
+    @Operation(summary = "Get student courses", description = "Redirect to enrollment history endpoint")
+    fun getStudentCourses(@PathVariable id: Long): ResponseEntity<ApiResponse<Any>> {
+        // Esta funcionalidad se implementa a través de /api/v1/enrollments/student/{id}/history
+        return ResponseEntity.ok(ApiResponse.success(
+            mapOf("redirectTo" to "/api/v1/enrollments/student/$id/history"),
+            "Use enrollments endpoint for course history"
+        ))
     }
 }

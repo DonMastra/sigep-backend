@@ -24,4 +24,7 @@ dependencies {
 
     // Validation
     implementation("org.springframework.boot:spring-boot-starter-validation")
+
+    // Rate limiting
+    implementation("com.bucket4j:bucket4j-core:8.10.1")
 }

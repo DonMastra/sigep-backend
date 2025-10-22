@@ -1,0 +1,50 @@
+# Development Environment Configuration
+
+spring:
+  # PostgreSQL Configuration
+  datasource:
+    url: jdbc:postgresql://localhost:5432/sigep_db
+    username: sigep_user
+    password: sigep_password
+
+  # JPA/Hibernate Configuration
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+# JWT Configuration (shorter expiration for development)
+jwt:
+  expiration: 3600000
+  refresh-expiration: 86400000
+
+# CORS Configuration (allow local development)
+app:
+  cors:
+    allowed-origins: http://localhost:4200,http://localhost:3000
+  security:
+    rate-limit:
+      capacity: 1000
+      refill-tokens: 1000
+
+# Actuator (expose all endpoints in dev)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+  endpoint:
+    health:
+      show-details: always
+
+# Logging Configuration
+logging:
+  level:
+    root: INFO
+    com.sigep: DEBUG
+    org.springframework.security: DEBUG
+    org.hibernate.SQL: DEBUG
+
