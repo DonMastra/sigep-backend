@@ -96,5 +96,60 @@ class CourseController(
             .status(HttpStatus.CREATED)
             .body(ApiResponse.success(enrollment, "Student enrolled successfully"))
     }
+
+    @PostMapping("/filter")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
+    fun filterCourses(
+        @RequestBody filter: CourseFilterRequest,
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "10") limit: Int
+    ): ResponseEntity<ApiResponse<PageResponse<CourseDto>>> {
+        val courses = courseService.filterCourses(filter, page, limit)
+        return ResponseEntity.ok(ApiResponse.success(courses))
+    }
+
+    @GetMapping("/published")
+    fun getPublishedCourses(
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "10") limit: Int
+    ): ResponseEntity<ApiResponse<PageResponse<CourseSimpleDto>>> {
+        val courses = courseService.getPublishedCourses(page, limit)
+        return ResponseEntity.ok(ApiResponse.success(courses))
+    }
+
+    @GetMapping("/statistics")
+    @PreAuthorize("hasRole('ADMIN')")
+    fun getCourseStatistics(): ResponseEntity<ApiResponse<CourseStatisticsDto>> {
+        val statistics = courseService.getCourseStatistics()
+        return ResponseEntity.ok(ApiResponse.success(statistics))
+    }
+
+    @PutMapping("/{id}/publish")
+    @PreAuthorize("hasRole('ADMIN')")
+    fun publishCourse(@PathVariable id: Long): ResponseEntity<ApiResponse<CourseDto>> {
+        val course = courseService.publishCourse(id)
+        return ResponseEntity.ok(ApiResponse.success(course, "Course published successfully"))
+    }
+
+    @PutMapping("/{id}/unpublish")
+    @PreAuthorize("hasRole('ADMIN')")
+    fun unpublishCourse(@PathVariable id: Long): ResponseEntity<ApiResponse<CourseDto>> {
+        val course = courseService.unpublishCourse(id)
+        return ResponseEntity.ok(ApiResponse.success(course, "Course unpublished successfully"))
+    }
+
+    @PutMapping("/{id}/activate")
+    @PreAuthorize("hasRole('ADMIN')")
+    fun activateCourse(@PathVariable id: Long): ResponseEntity<ApiResponse<CourseDto>> {
+        val course = courseService.activateCourse(id)
+        return ResponseEntity.ok(ApiResponse.success(course, "Course activated successfully"))
+    }
+
+    @PutMapping("/{id}/deactivate")
+    @PreAuthorize("hasRole('ADMIN')")
+    fun deactivateCourse(@PathVariable id: Long): ResponseEntity<ApiResponse<CourseDto>> {
+        val course = courseService.deactivateCourse(id)
+        return ResponseEntity.ok(ApiResponse.success(course, "Course deactivated successfully"))
+    }
 }
 
