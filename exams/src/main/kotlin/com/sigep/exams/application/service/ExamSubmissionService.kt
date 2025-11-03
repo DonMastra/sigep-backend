@@ -89,8 +89,12 @@ class ExamSubmissionService(
                 examTitle = exam?.title ?: "Examen no encontrado",
                 scheduledAt = exam?.scheduledAt,
                 totalPoints = exam?.totalPoints ?: java.math.BigDecimal.ZERO,
+                assignedTeachers = exam?.assignedTeachers?.let {
+                    it.split(",").map { id -> UUID.fromString(id.trim()) }
+                },
                 score = submission.score,
                 status = submission.status,
+                gradedBy = submission.gradedBy,
                 gradedAt = submission.gradedAt,
                 feedback = submission.feedback
             )

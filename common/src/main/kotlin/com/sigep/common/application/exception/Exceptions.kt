@@ -1,8 +1,5 @@
 package com.sigep.common.application.exception
 
-/**
- * Base exception for business logic errors
- */
 open class BusinessException(
     override val message: String,
     val code: String = "BUSINESS_ERROR"

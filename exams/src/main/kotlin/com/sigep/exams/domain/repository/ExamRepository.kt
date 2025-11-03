@@ -52,5 +52,52 @@ interface ExamRepository : JpaRepository<Exam, UUID> {
     fun findVisibleExams(@Param("now") now: LocalDateTime, pageable: Pageable): Page<Exam>
 
     fun existsByCourseIdAndTitleAndIdNot(courseId: UUID, title: String, id: UUID): Boolean
+
+    /**
+     * Encuentra exámenes asignados a un docente específico
+     */
+    @Query("""
+        SELECT e FROM Exam e 
+        WHERE e.assignedTeachers LIKE CONCAT('%', :teacherId, '%')
+    """)
+    fun findByTeacherId(@Param("teacherId") teacherId: UUID, pageable: Pageable): Page<Exam>
+
+    /**
+     * Encuentra exámenes asignados a un docente con filtro por estado
+     */
+    @Query("""
+        SELECT e FROM Exam e 
+        WHERE e.assignedTeachers LIKE CONCAT('%', :teacherId, '%')
+        AND e.status IN :statuses
+    """)
+    fun findByTeacherIdAndStatusIn(
+        @Param("teacherId") teacherId: UUID,
+        @Param("statuses") statuses: List<ExamStatus>,
+        pageable: Pageable
+    ): Page<Exam>
+
+    /**
+     * Cuenta exámenes por docente
+     */
+    @Query("""
+        SELECT COUNT(e) FROM Exam e 
+        WHERE e.assignedTeachers LIKE CONCAT('%', :teacherId, '%')
+    """)
+    fun countByTeacherId(@Param("teacherId") teacherId: UUID): Long
+
+    /**
+     * Encuentra exámenes de un docente en un rango de fechas
+     */
+    @Query("""
+        SELECT e FROM Exam e 
+        WHERE e.assignedTeachers LIKE CONCAT('%', :teacherId, '%')
+        AND e.scheduledAt BETWEEN :start AND :end
+        ORDER BY e.scheduledAt DESC
+    """)
+    fun findByTeacherIdAndScheduledBetween(
+        @Param("teacherId") teacherId: UUID,
+        @Param("start") start: LocalDateTime,
+        @Param("end") end: LocalDateTime
+    ): List<Exam>
 }
 

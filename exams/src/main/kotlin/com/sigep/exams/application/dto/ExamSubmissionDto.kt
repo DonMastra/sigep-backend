@@ -5,9 +5,6 @@ import java.math.BigDecimal
 import java.time.LocalDateTime
 import java.util.UUID
 
-/**
- * DTO de respuesta para ExamSubmission
- */
 data class ExamSubmissionDto(
     val id: UUID,
     val examId: UUID,
@@ -27,40 +24,29 @@ data class ExamSubmissionDto(
     val createdBy: UUID
 )
 
-/**
- * DTO para crear un submission (registro de estudiante que rindió)
- */
 data class CreateSubmissionRequest(
     val examId: UUID,
     val studentId: UUID,
     val notes: String? = null
 )
 
-/**
- * DTO para cargar calificación
- */
 data class GradeSubmissionRequest(
     val score: BigDecimal,
     val feedback: String? = null,
     val notes: String? = null
 )
 
-/**
- * DTO para actualizar calificación existente
- */
 data class UpdateGradeRequest(
     val score: BigDecimal,
     val feedback: String? = null,
     val reason: String
 )
 
-/**
- * DTO de respuesta para submission con información del estudiante
- */
 data class SubmissionWithStudentDto(
     val id: UUID,
     val examId: UUID,
     val examTitle: String,
+    val examAssignedTeachers: List<UUID>? = null,
     val studentId: UUID,
     val studentName: String,
     val studentEmail: String,
@@ -73,9 +59,6 @@ data class SubmissionWithStudentDto(
     val scannedFilePath: String?
 )
 
-/**
- * DTO de historial de calificaciones del estudiante
- */
 data class StudentExamHistoryDto(
     val studentId: UUID,
     val courseId: UUID,
@@ -88,8 +71,10 @@ data class ExamResultSummary(
     val examTitle: String,
     val scheduledAt: LocalDateTime?,
     val totalPoints: BigDecimal,
+    val assignedTeachers: List<UUID>? = null,
     val score: BigDecimal?,
     val status: SubmissionStatus,
+    val gradedBy: UUID?,
     val gradedAt: LocalDateTime?,
     val feedback: String?
 )

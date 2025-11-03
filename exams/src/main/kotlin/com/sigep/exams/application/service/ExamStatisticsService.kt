@@ -67,6 +67,9 @@ class ExamStatisticsService(
         return ExamStatisticsDto(
             examId = exam.id,
             examTitle = exam.title,
+            assignedTeachers = exam.assignedTeachers?.let {
+                it.split(",").map { id -> UUID.fromString(id.trim()) }
+            },
             totalStudents = submittedCount,
             submittedCount = submittedCount,
             gradedCount = gradedCount,

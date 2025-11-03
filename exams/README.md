@@ -1,5 +1,7 @@
 # Módulo de Exámenes (Exams)
 
+> 📚 **[Ver Índice de Documentación](DOCUMENTATION_INDEX.md)** - Guía completa de todos los documentos disponibles
+
 ## Descripción
 
 Módulo para la gestión de exámenes presenciales y carga de calificaciones del instituto de inglés.
@@ -11,6 +13,7 @@ Módulo para la gestión de exámenes presenciales y carga de calificaciones del
 - Historial de cambios de notas (auditoría)
 - Adjuntar archivos escaneados de exámenes
 - Estadísticas y reportes por examen y curso
+- **🆕 Análisis de rendimiento de docentes** - Métricas de performance y gestión
 - Control de acceso por roles (Admin, Teacher, Student)
 
 ### Fase 2 - Funcionalidad Futura (Online)
@@ -33,6 +36,7 @@ Módulo para la gestión de exámenes presenciales y carga de calificaciones del
   - `ExamService`: Gestión de exámenes
   - `ExamSubmissionService`: Gestión de calificaciones
   - `ExamStatisticsService`: Estadísticas y reportes
+  - `TeacherPerformanceService`: **🆕 Análisis de rendimiento de docentes**
 - **DTOs**: Objetos de transferencia de datos
 
 ### Infrastructure Layer
@@ -43,6 +47,7 @@ Módulo para la gestión de exámenes presenciales y carga de calificaciones del
 - **Controllers**: Endpoints REST
   - `ExamController`: CRUD de exámenes
   - `ExamSubmissionController`: Gestión de calificaciones
+  - `TeacherPerformanceController`: **🆕 Análisis de rendimiento de docentes**
 
 ## Modelo de Datos
 
@@ -179,6 +184,31 @@ Cancelar un submission
 Obtener historial de cambios de calificación
 - Requiere: `TEACHER` o `ADMIN`
 
+### 🆕 Análisis de Rendimiento de Docentes
+
+#### GET `/api/v1/teachers/{teacherId}/performance`
+Obtener estadísticas completas de rendimiento de un docente
+- Requiere: `ADMIN`
+- Retorna:
+  - Total de exámenes creados, publicados y cerrados
+  - Total de estudiantes evaluados
+  - Promedio general de calificaciones
+  - Tasa de aprobación general
+  - Distribución de exámenes por estado
+  - Estadísticas por curso
+  - Lista de exámenes recientes
+
+#### GET `/api/v1/teachers/{teacherId}/exams`
+Obtener lista de exámenes de un docente
+- Requiere: `ADMIN` o `TEACHER` (propio)
+- Query params: `statuses`, `page`, `size`, `sort`, `order`
+
+#### POST `/api/v1/teachers/compare`
+Comparar rendimiento de múltiples docentes
+- Requiere: `ADMIN`
+- Body: Array de IDs de docentes
+- Retorna: Mapa con estadísticas de cada docente
+
 ## Reglas de Negocio
 
 ### Exámenes
@@ -200,10 +230,53 @@ Obtener historial de cambios de calificación
 
 - **Courses**: Los exámenes pertenecen a cursos
 - **Students**: Las calificaciones se asocian a estudiantes
+- **Staff**: **🆕 Relación con docentes (TeachingStaff)** - Los exámenes tienen docentes asignados para análisis de rendimiento y gestión
 - **Security**: Control de acceso por roles
 - **Communications**: Notificaciones de exámenes publicados/calificados (futuro)
 - **Scheduling**: Integración con calendario (futuro)
 - **Reports**: Exportación de estadísticas (futuro)
+
+## Análisis de Rendimiento de Docentes
+
+### Métricas Disponibles
+
+El módulo ahora permite realizar un **análisis integral del rendimiento de los docentes** basándose en:
+
+1. **Gestión de Exámenes**
+   - Cantidad de exámenes creados
+   - Exámenes publicados vs. en borrador
+   - Exámenes cerrados (completados)
+
+2. **Resultados Académicos**
+   - Promedio de calificaciones de los estudiantes
+   - Tasa de aprobación en sus cursos
+   - Distribución de calificaciones
+
+3. **Indicadores por Curso**
+   - Desempeño en cada curso asignado
+   - Cantidad de estudiantes evaluados
+   - Promedios y tasas de aprobación por curso
+
+4. **Tendencias Temporales**
+   - Exámenes recientes
+   - Evolución del rendimiento
+
+### Casos de Uso
+
+- **Gestión de RRHH**: Evaluar objetivamente el desempeño docente
+- **Identificación de necesidades**: Detectar docentes que requieren capacitación
+- **Reconocimientos**: Identificar docentes con excelentes resultados
+- **Toma de decisiones**: Asignación de cursos basada en performance
+- **Auditoría académica**: Análisis de calidad educativa
+
+### Frontend Integration
+
+Para el frontend Angular, estos endpoints permiten:
+- Dashboard de métricas por docente
+- Comparación visual entre docentes
+- Gráficos de tendencias y distribuciones
+- Reportes exportables de rendimiento
+
 
 ## Caché
 

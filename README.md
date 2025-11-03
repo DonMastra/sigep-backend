@@ -198,13 +198,108 @@ http://localhost:8080/api/v1
 
 Ver documentación completa en: `http://localhost:8080/swagger-ui.html`
 
+### 🆕 Análisis de Rendimiento de Docentes (Exams Module)
+
+| Método | Endpoint | Descripción | Roles |
+|--------|----------|-------------|-------|
+| GET | `/teachers/{teacherId}/performance` | Obtener métricas de rendimiento del docente | ADMIN |
+| GET | `/teachers/{teacherId}/exams` | Listar exámenes del docente | ADMIN, TEACHER |
+| POST | `/teachers/compare` | Comparar rendimiento entre docentes | ADMIN |
+
+**Métricas incluidas:**
+- Total de exámenes creados, publicados y cerrados
+- Total de estudiantes evaluados
+- Promedio general de calificaciones
+- Tasa de aprobación
+- Estadísticas por curso
+- Distribución de exámenes por estado
+
 ## 🔐 Roles y Permisos
 
 - **ADMIN**: Acceso total al sistema
 - **TEACHER**: Acceso a estudiantes, cursos, exámenes
 - **GUARDIAN**: Acceso limitado a información de sus estudiantes
 
-## 📊 Monitoreo
+## 🔗 Integración entre Módulos
+
+El sistema implementa relaciones entre módulos siguiendo principios de DDD:
+
+### Relaciones Principales
+
+```
+┌─────────────┐
+│   Security  │ ◄──────────────────────────┐
+└──────┬──────┘                            │
+       │ Autenticación/Autorización        │
+       │                                   │
+┌──────▼──────┐      ┌──────────────┐     │
+│  Students   │◄────►│   Courses    │     │
+└──────┬──────┘      └──────┬───────┘     │
+       │                    │              │
+       │                    │              │
+┌──────▼──────┐      ┌──────▼───────┐     │
+│    Exams    │◄────►│    Staff     │─────┘
+└──────┬──────┘      └──────────────┘
+       │
+┌──────▼──────┐      ┌──────────────┐
+│  Payments   │      │ Scheduling   │
+└─────────────┘      └──────────────┘
+```
+
+### Casos de Uso de Integración
+
+#### 1. **Exams ↔ Students ↔ Courses**
+- Un examen pertenece a un curso
+- Los estudiantes se inscriben en cursos
+- Las calificaciones se registran por estudiante y examen
+
+#### 2. **Exams ↔ Staff (Docentes)**
+- Los exámenes tienen docentes asignados (`assignedTeachers`)
+- Permite análisis de rendimiento del docente
+- Métricas: exámenes creados, resultados obtenidos, tasas de aprobación
+
+#### 3. **Courses ↔ Students ↔ Scheduling**
+- Los cursos tienen sesiones programadas
+- Los estudiantes asisten a las sesiones
+- Control de asistencia y horarios
+
+#### 4. **Students ↔ Payments**
+- Gestión de cuotas mensuales
+- Historial de pagos por estudiante
+
+### Consultas Cross-Module
+
+**Ejemplo: Ver rendimiento integral de un estudiante**
+```kotlin
+// Obtener estudiante (Students module)
+val student = studentService.getStudent(studentId)
+
+// Obtener cursos inscritos (Courses module)
+val enrollments = enrollmentService.getStudentEnrollments(studentId)
+
+// Obtener exámenes y calificaciones (Exams module)
+val examHistory = examSubmissionService.getStudentHistory(studentId, courseId)
+
+// Obtener estado de pagos (Payments module - futuro)
+val paymentStatus = paymentService.getStudentPaymentStatus(studentId)
+```
+
+**Ejemplo: Dashboard de docente**
+```kotlin
+// Obtener información del docente (Staff module)
+val teacher = teachingStaffService.getById(teacherId)
+
+// Obtener cursos asignados (Courses module)
+val assignedCourses = courseService.getTeacherCourses(teacherId)
+
+// Obtener estadísticas de rendimiento (Exams module)
+val performance = teacherPerformanceService.getTeacherPerformance(teacherId)
+
+// Combinar datos para dashboard
+val dashboard = TeacherDashboard(teacher, assignedCourses, performance)
+```
+
+## 🔄 Migración a Microservicios
 
 ### Actuator Endpoints
 

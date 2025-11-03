@@ -6,9 +6,6 @@ import java.math.BigDecimal
 import java.time.LocalDateTime
 import java.util.UUID
 
-/**
- * DTO de respuesta para Exam
- */
 data class ExamDto(
     val id: UUID,
     val courseId: UUID,
@@ -32,9 +29,6 @@ data class ExamDto(
     val updatedBy: UUID?
 )
 
-/**
- * DTO de solicitud para crear un examen
- */
 data class CreateExamRequest(
     val courseId: UUID,
     val title: String,
@@ -50,9 +44,6 @@ data class CreateExamRequest(
     val roomInfo: String? = null
 )
 
-/**
- * DTO de solicitud para actualizar un examen
- */
 data class UpdateExamRequest(
     val title: String?,
     val description: String?,
@@ -67,9 +58,6 @@ data class UpdateExamRequest(
     val roomInfo: String?
 )
 
-/**
- * DTO de respuesta resumida de examen para listados
- */
 data class ExamSummaryDto(
     val id: UUID,
     val courseId: UUID,
@@ -78,8 +66,30 @@ data class ExamSummaryDto(
     val scheduledAt: LocalDateTime?,
     val totalPoints: BigDecimal,
     val weight: BigDecimal,
+    val assignedTeachers: List<UUID>? = null,
     val totalSubmissions: Int = 0,
     val gradedSubmissions: Int = 0,
     val pendingSubmissions: Int = 0
+)
+
+data class TeacherPerformanceDto(
+    val teacherId: UUID,
+    val totalExamsCreated: Int,
+    val totalExamsPublished: Int,
+    val totalExamsClosed: Int,
+    val totalStudentsEvaluated: Int,
+    val averageScore: BigDecimal?,
+    val passRate: BigDecimal?,
+    val examsByStatus: Map<ExamStatus, Int>,
+    val examsByCourse: Map<UUID, CourseExamSummaryDto>,
+    val recentExams: List<ExamSummaryDto>
+)
+
+data class CourseExamSummaryDto(
+    val courseId: UUID,
+    val totalExams: Int,
+    val averageScore: BigDecimal?,
+    val passRate: BigDecimal?,
+    val totalStudents: Int
 )
 

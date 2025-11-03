@@ -6,9 +6,6 @@ import org.springframework.stereotype.Service
 @Service("securityService")
 class SecurityService {
 
-    /**
-     * Check if the authenticated user is the owner of the resource or has admin/teacher role
-     */
     fun isOwnResource(authentication: Authentication, resourceId: Long): Boolean {
         val userId = authentication.details as? Map<*, *>
         val userIdFromToken = userId?.get("userId") as? Long
@@ -16,9 +13,6 @@ class SecurityService {
         return userIdFromToken == resourceId
     }
 
-    /**
-     * Check if user has permission to access student data
-     */
     fun canAccessStudent(authentication: Authentication, studentId: Long): Boolean {
         val authorities = authentication.authorities.map { it.authority }
 
