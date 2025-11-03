@@ -3,9 +3,6 @@ package com.sigep.common.application.dto
 import com.fasterxml.jackson.annotation.JsonFormat
 import java.time.LocalDateTime
 
-/**
- * Standard API Response wrapper
- */
 data class ApiResponse<T>(
     val success: Boolean,
     val data: T? = null,

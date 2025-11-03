@@ -4,9 +4,6 @@ import java.math.BigDecimal
 import java.time.LocalDateTime
 import java.util.UUID
 
-/**
- * DTO de historial de cambios de calificación
- */
 data class GradeHistoryDto(
     val id: UUID,
     val submissionId: UUID,
@@ -18,12 +15,10 @@ data class GradeHistoryDto(
     val reason: String?
 )
 
-/**
- * DTO de estadísticas de un examen
- */
 data class ExamStatisticsDto(
     val examId: UUID,
     val examTitle: String,
+    val assignedTeachers: List<UUID>? = null,
     val totalStudents: Int,
     val submittedCount: Int,
     val gradedCount: Int,
@@ -35,9 +30,6 @@ data class ExamStatisticsDto(
     val scoreDistribution: Map<String, Int> // Rangos de notas
 )
 
-/**
- * DTO de estadísticas de un curso
- */
 data class CourseExamStatisticsDto(
     val courseId: UUID,
     val totalExams: Int,
