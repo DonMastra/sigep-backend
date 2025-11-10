@@ -1,0 +1,9 @@
+${AnsiColor.GREEN}${AnsiStyle.BOLD}
+ ____          ____    _____    ____
+/ ___   (_)   / ___|  | ____|  |  _ \
+\___ \  | |  | |  _   |  _|    | |_) |
+ ___)   | |  | |_| |  | |___   |  __/
+|____/  |_|   \____|  |_____|  |_|
+SiGEP ${sigep.version}
+Spring Boot ${spring-boot.formatted-version}
+${AnsiStyle.NORMAL}${AnsiColor.DEFAULT}

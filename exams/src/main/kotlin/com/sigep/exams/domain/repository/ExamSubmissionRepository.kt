@@ -53,7 +53,7 @@ interface ExamSubmissionRepository : JpaRepository<ExamSubmission, UUID> {
             SELECT e.id FROM Exam e WHERE e.courseId = :courseId
         )
         AND s.studentId = :studentId
-        ORDER BY s.auditMetadata.createdAt DESC
+        ORDER BY s.createdAt DESC
     """)
     fun findStudentSubmissionsByCourse(
         @Param("studentId") studentId: UUID,

@@ -8,7 +8,7 @@ import java.time.LocalTime
 @Table(
     name = "staff_attendance",
     indexes = [
-        Index(name = "idx_attendance_date", columnList = "attendance_date"),
+        //Index(name = "idx_attendance_date", columnList = "attendance_date"),
         Index(name = "idx_teaching_staff_id", columnList = "teaching_staff_id"),
         Index(name = "idx_non_teaching_staff_id", columnList = "non_teaching_staff_id")
     ]
