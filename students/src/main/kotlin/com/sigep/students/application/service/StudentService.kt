@@ -3,11 +3,9 @@ package com.sigep.students.application.service
 import com.sigep.common.application.dto.PageResponse
 import com.sigep.common.domain.exception.ResourceNotFoundException
 import com.sigep.common.domain.exception.DuplicateResourceException
-import com.sigep.students.application.dto.CreateStudentRequest
-import com.sigep.students.application.dto.StudentDto
-import com.sigep.students.application.dto.UpdateStudentRequest
+import com.sigep.common.application.service.EnrollmentServiceProvider
+import com.sigep.students.application.dto.*
 import com.sigep.students.domain.model.Student
-import com.sigep.students.domain.model.StudentStatus
 import com.sigep.students.domain.repository.StudentRepository
 import org.slf4j.LoggerFactory
 import org.springframework.cache.annotation.CacheEvict
@@ -22,7 +20,8 @@ import java.time.LocalDateTime
 @Service
 @Transactional
 class StudentService(
-    private val studentRepository: StudentRepository
+    private val studentRepository: StudentRepository,
+    private val enrollmentServiceProvider: EnrollmentServiceProvider  // Inyectamos la interfaz, no el repositorio
 ) {
 
     private val logger = LoggerFactory.getLogger(StudentService::class.java)
@@ -33,6 +32,14 @@ class StudentService(
         val student = studentRepository.findById(id)
             .orElseThrow { ResourceNotFoundException("Student not found with id: $id") }
         return student.toDto()
+    }
+
+    @Cacheable(value = ["students_detail"], key = "#id")
+    fun getStudentDetailById(id: Long): StudentDetailDto {
+        logger.info("Fetching student detail with id: {}", id)
+        val student = studentRepository.findById(id)
+            .orElseThrow { ResourceNotFoundException("Student not found with id: $id") }
+        return student.toDetailDto()
     }
 
     fun getAllStudents(page: Int, size: Int, sortBy: String, sortDirection: String): PageResponse<StudentDto> {
@@ -67,7 +74,7 @@ class StudentService(
         )
     }
 
-    @CacheEvict(value = ["students"], allEntries = true)
+    @CacheEvict(value = ["students", "students_detail"], allEntries = true)
     fun createStudent(request: CreateStudentRequest): StudentDto {
         logger.info("Creating new student with email: {}", request.email)
 
@@ -75,17 +82,25 @@ class StudentService(
             throw DuplicateResourceException("Student with email ${request.email} already exists")
         }
 
+        if (studentRepository.existsByDocumentNumber(request.documentNumber)) {
+            throw DuplicateResourceException("Student with document number ${request.documentNumber} already exists")
+        }
+
         val student = Student(
             firstName = request.firstName,
             lastName = request.lastName,
             email = request.email,
-            phone = request.phone,
+            phone = "", // Deprecated, usar phoneNumber
+            phoneNumber = request.phoneNumber,
+            documentNumber = request.documentNumber,
             dateOfBirth = request.dateOfBirth,
             address = request.address,
-            guardianId = request.guardianId,
+            emergencyContact = request.emergencyContact,
+            guardianId = request.guardianId ?: 0, // TODO: Manejar guardianId opcional
             enrollmentDate = LocalDate.now(),
-            status = StudentStatus.ACTIVE,
-            currentLevel = request.currentLevel,
+            medicalNotes = request.medicalNotes,
+            active = true,
+            currentLevel = "BEGINNER", // Default
             createdAt = LocalDateTime.now(),
             updatedAt = LocalDateTime.now()
         )
@@ -96,7 +111,7 @@ class StudentService(
         return savedStudent.toDto()
     }
 
-    @CacheEvict(value = ["students"], key = "#id")
+    @CacheEvict(value = ["students", "students_detail"], key = "#id")
     fun updateStudent(id: Long, request: UpdateStudentRequest): StudentDto {
         logger.info("Updating student with id: {}", id)
 
@@ -110,14 +125,25 @@ class StudentService(
             }
         }
 
+        // Check document number uniqueness if being updated
+        if (request.documentNumber != null && request.documentNumber != student.documentNumber) {
+            if (studentRepository.existsByDocumentNumber(request.documentNumber)) {
+                throw DuplicateResourceException("Student with document number ${request.documentNumber} already exists")
+            }
+        }
+
         val updatedStudent = student.copy(
             firstName = request.firstName ?: student.firstName,
             lastName = request.lastName ?: student.lastName,
             email = request.email ?: student.email,
-            phone = request.phone ?: student.phone,
+            documentNumber = request.documentNumber ?: student.documentNumber,
+            dateOfBirth = request.dateOfBirth ?: student.dateOfBirth,
+            phoneNumber = request.phoneNumber ?: student.phoneNumber,
             address = request.address ?: student.address,
-            currentLevel = request.currentLevel ?: student.currentLevel,
-            status = request.status ?: student.status,
+            emergencyContact = request.emergencyContact ?: student.emergencyContact,
+            guardianId = request.guardianId ?: student.guardianId,
+            medicalNotes = request.medicalNotes ?: student.medicalNotes,
+            active = request.active ?: student.active,
             updatedAt = LocalDateTime.now()
         )
 
@@ -127,7 +153,7 @@ class StudentService(
         return savedStudent.toDto()
     }
 
-    @CacheEvict(value = ["students"], key = "#id")
+    @CacheEvict(value = ["students", "students_detail"], key = "#id")
     fun deleteStudent(id: Long) {
         logger.info("Deleting student with id: {}", id)
 
@@ -154,20 +180,56 @@ class StudentService(
         )
     }
 
-    private fun Student.toDto() = StudentDto(
-        id = id!!,
-        firstName = firstName,
-        lastName = lastName,
-        email = email,
-        phone = phone,
-        dateOfBirth = dateOfBirth,
-        address = address,
-        guardianId = guardianId,
-        enrollmentDate = enrollmentDate,
-        status = status,
-        currentLevel = currentLevel,
-        createdAt = createdAt,
-        updatedAt = updatedAt
-    )
+    /**
+     * Convierte Student a StudentDto básico (con curso actual si existe)
+     */
+    private fun Student.toDto(): StudentDto {
+        val currentEnrollment = enrollmentServiceProvider.getCurrentEnrollmentByStudent(this.id!!)
+
+        return StudentDto(
+            id = id!!,
+            firstName = firstName,
+            lastName = lastName,
+            email = email,
+            documentNumber = documentNumber,
+            dateOfBirth = dateOfBirth,
+            enrollmentDate = enrollmentDate,
+            guardianId = if (guardianId > 0) guardianId else null,
+            currentCourseId = currentEnrollment?.courseId,
+            currentCourseName = currentEnrollment?.courseName,
+            active = active,
+            createdAt = createdAt,
+            updatedAt = updatedAt
+        )
+    }
+
+    /**
+     * Convierte Student a StudentDetailDto (con toda la información + historial)
+     */
+    private fun Student.toDetailDto(): StudentDetailDto {
+        val currentEnrollment = enrollmentServiceProvider.getCurrentEnrollmentByStudent(this.id!!)
+        val allEnrollments = enrollmentServiceProvider.getEnrollmentsByStudent(this.id!!)
+
+        return StudentDetailDto(
+            id = id!!,
+            firstName = firstName,
+            lastName = lastName,
+            email = email,
+            documentNumber = documentNumber,
+            dateOfBirth = dateOfBirth,
+            address = address,
+            phoneNumber = phoneNumber,
+            emergencyContact = emergencyContact,
+            enrollmentDate = enrollmentDate,
+            guardianId = if (guardianId > 0) guardianId else null,
+            medicalNotes = medicalNotes,
+            currentCourseId = currentEnrollment?.courseId,
+            currentCourseName = currentEnrollment?.courseName,
+            active = active,
+            courseHistory = allEnrollments,  // Ya son EnrollmentSummaryDto
+            createdAt = createdAt,
+            updatedAt = updatedAt
+        )
+    }
 }
 

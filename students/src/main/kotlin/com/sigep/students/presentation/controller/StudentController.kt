@@ -40,9 +40,9 @@ class StudentController(
 
     @GetMapping("/{id}")
     @RequireStaffOrGuardian
-    @Operation(summary = "Get student by ID", description = "Retrieve a specific student by their ID")
-    fun getStudentById(@PathVariable id: Long): ResponseEntity<ApiResponse<StudentDto>> {
-        val student = studentService.getStudentById(id)
+    @Operation(summary = "Get student by ID", description = "Retrieve a specific student with full details and course history")
+    fun getStudentById(@PathVariable id: Long): ResponseEntity<ApiResponse<com.sigep.students.application.dto.StudentDetailDto>> {
+        val student = studentService.getStudentDetailById(id)
         return ResponseEntity.ok(ApiResponse.success(student))
     }
 

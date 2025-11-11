@@ -321,16 +321,18 @@ interface StudentDetailDto extends StudentDto {
   phoneNumber: string;
   emergencyContact: string;
   medicalNotes: string | null;
-  courseHistory: CourseHistoryDto[];
+  courseHistory: EnrollmentSummaryDto[];  // Listado de inscripciones (enrollments)
 }
 
-interface CourseHistoryDto {
+interface EnrollmentSummaryDto {
+  id: number;
+  studentId: number;
   courseId: number;
   courseName: string;
-  enrollmentDate: string;
-  completionDate: string | null;
-  finalGrade: number | null;
-  status: 'ACTIVE' | 'COMPLETED' | 'DROPPED';
+  enrollmentDate: string;      // ISO date
+  status: string;              // 'ACTIVE' | 'COMPLETED' | 'FAILED' | 'DROPPED' | 'SUSPENDED'
+  finalGrade: number | null;   // Decimal
+  completionDate: string | null; // ISO date
 }
 ```
 

@@ -31,14 +31,25 @@ data class Student(
     val address: String,
 
     @Column(nullable = false)
+    val phoneNumber: String,
+
+    @Column(nullable = false)
+    val emergencyContact: String,
+
+    @Column(nullable = false)
+    val documentNumber: String,
+
+    @Column(nullable = false)
     val guardianId: Long, // Reference to User with GUARDIAN role
 
     @Column(nullable = false)
     val enrollmentDate: LocalDate,
 
-    @Enumerated(EnumType.STRING)
+    @Column(length = 1000)
+    val medicalNotes: String? = null,
+
     @Column(nullable = false)
-    val status: StudentStatus = StudentStatus.ACTIVE,
+    val active: Boolean = true,
 
     @Column(nullable = false)
     val currentLevel: String, // e.g., "Beginner", "Intermediate", "Advanced"
@@ -50,10 +61,4 @@ data class Student(
     val updatedAt: LocalDateTime = LocalDateTime.now()
 ) : AggregateRoot
 
-enum class StudentStatus {
-    ACTIVE,
-    INACTIVE,
-    SUSPENDED,
-    GRADUATED
-}
 

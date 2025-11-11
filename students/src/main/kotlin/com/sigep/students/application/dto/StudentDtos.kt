@@ -1,6 +1,6 @@
 package com.sigep.students.application.dto
 
-import com.sigep.students.domain.model.StudentStatus
+import com.sigep.common.application.dto.EnrollmentSummaryDto
 import jakarta.validation.constraints.*
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -10,33 +10,57 @@ data class StudentDto(
     val firstName: String,
     val lastName: String,
     val email: String,
-    val phone: String,
+    val documentNumber: String,
     val dateOfBirth: LocalDate,
-    val address: String,
-    val guardianId: Long,
     val enrollmentDate: LocalDate,
-    val status: StudentStatus,
-    val currentLevel: String,
+    val guardianId: Long?,
+    val currentCourseId: Long?,
+    val currentCourseName: String?,
+    val active: Boolean,
     val createdAt: LocalDateTime,
     val updatedAt: LocalDateTime
 )
 
+/**
+ * DTO detallado de Student con toda la información y historial de cursos
+ */
+data class StudentDetailDto(
+    val id: Long,
+    val firstName: String,
+    val lastName: String,
+    val email: String,
+    val documentNumber: String,
+    val dateOfBirth: LocalDate,
+    val address: String,
+    val phoneNumber: String,
+    val emergencyContact: String,
+    val enrollmentDate: LocalDate,
+    val guardianId: Long?,
+    val medicalNotes: String?,
+    val currentCourseId: Long?,
+    val currentCourseName: String?,
+    val active: Boolean,
+    val courseHistory: List<EnrollmentSummaryDto>,  // Usar DTO de common
+    val createdAt: LocalDateTime,
+    val updatedAt: LocalDateTime
+)
+
+
 data class CreateStudentRequest(
     @field:NotBlank(message = "First name is required")
-    @field:Size(min = 2, max = 100)
+    @field:Size(min = 1, max = 100)
     val firstName: String,
 
     @field:NotBlank(message = "Last name is required")
-    @field:Size(min = 2, max = 100)
+    @field:Size(min = 1, max = 100)
     val lastName: String,
 
     @field:NotBlank(message = "Email is required")
     @field:Email(message = "Invalid email format")
     val email: String,
 
-    @field:NotBlank(message = "Phone is required")
-    @field:Pattern(regexp = "^[+]?[0-9]{10,15}$", message = "Invalid phone format")
-    val phone: String,
+    @field:NotBlank(message = "Document number is required")
+    val documentNumber: String,
 
     @field:NotNull(message = "Date of birth is required")
     @field:Past(message = "Date of birth must be in the past")
@@ -45,30 +69,42 @@ data class CreateStudentRequest(
     @field:NotBlank(message = "Address is required")
     val address: String,
 
-    @field:NotNull(message = "Guardian ID is required")
-    val guardianId: Long,
+    @field:NotBlank(message = "Phone number is required")
+    val phoneNumber: String,
 
-    @field:NotBlank(message = "Current level is required")
-    val currentLevel: String
+    @field:NotBlank(message = "Emergency contact is required")
+    val emergencyContact: String,
+
+    val guardianId: Long?,
+
+    val medicalNotes: String?
 )
 
 data class UpdateStudentRequest(
-    @field:Size(min = 2, max = 100)
+    @field:Size(min = 1, max = 100)
     val firstName: String?,
 
-    @field:Size(min = 2, max = 100)
+    @field:Size(min = 1, max = 100)
     val lastName: String?,
 
     @field:Email(message = "Invalid email format")
     val email: String?,
 
-    @field:Pattern(regexp = "^[+]?[0-9]{10,15}$", message = "Invalid phone format")
-    val phone: String?,
+    val documentNumber: String?,
+
+    @field:Past(message = "Date of birth must be in the past")
+    val dateOfBirth: LocalDate?,
 
     val address: String?,
 
-    val currentLevel: String?,
+    val phoneNumber: String?,
 
-    val status: StudentStatus?
+    val emergencyContact: String?,
+
+    val guardianId: Long?,
+
+    val medicalNotes: String?,
+
+    val active: Boolean?
 )
 
