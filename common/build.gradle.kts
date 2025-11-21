@@ -10,6 +10,9 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
 
+    // Jackson support for Java 8 date/time types (LocalDate, LocalDateTime, etc.)
+    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310")
+
     // PostgreSQL (runtime only)
     runtimeOnly("org.postgresql:postgresql")
 }

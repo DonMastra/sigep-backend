@@ -17,6 +17,8 @@ data class StudentDto(
     val currentCourseId: Long?,
     val currentCourseName: String?,
     val active: Boolean,
+    val phoneNumber: String,
+    val address: String,
     val createdAt: LocalDateTime,
     val updatedAt: LocalDateTime
 )

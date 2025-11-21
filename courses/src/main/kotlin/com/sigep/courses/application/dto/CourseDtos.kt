@@ -18,7 +18,7 @@ data class CourseDto(
     val maxStudents: Int,
     val minStudents: Int,
     val teacherId: Long,
-    val teacherName: String? = null, // Will be populated if needed
+    val teacherName: String? = null,
     val price: BigDecimal,
     val startDate: LocalDate?,
     val endDate: LocalDate?,

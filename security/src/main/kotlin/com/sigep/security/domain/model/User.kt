@@ -42,8 +42,8 @@ data class User(
 ) : AggregateRoot
 
 enum class UserRole {
-    ADMIN,      // Administrador del sistema
-    TEACHER,    // Docente/Profesor
-    GUARDIAN    // Responsable/Tutor
+    ADMIN,
+    TEACHER,
+    GUARDIAN
 }
 

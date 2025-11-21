@@ -14,6 +14,7 @@ import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.math.BigDecimal
 import java.time.LocalDate
 import java.time.LocalDateTime
 
@@ -179,6 +180,29 @@ class StudentService(
             totalPages = studentsPage.totalPages
         )
     }
+    /**
+     * Obtiene el estado de pagos de un estudiante
+     * TODO: Esta es una implementación temporal.
+     * Cuando el módulo payments esté implementado, debe integrarse con ese servicio.
+     */
+    fun getStudentPaymentStatus(studentId: Long): StudentPaymentStatusDto {
+        logger.info("Fetching payment status for student: {}", studentId)
+
+        if (!studentRepository.existsById(studentId)) {
+            throw ResourceNotFoundException("Student not found with id: $studentId")
+        }
+
+        // TODO: Integrar con módulo de payments cuando esté disponible
+        // Por ahora retornamos un estado por defecto
+        return StudentPaymentStatusDto(
+            studentId = studentId,
+            status = PaymentStatus.UP_TO_DATE,  // Mock: todos al día
+            balance = BigDecimal.ZERO,
+            lastPaymentDate = LocalDate.now().minusMonths(1),
+            nextDueDate = LocalDate.now().plusMonths(1)
+        )
+    }
+
 
     /**
      * Convierte Student a StudentDto básico (con curso actual si existe)
@@ -198,6 +222,8 @@ class StudentService(
             currentCourseId = currentEnrollment?.courseId,
             currentCourseName = currentEnrollment?.courseName,
             active = active,
+            phoneNumber = phoneNumber,
+            address = address,
             createdAt = createdAt,
             updatedAt = updatedAt
         )

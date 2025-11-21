@@ -81,9 +81,9 @@ gradlew clean build --refresh-dependencies
 ## 📚 Recursos y Referencias
 
 ### Documentación del Proyecto
-- [SECURITY.md](SECURITY.md) - Seguridad y autenticación
+- [SECURITY.md](security/SECURITY.md) - Seguridad y autenticación
 - [API_CONTRACT.md](API_CONTRACT.md) - Contrato de API para frontend
-- [AUTHENTICATION_GUIDE.md](AUTHENTICATION_GUIDE.md) - Guía de autenticación
+- [AUTHENTICATION_GUIDE.md](security/AUTHENTICATION_GUIDE.md) - Guía de autenticación
 - [ARCHITECTURE.md](ARCHITECTURE.md) - Arquitectura del sistema
 
 ### Tecnologías Principales
@@ -131,9 +131,9 @@ Backend API REST desarrollado con Spring Boot y Kotlin para la gestión integral
 ## 📚 Documentación
 
 - **[README](README.md)** - Este archivo (introducción y guía rápida)
-- **[SECURITY.md](SECURITY.md)** - Documentación completa del módulo de seguridad
+- **[SECURITY.md](security/SECURITY.md)** - Documentación completa del módulo de seguridad
 - **[API_CONTRACT.md](API_CONTRACT.md)** - Contrato de API para integración con frontend
-- **[AUTHENTICATION_GUIDE.md](AUTHENTICATION_GUIDE.md)** - Guía de autenticación y testing
+- **[AUTHENTICATION_GUIDE.md](security/AUTHENTICATION_GUIDE.md)** - Guía de autenticación y testing
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - Arquitectura detallada del sistema
 - **[Swagger UI](http://localhost:8080/swagger-ui/index.html)** - Documentación interactiva de la API (cuando la app está corriendo)
 
@@ -649,7 +649,7 @@ Para ver todos los endpoints con detalles de request/response:
 
 - **Swagger UI Interactivo**: http://localhost:8080/swagger-ui/index.html
 - **Contrato de API para Frontend**: [API_CONTRACT.md](API_CONTRACT.md)
-- **Guía de Autenticación**: [AUTHENTICATION_GUIDE.md](AUTHENTICATION_GUIDE.md)
+- **Guía de Autenticación**: [AUTHENTICATION_GUIDE.md](security/AUTHENTICATION_GUIDE.md)
 
 ## 🔐 Seguridad y Roles
 
@@ -713,7 +713,7 @@ La aplicación implementa control de acceso basado en roles con tres niveles:
 - Todas las requests validadas con Bean Validation
 - DTOs tipados con TypeScript-like contracts
 
-**Ver documentación completa**: [SECURITY.md](SECURITY.md)
+**Ver documentación completa**: [SECURITY.md](security/SECURITY.md)
 
 ## 🔗 Integración entre Módulos
 

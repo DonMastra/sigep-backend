@@ -11,8 +11,9 @@ data class EnrollmentSummaryDto(
     val studentId: Long,
     val courseId: Long,
     val courseName: String,
+    val courseLevel: String,  // BEGINNER, INTERMEDIATE, ADVANCED
     val enrollmentDate: LocalDate,
-    val status: String,  // Usamos String en vez de Enum para evitar dependencias
+    val status: String,
     val finalGrade: BigDecimal?,
     val completionDate: LocalDate?
 )

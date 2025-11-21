@@ -11,7 +11,7 @@
 
 1. **[README.md](README.md)** - Introducción general y guía de inicio
 2. **[QUICKSTART.md](QUICKSTART.md)** - Guía rápida para levantar el proyecto
-3. **[AUTHENTICATION_GUIDE.md](AUTHENTICATION_GUIDE.md)** - Cómo autenticarse y probar la API
+3. **[AUTHENTICATION_GUIDE.md](security/AUTHENTICATION_GUIDE.md)** - Cómo autenticarse y probar la API
 
 ---
 
@@ -28,8 +28,8 @@
 
 | Documento | Descripción | Audiencia |
 |-----------|-------------|-----------|
-| **[SECURITY.md](SECURITY.md)** | Documentación completa del módulo de seguridad, JWT, roles, rate limiting | Desarrolladores, Auditores |
-| **[AUTHENTICATION_GUIDE.md](AUTHENTICATION_GUIDE.md)** | Guía práctica de autenticación, obtención de tokens, testing | Desarrolladores Frontend/Backend |
+| **[SECURITY.md](security/SECURITY.md)** | Documentación completa del módulo de seguridad, JWT, roles, rate limiting | Desarrolladores, Auditores |
+| **[AUTHENTICATION_GUIDE.md](security/AUTHENTICATION_GUIDE.md)** | Guía práctica de autenticación, obtención de tokens, testing | Desarrolladores Frontend/Backend |
 
 ### 🔌 API y Contratos
 
@@ -85,7 +85,7 @@
 ### 🔐 Security (Seguridad)
 - **Estado**: ✅ Completado
 - **Ubicación**: `security/`
-- **Documentación**: [SECURITY.md](SECURITY.md)
+- **Documentación**: [SECURITY.md](security/SECURITY.md)
 - **Funcionalidades**:
   - Autenticación JWT (access + refresh tokens)
   - Sistema de roles: ADMIN, TEACHER, GUARDIAN
@@ -182,14 +182,14 @@
    - [DIAGRAMS.md](DIAGRAMS.md) - Diagramas visuales
 
 3. **Trabajar con Seguridad**
-   - [SECURITY.md](SECURITY.md) - Sistema de seguridad
-   - [AUTHENTICATION_GUIDE.md](AUTHENTICATION_GUIDE.md) - Testing con tokens
+   - [SECURITY.md](security/SECURITY.md) - Sistema de seguridad
+   - [AUTHENTICATION_GUIDE.md](security/AUTHENTICATION_GUIDE.md) - Testing con tokens
 
 ### Para Desarrolladores Frontend
 
 1. **Integración con API**
    - [API_CONTRACT.md](API_CONTRACT.md) - Contrato completo con TypeScript interfaces
-   - [AUTHENTICATION_GUIDE.md](AUTHENTICATION_GUIDE.md) - Flujo de autenticación
+   - [AUTHENTICATION_GUIDE.md](security/AUTHENTICATION_GUIDE.md) - Flujo de autenticación
    - [Swagger UI](http://localhost:8080/swagger-ui/index.html) - Probar endpoints
 
 2. **Ejemplos de Integración**
@@ -202,7 +202,7 @@
    - [DIAGRAMS.md](DIAGRAMS.md) - Diagramas de componentes
 
 2. **Seguridad y Compliance**
-   - [SECURITY.md](SECURITY.md) - Medidas de seguridad implementadas
+   - [SECURITY.md](security/SECURITY.md) - Medidas de seguridad implementadas
 
 3. **Roadmap**
    - [README.md](README.md#-roadmap) - Funcionalidades actuales y planificadas
@@ -243,10 +243,10 @@
 
 ### Por Funcionalidad
 
-- **Autenticación**: [SECURITY.md](SECURITY.md#-autenticación)
-- **Roles y Permisos**: [SECURITY.md](SECURITY.md#️-autorización)
-- **JWT Tokens**: [SECURITY.md](SECURITY.md#-jwt-tokens)
-- **Rate Limiting**: [SECURITY.md](SECURITY.md#-rate-limiting)
+- **Autenticación**: [SECURITY.md](security/SECURITY.md#-autenticación)
+- **Roles y Permisos**: [SECURITY.md](security/SECURITY.md#️-autorización)
+- **JWT Tokens**: [SECURITY.md](security/SECURITY.md#-jwt-tokens)
+- **Rate Limiting**: [SECURITY.md](security/SECURITY.md#-rate-limiting)
 | Documentación | ✅ Actualizada | 1.0.0 | 2025-11-04 |
 - **Estudiantes API**: [API_CONTRACT.md](API_CONTRACT.md#-students-endpoints)
 - **Cursos API**: [API_CONTRACT.md](API_CONTRACT.md#-courses-endpoints)
@@ -261,7 +261,7 @@
 
 ### Por Error/Problema
 
-- **Errores de Autenticación**: [SECURITY.md](SECURITY.md#️-manejo-de-errores-de-seguridad)
+- **Errores de Autenticación**: [SECURITY.md](security/SECURITY.md#️-manejo-de-errores-de-seguridad)
 - **Troubleshooting**: [README.md](README.md#-troubleshooting)
 - **Códigos de Error HTTP**: [API_CONTRACT.md](API_CONTRACT.md#️-error-codes)
 

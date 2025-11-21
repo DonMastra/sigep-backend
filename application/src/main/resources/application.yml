@@ -46,8 +46,12 @@ spring:
   jackson:
     serialization:
       write-dates-as-timestamps: false
-    time-zone: UTC
+      write-durations-as-timestamps: false
+    deserialization:
+      fail-on-unknown-properties: false
+    time-zone: America/Argentina/Buenos_Aires
     default-property-inclusion: non_null
+    date-format: yyyy-MM-dd
 
   # File Upload Configuration
   servlet:

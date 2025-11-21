@@ -109,4 +109,15 @@ class StudentController(
             "Use enrollments endpoint for course history"
         ))
     }
+
+    @GetMapping("/{id}/payment-status")
+    @RequireStaffOrGuardian
+    @Operation(
+        summary = "Get student payment status",
+        description = "Retrieve payment status for a specific student. Currently returns mock data until payments module is implemented."
+    )
+    fun getStudentPaymentStatus(@PathVariable id: Long): ResponseEntity<ApiResponse<com.sigep.students.application.dto.StudentPaymentStatusDto>> {
+        val paymentStatus = studentService.getStudentPaymentStatus(id)
+        return ResponseEntity.ok(ApiResponse.success(paymentStatus))
+    }
 }

@@ -12,7 +12,7 @@ data class Course(
     val id: Long? = null,
 
     @Column(nullable = false, unique = true)
-    val code: String, // Course code (e.g., "ENG-BEG-01")
+    val code: String,
 
     @Column(nullable = false)
     val name: String,

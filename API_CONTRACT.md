@@ -282,6 +282,8 @@ interface StudentListParams {
     totalPages: number;
     last: boolean;
   };
+  message: string;
+  timestamp: string;
 }
 
 interface StudentDto {
@@ -290,14 +292,16 @@ interface StudentDto {
   lastName: string;
   email: string;
   documentNumber: string;
-  dateOfBirth: string;      // ISO date
-  enrollmentDate: string;   // ISO date
+  dateOfBirth: string;      // ISO date (YYYY-MM-DD)
+  enrollmentDate: string;   // ISO date (YYYY-MM-DD)
   guardianId: number | null;
   currentCourseId: number | null;
   currentCourseName: string | null;
   active: boolean;
-  createdAt: string;
-  updatedAt: string;
+  phoneNumber: string;
+  address: string;
+  createdAt: string;        // ISO datetime
+  updatedAt: string;        // ISO datetime
 }
 ```
 
@@ -314,14 +318,29 @@ interface StudentDto {
 {
   success: true;
   data: StudentDetailDto;
+  message: string;
+  timestamp: string;
 }
 
-interface StudentDetailDto extends StudentDto {
+interface StudentDetailDto {
+  id: number;
+  firstName: string;
+  lastName: string;
+  email: string;
+  documentNumber: string;
+  dateOfBirth: string;         // ISO date (YYYY-MM-DD)
   address: string;
   phoneNumber: string;
   emergencyContact: string;
+  enrollmentDate: string;      // ISO date (YYYY-MM-DD)
+  guardianId: number | null;
   medicalNotes: string | null;
-  courseHistory: EnrollmentSummaryDto[];  // Listado de inscripciones (enrollments)
+  currentCourseId: number | null;
+  currentCourseName: string | null;
+  active: boolean;
+  courseHistory: EnrollmentSummaryDto[];  // Historial de inscripciones
+  createdAt: string;           // ISO datetime
+  updatedAt: string;           // ISO datetime
 }
 
 interface EnrollmentSummaryDto {
@@ -329,10 +348,11 @@ interface EnrollmentSummaryDto {
   studentId: number;
   courseId: number;
   courseName: string;
-  enrollmentDate: string;      // ISO date
-  status: string;              // 'ACTIVE' | 'COMPLETED' | 'FAILED' | 'DROPPED' | 'SUSPENDED'
-  finalGrade: number | null;   // Decimal
-  completionDate: string | null; // ISO date
+  courseLevel: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED';
+  enrollmentDate: string;      // ISO date (YYYY-MM-DD)
+  status: 'ACTIVE' | 'COMPLETED' | 'FAILED' | 'DROPPED' | 'SUSPENDED';
+  finalGrade: number | null;   // Decimal (0.00 - 100.00)
+  completionDate: string | null; // ISO date (YYYY-MM-DD)
 }
 ```
 
@@ -431,21 +451,51 @@ interface CreateStudentRequest {
 
 ---
 
+### 7. Get Student Payment Status
+
+**Endpoint:** `GET /api/v1/students/{id}/payment-status`
+
+**Roles:** `ADMIN`, `TEACHER`, `GUARDIAN` (solo estudiantes propios)
+
+**Response (200 OK):**
+```typescript
+{
+  success: true;
+  data: StudentPaymentStatusDto;
+  message: string;
+  timestamp: string;
+}
+
+interface StudentPaymentStatusDto {
+  studentId: number;
+  status: 'UP_TO_DATE' | 'PENDING' | 'OVERDUE';
+  balance: number;             // Decimal - Saldo pendiente
+  lastPaymentDate: string | null;  // ISO date (YYYY-MM-DD) - Último pago realizado
+  nextDueDate: string | null;      // ISO date (YYYY-MM-DD) - Próximo vencimiento
+}
+```
+
+**Nota**: Actualmente retorna datos mock. Se integrará con el módulo `payments` cuando esté implementado.
+
+**Errores:**
+- `404 Not Found`: Estudiante no existe
+- `403 Forbidden`: No tiene permisos para ver este estudiante
+
+---
+
 ## 📚 Courses Endpoints
 
-### 1. List Courses
+### 1. List Courses (Paginated)
 
 **Endpoint:** `GET /api/v1/courses`
 
 **Query Params:**
 ```typescript
 interface CourseListParams {
-  page?: number;
-  size?: number;
-  sort?: string;
-  order?: 'ASC' | 'DESC';
-  level?: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED';
-  status?: 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
+  page?: number;        // Default: 0
+  size?: number;        // Default: 10
+  sort?: string;        // Default: 'id'
+  order?: 'ASC' | 'DESC'; // Default: 'ASC'
 }
 ```
 
@@ -457,32 +507,51 @@ interface CourseListParams {
   success: true;
   data: {
     content: CourseDto[];
-    // ...pagination
+    page: number;
+    size: number;
+    totalElements: number;
+    totalPages: number;
+    last: boolean;
   };
+  message: string;
+  timestamp: string;
 }
 
 interface CourseDto {
   id: number;
+  code: string;                      // Código único del curso (ej: ENG-BEG-01)
   name: string;
   description: string;
   level: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED';
-  status: 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
-  startDate: string;
-  endDate: string | null;
-  maxCapacity: number;
-  currentEnrollment: number;
-  teacherId: number | null;
-  teacherName: string | null;
-  schedule: string | null;
-  classroom: string | null;
-  createdAt: string;
-  updatedAt: string;
+  duration: number;                  // Duración en horas
+  maxStudents: number;               // Capacidad máxima
+  minStudents: number;               // Mínimo de estudiantes para abrir
+  teacherId: number;
+  teacherName: string | null;        // Nombre del profesor asignado
+  price: number;                     // Decimal - Precio del curso
+  startDate: string | null;          // ISO date (YYYY-MM-DD)
+  endDate: string | null;            // ISO date (YYYY-MM-DD)
+  status: 'ACTIVE' | 'INACTIVE' | 'COMPLETED' | 'CANCELLED';
+  isPublished: boolean;              // Si está publicado para inscripciones
+  schedules: CourseScheduleDto[];    // Horarios del curso
+  enrolledStudents: number;          // Cantidad de estudiantes inscriptos
+  availableSeats: number;            // Cupos disponibles
+  isEnrollmentOpen: boolean;         // Si está abierto a inscripciones
+  createdAt: string;                 // ISO datetime
+  updatedAt: string;                 // ISO datetime
+}
+
+interface CourseScheduleDto {
+  id: number | null;
+  dayOfWeek: 'MONDAY' | 'TUESDAY' | 'WEDNESDAY' | 'THURSDAY' | 'FRIDAY' | 'SATURDAY' | 'SUNDAY';
+  startTime: string;                 // HH:mm format
+  endTime: string;                   // HH:mm format
 }
 ```
 
 ---
 
-### 2. Get Course Details
+### 2. Get Course by ID
 
 **Endpoint:** `GET /api/v1/courses/{id}`
 
@@ -492,38 +561,77 @@ interface CourseDto {
 ```typescript
 {
   success: true;
-  data: CourseDetailDto;
+  data: CourseDto;
+  message: string;
+  timestamp: string;
 }
+```
 
-interface CourseDetailDto extends CourseDto {
-  enrolledStudents: StudentDto[];
-  materials: CourseMaterialDto[];
-  sessions: CourseSessionDto[];
-  attendanceRate: number;
+**Errores:**
+- `404 Not Found`: Curso no existe
+
+---
+
+### 3. Search Courses
+
+**Endpoint:** `GET /api/v1/courses/search`
+
+**Query Params:**
+```typescript
+interface SearchParams {
+  query: string;         // Búsqueda por nombre, código o descripción
+  page?: number;
+  size?: number;
 }
+```
 
-interface CourseMaterialDto {
-  id: number;
-  title: string;
-  description: string;
-  fileUrl: string;
-  uploadedAt: string;
-  uploadedBy: string;
-}
+**Roles:** `ADMIN`, `TEACHER`
 
-interface CourseSessionDto {
-  id: number;
-  sessionNumber: number;
-  scheduledDate: string;
-  topic: string;
-  status: 'SCHEDULED' | 'COMPLETED' | 'CANCELLED';
-  attendanceCount: number;
+**Response (200 OK):**
+```typescript
+{
+  success: true;
+  data: {
+    content: CourseDto[];
+    // ...pagination
+  };
+  message: string;
+  timestamp: string;
 }
 ```
 
 ---
 
-### 3. Create Course
+### 4. Get Courses by Teacher
+
+**Endpoint:** `GET /api/v1/courses/teacher/{teacherId}`
+
+**Query Params:**
+```typescript
+{
+  page?: number;
+  size?: number;
+}
+```
+
+**Roles:** `ADMIN`, `TEACHER`
+
+**Response (200 OK):**
+```typescript
+{
+  success: true;
+  data: {
+    content: CourseDto[];
+    // ...pagination
+  };
+  message: string;
+  timestamp: string;
+}
+```
+
+---
+
+### 5. Create Course
 
 **Endpoint:** `POST /api/v1/courses`
 
@@ -532,15 +640,25 @@ interface CourseSessionDto {
 **Request:**
 ```typescript
 interface CreateCourseRequest {
-  name: string;
-  description: string;
+  code: string;                      // min: 3, max: 50, pattern: ^[A-Z0-9-]+$
+  name: string;                      // min: 3, max: 200
+  description: string;               // min: 10, max: 1000
   level: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED';
-  startDate: string;      // YYYY-MM-DD
-  endDate?: string;
-  maxCapacity: number;
-  teacherId?: number;
-  schedule?: string;
-  classroom?: string;
+  duration: number;                  // min: 1, max: 1000 hours
+  maxStudents: number;               // min: 1, max: 100
+  minStudents?: number;              // Default: 1
+  teacherId: number;
+  price: number;                     // Decimal, min: 0.0
+  startDate?: string;                // ISO date (YYYY-MM-DD)
+  endDate?: string;                  // ISO date (YYYY-MM-DD)
+  isPublished?: boolean;             // Default: false
+  schedules: CreateCourseScheduleRequest[]; // Al menos 1 horario
+}
+
+interface CreateCourseScheduleRequest {
+  dayOfWeek: 'MONDAY' | 'TUESDAY' | 'WEDNESDAY' | 'THURSDAY' | 'FRIDAY' | 'SATURDAY' | 'SUNDAY';
+  startTime: string;                 // HH:mm format
+  endTime: string;                   // HH:mm format
 }
 ```
 
@@ -550,21 +668,428 @@ interface CreateCourseRequest {
   success: true;
   data: CourseDto;
   message: "Course created successfully";
+  timestamp: string;
+}
+```
+
+**Errores:**
+- `400 Bad Request`: Validación fallida
+- `409 Conflict`: Código de curso ya existe
+
+---
+
+### 6. Update Course
+
+**Endpoint:** `PUT /api/v1/courses/{id}`
+
+**Roles:** `ADMIN`
+
+**Request:**
+```typescript
+interface UpdateCourseRequest {
+  code?: string;
+  name?: string;
+  description?: string;
+  level?: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED';
+  duration?: number;
+  maxStudents?: number;
+  minStudents?: number;
+  teacherId?: number;
+  price?: number;
+  startDate?: string;
+  endDate?: string;
+  status?: 'ACTIVE' | 'INACTIVE' | 'COMPLETED' | 'CANCELLED';
+  isPublished?: boolean;
+}
+```
+
+**Response (200 OK):**
+```typescript
+{
+  success: true;
+  data: CourseDto;
+  message: "Course updated successfully";
+  timestamp: string;
 }
 ```
 
 ---
 
-### 4. Enroll Student in Course
+### 7. Delete Course
 
-**Endpoint:** `POST /api/v1/courses/{courseId}/enrollments`
+**Endpoint:** `DELETE /api/v1/courses/{id}`
+
+**Roles:** `ADMIN`
+
+**Response (200 OK):**
+```typescript
+{
+  success: true;
+  data: null;
+  message: "Course deleted successfully";
+  timestamp: string;
+}
+```
+
+---
+
+### 8. Enroll Student in Course
+
+**Endpoint:** `POST /api/v1/courses/{id}/enroll`
 
 **Roles:** `ADMIN`, `TEACHER` (solo cursos asignados)
 
 **Request:**
 ```typescript
-interface EnrollmentRequest {
+interface EnrollStudentRequest {
   studentId: number;
+  notes?: string;
+}
+```
+
+**Response (201 Created):**
+```typescript
+{
+  success: true;
+  data: EnrollmentDto;
+  message: "Student enrolled successfully";
+  timestamp: string;
+}
+
+interface EnrollmentDto {
+  id: number;
+  studentId: number;
+  courseId: number;
+  courseName: string;
+  enrollmentDate: string;          // ISO date (YYYY-MM-DD)
+  status: 'ACTIVE' | 'COMPLETED' | 'FAILED' | 'DROPPED' | 'SUSPENDED';
+  finalGrade: number | null;       // Decimal (0.00 - 100.00)
+  completionDate: string | null;   // ISO date (YYYY-MM-DD)
+  notes: string | null;
+  createdAt: string;               // ISO datetime
+  updatedAt: string;               // ISO datetime
+}
+```
+
+**Errores:**
+- `409 Conflict`: Estudiante ya inscrito o curso lleno
+- `404 Not Found`: Curso o estudiante no existe
+
+---
+
+### 9. Filter Courses
+
+**Endpoint:** `POST /api/v1/courses/filter`
+
+**Roles:** `ADMIN`, `TEACHER`
+
+**Request:**
+```typescript
+interface CourseFilterRequest {
+  level?: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED';
+  status?: 'ACTIVE' | 'INACTIVE' | 'COMPLETED' | 'CANCELLED';
+  teacherId?: number;
+  isPublished?: boolean;
+  minPrice?: number;
+  maxPrice?: number;
+  hasAvailableSeats?: boolean;
+}
+```
+
+**Query Params:**
+```typescript
+{
+  page?: number;
+  size?: number;
+}
+```
+
+**Response (200 OK):**
+```typescript
+{
+  success: true;
+  data: {
+    content: CourseDto[];
+    // ...pagination
+  };
+  message: string;
+  timestamp: string;
+}
+```
+
+---
+
+### 10. Get Published Courses (Public)
+
+**Endpoint:** `GET /api/v1/courses/published`
+
+**Roles:** Public (no authentication required)
+
+**Query Params:**
+```typescript
+{
+  page?: number;
+  size?: number;
+}
+```
+
+**Response (200 OK):**
+```typescript
+{
+  success: true;
+  data: {
+    content: CourseSimpleDto[];
+    // ...pagination
+  };
+  message: string;
+  timestamp: string;
+}
+
+interface CourseSimpleDto {
+  id: number;
+  code: string;
+  name: string;
+  level: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED';
+  price: number;
+  availableSeats: number;
+  isEnrollmentOpen: boolean;
+}
+```
+
+---
+
+### 11. Get Course Statistics
+
+**Endpoint:** `GET /api/v1/courses/statistics`
+
+**Roles:** `ADMIN`
+
+**Response (200 OK):**
+```typescript
+{
+  success: true;
+  data: CourseStatisticsDto;
+  message: string;
+  timestamp: string;
+}
+
+interface CourseStatisticsDto {
+  totalCourses: number;
+  activeCourses: number;
+  publishedCourses: number;
+  totalEnrollments: number;
+  averageEnrollmentRate: number;   // Percentage
+  coursesByLevel: {
+    BEGINNER: number;
+    INTERMEDIATE: number;
+    ADVANCED: number;
+  };
+  coursesByStatus: {
+    ACTIVE: number;
+    INACTIVE: number;
+    COMPLETED: number;
+    CANCELLED: number;
+  };
+}
+```
+
+---
+
+### 12. Publish Course
+
+**Endpoint:** `PUT /api/v1/courses/{id}/publish`
+
+**Roles:** `ADMIN`
+
+**Response (200 OK):**
+```typescript
+{
+  success: true;
+  data: CourseDto;
+  message: "Course published successfully";
+  timestamp: string;
+}
+```
+
+---
+
+### 13. Unpublish Course
+
+**Endpoint:** `PUT /api/v1/courses/{id}/unpublish`
+
+**Roles:** `ADMIN`
+
+**Response (200 OK):**
+```typescript
+{
+  success: true;
+  data: CourseDto;
+  message: "Course unpublished successfully";
+  timestamp: string;
+}
+```
+
+---
+
+### 14. Activate Course
+
+**Endpoint:** `PUT /api/v1/courses/{id}/activate`
+
+**Roles:** `ADMIN`
+
+**Response (200 OK):**
+```typescript
+{
+  success: true;
+  data: CourseDto;
+  message: "Course activated successfully";
+  timestamp: string;
+}
+```
+
+---
+
+### 15. Deactivate Course
+
+**Endpoint:** `PUT /api/v1/courses/{id}/deactivate`
+
+**Roles:** `ADMIN`
+
+**Response (200 OK):**
+```typescript
+{
+  success: true;
+  data: CourseDto;
+  message: "Course deactivated successfully";
+  timestamp: string;
+}
+```
+
+---
+
+## 📝 Enrollments Endpoints
+
+### 1. Get Enrollment by ID
+
+**Endpoint:** `GET /api/v1/enrollments/{id}`
+
+**Roles:** `ADMIN`, `TEACHER`
+
+**Response (200 OK):**
+```typescript
+{
+  success: true;
+  data: EnrollmentDto;
+  message: string;
+  timestamp: string;
+}
+```
+
+**Errores:**
+- `404 Not Found`: Enrollment no existe
+
+---
+
+### 2. Get Student Enrollments
+
+**Endpoint:** `GET /api/v1/enrollments/student/{studentId}`
+
+**Roles:** `ADMIN`, `TEACHER`, `GUARDIAN` (solo estudiantes propios)
+
+**Query Params:**
+```typescript
+{
+  page?: number;
+  size?: number;
+}
+```
+
+**Response (200 OK):**
+```typescript
+{
+  success: true;
+  data: {
+    content: EnrollmentDto[];
+    page: number;
+    size: number;
+    totalElements: number;
+    totalPages: number;
+    last: boolean;
+  };
+  message: string;
+  timestamp: string;
+}
+```
+
+---
+
+### 3. Get Student Enrollment History
+
+**Endpoint:** `GET /api/v1/enrollments/student/{studentId}/history`
+
+**Roles:** `ADMIN`, `TEACHER`, `GUARDIAN` (solo estudiantes propios)
+
+**Response (200 OK):**
+```typescript
+{
+  success: true;
+  data: StudentEnrollmentHistoryDto;
+  message: string;
+  timestamp: string;
+}
+
+interface StudentEnrollmentHistoryDto {
+  studentId: number;
+  enrollments: EnrollmentDto[];
+  totalCourses: number;
+  completedCourses: number;
+  activeCourses: number;
+}
+```
+
+---
+
+### 4. Get Course Enrollments
+
+**Endpoint:** `GET /api/v1/enrollments/course/{courseId}`
+
+**Roles:** `ADMIN`, `TEACHER`
+
+**Query Params:**
+```typescript
+{
+  page?: number;
+  size?: number;
+}
+```
+
+**Response (200 OK):**
+```typescript
+{
+  success: true;
+  data: {
+    content: EnrollmentDto[];
+    // ...pagination
+  };
+  message: string;
+  timestamp: string;
+}
+```
+
+---
+
+### 5. Update Enrollment
+
+**Endpoint:** `PUT /api/v1/enrollments/{id}`
+
+**Roles:** `ADMIN`, `TEACHER` (solo cursos asignados)
+
+**Request:**
+```typescript
+interface UpdateEnrollmentRequest {
+  status?: 'ACTIVE' | 'COMPLETED' | 'FAILED' | 'DROPPED' | 'SUSPENDED';
+  finalGrade?: number;     // Decimal (0.00 - 100.00)
+  notes?: string;
 }
 ```
 
@@ -573,46 +1098,26 @@ interface EnrollmentRequest {
 {
   success: true;
   data: EnrollmentDto;
-  message: "Student enrolled successfully";
-}
-
-interface EnrollmentDto {
-  id: number;
-  studentId: number;
-  studentName: string;
-  courseId: number;
-  courseName: string;
-  enrollmentDate: string;
-  status: 'ACTIVE' | 'COMPLETED' | 'DROPPED';
+  message: "Enrollment updated successfully";
+  timestamp: string;
 }
 ```
-
-**Errores:**
-- `409 Conflict`: Estudiante ya inscrito o curso lleno
 
 ---
 
-### 5. Upload Course Material
+### 6. Delete Enrollment
 
-**Endpoint:** `POST /api/v1/courses/{courseId}/materials`
+**Endpoint:** `DELETE /api/v1/enrollments/{id}`
 
-**Roles:** `ADMIN`, `TEACHER` (solo cursos asignados)
+**Roles:** `ADMIN`
 
-**Request (multipart/form-data):**
-```typescript
-interface UploadMaterialRequest {
-  title: string;
-  description: string;
-  file: File;
-}
-```
-
-**Response (201 Created):**
+**Response (200 OK):**
 ```typescript
 {
   success: true;
-  data: CourseMaterialDto;
-  message: "Material uploaded successfully";
+  data: null;
+  message: "Enrollment deleted successfully";
+  timestamp: string;
 }
 ```
 
