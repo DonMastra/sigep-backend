@@ -9,6 +9,7 @@ import com.sigep.students.application.service.StudentService
 import com.sigep.security.application.annotation.RequireAdmin
 import com.sigep.security.application.annotation.RequireAdminOrTeacher
 import com.sigep.security.application.annotation.RequireStaffOrGuardian
+import com.sigep.students.application.dto.StudentDetailDto
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
@@ -41,7 +42,7 @@ class StudentController(
     @GetMapping("/{id}")
     @RequireStaffOrGuardian
     @Operation(summary = "Get student by ID", description = "Retrieve a specific student with full details and course history")
-    fun getStudentById(@PathVariable id: Long): ResponseEntity<ApiResponse<com.sigep.students.application.dto.StudentDetailDto>> {
+    fun getStudentById(@PathVariable id: Long): ResponseEntity<ApiResponse<StudentDetailDto>> {
         val student = studentService.getStudentDetailById(id)
         return ResponseEntity.ok(ApiResponse.success(student))
     }
