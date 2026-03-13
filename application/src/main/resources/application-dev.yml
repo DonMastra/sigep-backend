@@ -11,10 +11,10 @@ spring:
   jpa:
     hibernate:
       ddl-auto: update
-    show-sql: true
+    show-sql: false
     properties:
       hibernate:
-        format_sql: true
+        format_sql: false
 
 # JWT Configuration (shorter expiration for development)
 jwt:
@@ -24,7 +24,7 @@ jwt:
 # CORS Configuration (allow local development)
 app:
   cors:
-    allowed-origins: http://localhost:4200,http://localhost:3000
+    allowed-origins: http://localhost:4200,http://localhost:3000,https://n8mc3d7z-4200.brs.devtunnels.ms
   security:
     rate-limit:
       capacity: 1000
@@ -46,5 +46,5 @@ logging:
     root: INFO
     com.sigep: DEBUG
     org.springframework.security: DEBUG
-    org.hibernate.SQL: DEBUG
-
+    org.hibernate.SQL: OFF
+    org.hibernate.type.descriptor.sql.BasicBinder: OFF

@@ -1265,20 +1265,29 @@ interface SubmitGradeRequest {
 
 ## 👔 Staff Endpoints
 
-### 1. List Teaching Staff
+> **Actualizado**: Marzo 2026 — Integración completa con frontend (Angular).
+
+---
+
+### Personal Docente (`/api/v1/staff/teaching`)
+
+---
+
+#### 1. Listar Personal Docente
 
 **Endpoint:** `GET /api/v1/staff/teaching`
 
+**Roles:** `ADMIN`
+
 **Query Params:**
 ```typescript
-interface TeachingStaffParams {
-  page?: number;
-  size?: number;
-  status?: 'ACTIVE' | 'INACTIVE' | 'ON_LEAVE';
+interface TeachingStaffListParams {
+  page?: number;          // Default: 0
+  limit?: number;         // Default: 10
+  sort?: string;          // Default: 'lastName'
+  order?: 'ASC' | 'DESC'; // Default: 'ASC'
 }
 ```
-
-**Roles:** `ADMIN`
 
 **Response (200 OK):**
 ```typescript
@@ -1286,7 +1295,10 @@ interface TeachingStaffParams {
   success: true;
   data: {
     content: TeachingStaffDto[];
-    // ...pagination
+    page: number;
+    size: number;
+    totalElements: number;
+    totalPages: number;
   };
 }
 
@@ -1294,25 +1306,174 @@ interface TeachingStaffDto {
   id: number;
   firstName: string;
   lastName: string;
+  fullName: string;
   email: string;
   phoneNumber: string;
-  specialization: string;
-  hireDate: string;
-  status: 'ACTIVE' | 'INACTIVE' | 'ON_LEAVE';
-  assignedStudentsCount: number;
-  assignedCoursesCount: number;
+  documentNumber: string;
+  birthDate: string;                // YYYY-MM-DD
+  address: string;
+  hireDate: string;                 // YYYY-MM-DD
   monthlySalary: number;
-  paymentStatus: 'UP_TO_DATE' | 'PENDING' | 'OVERDUE';
-  createdAt: string;
-  updatedAt: string;
+  paymentStatus: 'UP_TO_DATE' | 'PENDING' | 'OVERDUE' | 'PARTIALLY_PAID';
+  status: 'ACTIVE' | 'INACTIVE';   // derivado de isActive
+  assignedStudentsCount: number;
+  assignedCourses: CourseAssignmentDto[] | null;
+  specialization: string | null;
+  observations: string | null;
+  notes: string | null;
+  emergencyContactName: string;
+  emergencyContactPhone: string;
+  attendanceStats: AttendanceStatsDto | null;
+  totalWorkingDaysInMonth: number | null; // días laborales (L-V) del mes actual
+  photoUrl: string | null;
+  createdAt: string;                // ISO datetime
+  updatedAt: string;                // ISO datetime
+}
+
+interface CourseAssignmentDto {
+  courseId: number;
+  courseName: string;
+  level: string;
+  enrolledStudents: number;
+}
+
+interface AttendanceStatsDto {
+  totalDays: number;
+  presentDays: number;
+  absentDays: number;
+  lateDays: number;
+  attendanceRate: number;           // porcentaje (0-100) sobre días laborales del mes
 }
 ```
 
 ---
 
-### 2. Get Teaching Staff Details
+#### 2. Obtener Detalle de Docente
 
 **Endpoint:** `GET /api/v1/staff/teaching/{id}`
+
+**Roles:** `ADMIN`, `TEACHER`
+
+**Response (200 OK):**
+```typescript
+{
+  success: true;
+  data: TeachingStaffDto;           // incluye attendanceStats y totalWorkingDaysInMonth
+}
+```
+
+---
+
+#### 3. Buscar Personal Docente
+
+**Endpoint:** `GET /api/v1/staff/teaching/search`
+
+**Roles:** `ADMIN`
+
+**Query Params:**
+```typescript
+{
+  query: string;    // busca en firstName, lastName, email, documentNumber
+  page?: number;
+  limit?: number;
+}
+```
+
+**Response (200 OK):**
+```typescript
+{
+  success: true;
+  data: { content: TeachingStaffDto[]; /* ...paginación */ };
+}
+```
+
+---
+
+#### 4. Crear Docente
+
+**Endpoint:** `POST /api/v1/staff/teaching`
+
+**Roles:** `ADMIN`
+
+**Request Body:**
+```typescript
+interface CreateTeachingStaffRequest {
+  firstName: string;
+  lastName: string;
+  email: string;              // único
+  phoneNumber: string;
+  documentNumber: string;     // único
+  birthDate: string;          // YYYY-MM-DD
+  address: string;
+  hireDate: string;           // YYYY-MM-DD
+  monthlySalary: number;
+  specialization?: string;
+  observations?: string;
+  notes?: string;
+  qualifications?: string;    // alias de specialization
+
+  // Contacto de emergencia — enviar de dos formas (se acepta cualquiera):
+  emergencyContactName?: string;   // Forma 1: dos campos separados
+  emergencyContactPhone?: string;
+  emergencyContact?: string;       // Forma 2: "Nombre / Teléfono" (string único)
+}
+```
+
+**Response (201 Created):**
+```typescript
+{
+  success: true;
+  data: TeachingStaffDto;
+  message: "Teaching staff created successfully";
+}
+```
+
+**Errores:**
+- `400 Bad Request`: Validación fallida
+- `409 Conflict` / `400`: Email o documentNumber ya existe
+
+---
+
+#### 5. Actualizar Docente
+
+**Endpoint:** `PUT /api/v1/staff/teaching/{id}`
+
+**Roles:** `ADMIN`
+
+**Request Body:** (todos los campos son opcionales — solo se actualizan los enviados)
+```typescript
+interface UpdateTeachingStaffRequest {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  phoneNumber?: string;
+  address?: string;
+  monthlySalary?: number;
+  paymentStatus?: 'UP_TO_DATE' | 'PENDING' | 'OVERDUE' | 'PARTIALLY_PAID';
+  specialization?: string;
+  qualifications?: string;
+  observations?: string;
+  notes?: string;
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
+  emergencyContact?: string;      // "Nombre / Teléfono"
+}
+```
+
+**Response (200 OK):**
+```typescript
+{
+  success: true;
+  data: TeachingStaffDto;
+  message: "Teaching staff updated successfully";
+}
+```
+
+---
+
+#### 6. Eliminar Docente (Soft Delete)
+
+**Endpoint:** `DELETE /api/v1/staff/teaching/{id}`
 
 **Roles:** `ADMIN`
 
@@ -1320,35 +1481,31 @@ interface TeachingStaffDto {
 ```typescript
 {
   success: true;
-  data: TeachingStaffDetailDto;
-}
-
-interface TeachingStaffDetailDto extends TeachingStaffDto {
-  documentNumber: string;
-  address: string;
-  emergencyContact: string;
-  qualifications: string;
-  assignedCourses: CourseDto[];
-  assignedStudents: StudentDto[];
-  attendanceRecords: AttendanceRecordDto[];
-  notes: string | null;
-}
-
-interface AttendanceRecordDto {
-  id: number;
-  date: string;
-  status: 'PRESENT' | 'ABSENT' | 'LATE' | 'EXCUSED';
-  notes: string | null;
+  message: "Teaching staff deleted successfully";
 }
 ```
 
 ---
 
-### 3. List Non-Teaching Staff
+### Personal No Docente (`/api/v1/staff/non-teaching`)
+
+---
+
+#### 7. Listar Personal No Docente
 
 **Endpoint:** `GET /api/v1/staff/non-teaching`
 
 **Roles:** `ADMIN`
+
+**Query Params:**
+```typescript
+{
+  page?: number;
+  limit?: number;
+  sort?: string;
+  order?: 'ASC' | 'DESC';
+}
+```
 
 **Response (200 OK):**
 ```typescript
@@ -1356,7 +1513,7 @@ interface AttendanceRecordDto {
   success: true;
   data: {
     content: NonTeachingStaffDto[];
-    // ...pagination
+    /* ...paginación */
   };
 }
 
@@ -1364,19 +1521,289 @@ interface NonTeachingStaffDto {
   id: number;
   firstName: string;
   lastName: string;
+  fullName: string;
   email: string;
   phoneNumber: string;
-  position: 'CLEANING' | 'MAINTENANCE' | 'IT' | 'ADMINISTRATION' | 'OTHER';
-  company: string;
+  documentNumber: string;
+  birthDate: string;              // YYYY-MM-DD
+  address: string;
+  hireDate: string;               // YYYY-MM-DD
   hourlyRate: number;
-  assignedTasks: string;
+  role: 'CLEANING' | 'MAINTENANCE' | 'IT_SUPPORT' | 'IT' | 'SECURITY' | 'ADMINISTRATION' | 'OTHER';
+  position: string;               // alias de role.name — para compatibilidad frontend
+  companyName: string;
+  company: string;                // alias de companyName — para compatibilidad frontend
+  assignedTasks: string | null;
+  observations: string | null;
+  emergencyContactName: string;
+  emergencyContactPhone: string;
   status: 'ACTIVE' | 'INACTIVE';
+  attendanceStats: AttendanceStatsDto | null;
+  hoursWorkedThisMonth: number | null;
+  estimatedEarningsThisMonth: number | null;
+  photoUrl: string | null;
   createdAt: string;
   updatedAt: string;
 }
 ```
 
+> **Nota de nomenclatura**: El frontend usa `position` y `company`. El backend expone ambos nombres en la respuesta para máxima compatibilidad.
+
 ---
+
+#### 8. Obtener Detalle de No Docente
+
+**Endpoint:** `GET /api/v1/staff/non-teaching/{id}`
+
+**Roles:** `ADMIN`, `TEACHER`
+
+**Response (200 OK):**
+```typescript
+{
+  success: true;
+  data: NonTeachingStaffDto;    // incluye hoursWorkedThisMonth, estimatedEarningsThisMonth y attendanceStats
+}
+```
+
+---
+
+#### 9. Filtrar No Docentes por Rol
+
+**Endpoint:** `GET /api/v1/staff/non-teaching/by-role/{role}`
+
+**Roles:** `ADMIN`
+
+**Path Param:** `role` — uno de: `CLEANING | MAINTENANCE | IT_SUPPORT | IT | SECURITY | ADMINISTRATION | OTHER`
+
+**Query Params:** `page`, `limit`
+
+**Response (200 OK):** Lista paginada de `NonTeachingStaffDto`
+
+---
+
+#### 10. Buscar Personal No Docente
+
+**Endpoint:** `GET /api/v1/staff/non-teaching/search`
+
+**Roles:** `ADMIN`
+
+**Query Params:**
+```typescript
+{
+  query: string;    // busca en firstName, lastName, email, documentNumber, companyName
+  page?: number;
+  limit?: number;
+}
+```
+
+---
+
+#### 11. Crear No Docente
+
+**Endpoint:** `POST /api/v1/staff/non-teaching`
+
+**Roles:** `ADMIN`
+
+**Request Body:**
+```typescript
+interface CreateNonTeachingStaffRequest {
+  firstName: string;
+  lastName: string;
+  email: string;            // único
+  phoneNumber: string;
+  documentNumber: string;   // único
+  birthDate: string;        // YYYY-MM-DD
+  address: string;
+  hireDate: string;         // YYYY-MM-DD
+  hourlyRate: number;
+
+  // Rol — enviar 'role' O 'position' (se acepta cualquiera):
+  role?: 'CLEANING' | 'MAINTENANCE' | 'IT_SUPPORT' | 'IT' | 'SECURITY' | 'ADMINISTRATION' | 'OTHER';
+  position?: 'CLEANING' | 'MAINTENANCE' | 'IT_SUPPORT' | 'IT' | 'SECURITY' | 'ADMINISTRATION' | 'OTHER';
+
+  // Empresa — enviar 'companyName' O 'company':
+  companyName?: string;
+  company?: string;
+
+  assignedTasks?: string;
+  observations?: string;
+
+  // Contacto de emergencia:
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
+  emergencyContact?: string;     // "Nombre / Teléfono"
+}
+```
+
+**Response (201 Created):**
+```typescript
+{
+  success: true;
+  data: NonTeachingStaffDto;
+  message: "Non-teaching staff created successfully";
+}
+```
+
+---
+
+#### 12. Actualizar No Docente
+
+**Endpoint:** `PUT /api/v1/staff/non-teaching/{id}`
+
+**Roles:** `ADMIN`
+
+**Request Body:** (todos opcionales)
+```typescript
+interface UpdateNonTeachingStaffRequest {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  phoneNumber?: string;
+  address?: string;
+  hourlyRate?: number;
+  role?: NonTeachingRole;
+  position?: NonTeachingRole;   // alias de role
+  companyName?: string;
+  company?: string;             // alias de companyName
+  assignedTasks?: string;
+  observations?: string;
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
+  emergencyContact?: string;
+}
+```
+
+**Response (200 OK):**
+```typescript
+{
+  success: true;
+  data: NonTeachingStaffDto;
+  message: "Non-teaching staff updated successfully";
+}
+```
+
+---
+
+#### 13. Eliminar No Docente (Soft Delete)
+
+**Endpoint:** `DELETE /api/v1/staff/non-teaching/{id}`
+
+**Roles:** `ADMIN`
+
+**Response (200 OK):**
+```typescript
+{
+  success: true;
+  message: "Non-teaching staff deleted successfully";
+}
+```
+
+---
+
+### Asistencia de Personal (`/api/v1/staff/attendance`)
+
+---
+
+#### 14. Registrar Asistencia
+
+**Endpoint:** `POST /api/v1/staff/attendance`
+
+**Roles:** `ADMIN`
+
+**Request Body:**
+```typescript
+interface CreateAttendanceRequest {
+  teachingStaffId?: number;       // uno de los dos es requerido
+  nonTeachingStaffId?: number;
+  attendanceDate: string;         // YYYY-MM-DD
+  checkInTime?: string;           // HH:mm
+  checkOutTime?: string;          // HH:mm
+  status: 'PRESENT' | 'ABSENT' | 'LATE' | 'EXCUSED' | 'SICK_LEAVE' | 'VACATION';
+  notes?: string;
+  hoursWorked?: number;
+}
+```
+
+**Response (201 Created):** `StaffAttendanceDto`
+
+---
+
+#### 15. Actualizar Asistencia
+
+**Endpoint:** `PUT /api/v1/staff/attendance/{id}`
+
+**Roles:** `ADMIN`
+
+---
+
+#### 16. Obtener Asistencia de Docente
+
+**Endpoint:** `GET /api/v1/staff/attendance/teaching/{staffId}`
+
+**Query Params:** `startDate`, `endDate` (YYYY-MM-DD), `page`, `limit`
+
+---
+
+#### 17. Obtener Asistencia de No Docente
+
+**Endpoint:** `GET /api/v1/staff/attendance/non-teaching/{staffId}`
+
+**Query Params:** `startDate`, `endDate` (YYYY-MM-DD), `page`, `limit`
+
+---
+
+#### 18. Eliminar Registro de Asistencia
+
+**Endpoint:** `DELETE /api/v1/staff/attendance/{id}`
+
+**Roles:** `ADMIN`
+
+---
+
+### Enumeraciones del Módulo Staff
+
+```typescript
+// Roles de personal no docente
+type NonTeachingRole =
+  | 'CLEANING'        // Personal de limpieza
+  | 'MAINTENANCE'     // Mantenimiento
+  | 'IT_SUPPORT'      // Soporte IT (también acepta 'IT' como alias)
+  | 'IT'              // Alias de IT_SUPPORT
+  | 'SECURITY'        // Seguridad
+  | 'ADMINISTRATION'  // Administrativo
+  | 'OTHER';          // Otro
+
+// Estado de pago de docentes
+type PaymentStatus =
+  | 'UP_TO_DATE'      // Al día
+  | 'PENDING'         // Pendiente
+  | 'OVERDUE'         // Vencido
+  | 'PARTIALLY_PAID'; // Pago parcial
+
+// Estado de asistencia
+type AttendanceStatus =
+  | 'PRESENT'
+  | 'ABSENT'
+  | 'LATE'
+  | 'EXCUSED'
+  | 'SICK_LEAVE'
+  | 'VACATION';
+```
+
+---
+
+### Notas de Compatibilidad Frontend ↔ Backend
+
+| Campo frontend | Campo backend | Resolución |
+|---|---|---|
+| `position` | `role` | Ambos se aceptan en requests; ambos se devuelven en responses |
+| `company` | `companyName` | Idem |
+| `emergencyContact` (string único) | `emergencyContactName` + `emergencyContactPhone` | El backend acepta ambas formas; split automático por `/` |
+| `IT` | `IT_SUPPORT` | Ambos valores se aceptan; la respuesta incluye el valor exacto del enum |
+| `status: 'ACTIVE'/'INACTIVE'` | `isActive: boolean` | El backend convierte automáticamente en la respuesta |
+| `totalWorkingDaysInMonth` | — | Calculado por el backend (días L-V del mes actual) |
+
+
 
 ## 💳 Payments Endpoints
 

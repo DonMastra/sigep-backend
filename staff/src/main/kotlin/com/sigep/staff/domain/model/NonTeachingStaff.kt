@@ -39,11 +39,11 @@ data class NonTeachingStaff(
     val hourlyRate: Double,
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    val role: NonTeachingRole,
+    @Column(nullable = true)
+    val role: NonTeachingRole? = null,
 
-    @Column(nullable = false)
-    val companyName: String,
+    @Column(nullable = true)
+    val companyName: String? = null,
 
     @Column(columnDefinition = "TEXT")
     val assignedTasks: String? = null,
@@ -66,6 +66,8 @@ enum class NonTeachingRole {
     CLEANING,
     MAINTENANCE,
     IT_SUPPORT,
+    /** Alias de IT_SUPPORT para compatibilidad con el frontend */
+    IT,
     SECURITY,
     ADMINISTRATION,
     OTHER

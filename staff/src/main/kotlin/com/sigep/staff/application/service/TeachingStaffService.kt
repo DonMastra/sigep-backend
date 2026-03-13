@@ -101,10 +101,11 @@ class TeachingStaffService(
             address = request.address,
             hireDate = request.hireDate,
             monthlySalary = request.monthlySalary,
-            specialization = request.specialization,
+            specialization = request.specialization ?: request.qualifications,
             observations = request.observations,
-            emergencyContactName = request.emergencyContactName,
-            emergencyContactPhone = request.emergencyContactPhone
+            notes = request.notes,
+            emergencyContactName = request.resolvedEmergencyContactName,
+            emergencyContactPhone = request.resolvedEmergencyContactPhone
         )
 
         val savedStaff = teachingStaffRepository.save(staff)
@@ -136,11 +137,11 @@ class TeachingStaffService(
             address = request.address ?: staff.address,
             monthlySalary = request.monthlySalary ?: staff.monthlySalary,
             paymentStatus = request.paymentStatus ?: staff.paymentStatus,
-            specialization = request.specialization ?: staff.specialization,
+            specialization = request.specialization ?: request.qualifications ?: staff.specialization,
             observations = request.observations ?: staff.observations,
             notes = request.notes ?: staff.notes,
-            emergencyContactName = request.emergencyContactName ?: staff.emergencyContactName,
-            emergencyContactPhone = request.emergencyContactPhone ?: staff.emergencyContactPhone
+            emergencyContactName = request.resolvedEmergencyContactName ?: staff.emergencyContactName,
+            emergencyContactPhone = request.resolvedEmergencyContactPhone ?: staff.emergencyContactPhone
         )
 
         val savedStaff = teachingStaffRepository.save(updatedStaff)
@@ -176,12 +177,17 @@ class TeachingStaffService(
             hireDate = staff.hireDate,
             monthlySalary = staff.monthlySalary,
             paymentStatus = staff.paymentStatus,
+            status = if (staff.isActive) "ACTIVE" else "INACTIVE",
             assignedStudentsCount = staff.assignedStudentsCount,
             specialization = staff.specialization,
             observations = staff.observations,
             notes = staff.notes,
             emergencyContactName = staff.emergencyContactName,
-            emergencyContactPhone = staff.emergencyContactPhone
+            emergencyContactPhone = staff.emergencyContactPhone,
+            attendanceStats = AttendanceStatsDto.EMPTY,
+            totalWorkingDaysInMonth = 0,
+            createdAt = staff.createdAt,
+            updatedAt = staff.updatedAt
         )
     }
 
@@ -191,6 +197,11 @@ class TeachingStaffService(
         val now = LocalDate.now()
         val startOfMonth = now.withDayOfMonth(1)
         val endOfMonth = YearMonth.now().atEndOfMonth()
+
+        // Calcular días laborales reales del mes (lunes a viernes)
+        val totalWorkingDays = generateSequence(startOfMonth) { it.plusDays(1) }
+            .takeWhile { !it.isAfter(endOfMonth) }
+            .count { it.dayOfWeek.value in 1..5 }
 
         val presentDays = attendanceRepository.countTeachingStaffAttendanceByStatus(
             staff.id!!, AttendanceStatus.PRESENT, startOfMonth, endOfMonth
@@ -205,9 +216,10 @@ class TeachingStaffService(
         ).toInt()
 
         val totalDays = presentDays + absentDays + lateDays
-        val attendanceRate = if (totalDays > 0) (presentDays.toDouble() / totalDays.toDouble()) * 100 else 0.0
+        val attendanceRate = if (totalWorkingDays > 0) (presentDays.toDouble() / totalWorkingDays.toDouble()) * 100 else 0.0
 
         return dto.copy(
+            totalWorkingDaysInMonth = totalWorkingDays,
             attendanceStats = AttendanceStatsDto(
                 totalDays = totalDays,
                 presentDays = presentDays,
