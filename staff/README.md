@@ -1,76 +1,55 @@
 # Módulo de Gestión de Personal (Staff)
 
+> **Última actualización**: Marzo 2026 — Integración completa con frontend Angular.
+
 ## Descripción
 
-El módulo **Staff** proporciona funcionalidades completas para la gestión del personal docente y no docente de la institución educativa.
+El módulo **Staff** proporciona funcionalidades completas para la gestión del personal docente y no docente de la institución educativa. Expone una API REST con soporte CRUD completo para ambos tipos de personal, registro de asistencia y estadísticas mensuales.
+
+---
 
 ## Características Principales
 
 ### 👨‍🏫 Personal Docente (Teaching Staff)
 
-- **Datos Personales**: Nombre, email, teléfono, documento, dirección
-- **Información Laboral**: 
-  - Fecha de contratación
-  - Salario mensual
-  - Estado de pago (al día, pendiente, atrasado)
-  - Especialización
-- **Gestión Académica**:
-  - Estudiantes asignados (contador)
-  - Cursos asignados (integración con módulo de courses)
-- **Seguimiento**:
-  - Observaciones y notas administrativas
-  - Presentismo/ausentismo
-  - Estadísticas de asistencia
-- **Contacto de Emergencia**: Nombre y teléfono
+- **Datos Personales**: Nombre, email, teléfono, documento, fecha de nacimiento, dirección
+- **Información Laboral**: Fecha de contratación, salario mensual, estado de pago, especialización
+- **Gestión Académica**: Contador de estudiantes asignados, cursos asignados (integración con módulo courses)
+- **Asistencia**: Estadísticas mensuales calculadas sobre días laborales reales (L-V)
+- **Contacto de Emergencia**: Nombre y teléfono (se aceptan como dos campos separados o como string único `"Nombre / Teléfono"`)
+- **Soft Delete**: Desactivación lógica (no borrado físico)
 
 ### 🧹 Personal No Docente (Non-Teaching Staff)
 
-- **Datos Personales**: Nombre, email, teléfono, documento, dirección
-- **Información Laboral**:
-  - Fecha de contratación
-  - Tarifa por hora
-  - Rol (limpieza, mantenimiento, sistemas, seguridad, administración)
-  - Empresa a la que pertenece
-- **Gestión de Tareas**:
-  - Tareas asignadas
-  - Horas trabajadas por mes
-  - Ganancia estimada mensual
-- **Seguimiento**:
-  - Observaciones
-  - Días de asistencia
-  - Estadísticas de asistencia
-- **Contacto de Emergencia**: Nombre y teléfono
+- **Datos Personales**: Nombre, email, teléfono, documento, fecha de nacimiento, dirección
+- **Información Laboral**: Fecha de contratación, tarifa por hora, rol, empresa
+- **Gestión de Tareas**: Tareas asignadas, horas trabajadas en el mes, ganancia estimada mensual
+- **Asistencia**: Estadísticas mensuales calculadas sobre días laborales reales (L-V)
+- **Contacto de Emergencia**: Dos campos separados o string único (se acepta cualquier formato)
+- **Soft Delete**: Desactivación lógica
 
 ### 📊 Control de Asistencia
 
-- Registro de entrada/salida (check-in/check-out)
-- Estados de asistencia:
-  - Presente
-  - Ausente
-  - Tarde
-  - Justificado
-  - Licencia por enfermedad
-  - Vacaciones
-- Horas trabajadas (especialmente para personal no docente)
-- Notas sobre cada registro de asistencia
-- Reportes de asistencia por período
+- Registro de entrada/salida (check-in / check-out)
+- Estados: `PRESENT`, `ABSENT`, `LATE`, `EXCUSED`, `SICK_LEAVE`, `VACATION`
+- Horas trabajadas por registro (especialmente útil para no docentes)
+- Reportes por período con estadísticas automáticas
+
+---
 
 ## Arquitectura
 
-### Estructura de Módulos
-
 ```
 staff/
-├── domain/
-│   └── model/
-│       ├── TeachingStaff.kt          # Entidad personal docente
-│       ├── NonTeachingStaff.kt       # Entidad personal no docente
-│       └── StaffAttendance.kt        # Registro de asistencia
+├── domain/model/
+│   ├── TeachingStaff.kt          # Entidad personal docente
+│   ├── NonTeachingStaff.kt       # Entidad personal no docente (+ enum NonTeachingRole)
+│   └── StaffAttendance.kt        # Registro de asistencia (+ enum AttendanceStatus)
 ├── application/
 │   ├── dto/
-│   │   ├── TeachingStaffDto.kt
-│   │   ├── NonTeachingStaffDto.kt
-│   │   └── StaffAttendanceDto.kt
+│   │   ├── TeachingStaffDto.kt   # DTOs, CreateRequest, UpdateRequest (docente)
+│   │   ├── NonTeachingStaffDto.kt # DTOs, CreateRequest, UpdateRequest (no docente)
+│   │   └── StaffAttendanceDto.kt  # DTOs de asistencia
 │   └── service/
 │       ├── TeachingStaffService.kt
 │       ├── NonTeachingStaffService.kt
@@ -82,55 +61,140 @@ staff/
 │   │   └── StaffAttendanceRepository.kt
 │   └── config/
 │       └── StaffModuleConfig.kt
-└── presentation/
-    └── controller/
-        ├── TeachingStaffController.kt
-        ├── NonTeachingStaffController.kt
-        └── StaffAttendanceController.kt
+└── presentation/controller/
+    ├── TeachingStaffController.kt
+    ├── NonTeachingStaffController.kt
+    └── StaffAttendanceController.kt
 ```
+
+---
 
 ## API Endpoints
 
-### Personal Docente
+### Personal Docente — `GET /api/v1/staff/teaching`
 
-| Método | Endpoint | Descripción | Rol Requerido |
-|--------|----------|-------------|---------------|
-| GET | `/api/v1/staff/teaching` | Listar todo el personal docente | ADMIN |
-| GET | `/api/v1/staff/teaching/{id}` | Obtener docente por ID | ADMIN, TEACHER |
-| GET | `/api/v1/staff/teaching/search?query=` | Buscar docentes | ADMIN |
+| Método | Endpoint | Descripción | Rol |
+|--------|----------|-------------|-----|
+| GET | `/api/v1/staff/teaching` | Listar docentes (paginado) | ADMIN |
+| GET | `/api/v1/staff/teaching/{id}` | Detalle con asistencia del mes | ADMIN, TEACHER |
+| GET | `/api/v1/staff/teaching/search?query=` | Buscar por nombre/email/documento | ADMIN |
 | POST | `/api/v1/staff/teaching` | Crear docente | ADMIN |
 | PUT | `/api/v1/staff/teaching/{id}` | Actualizar docente | ADMIN |
-| DELETE | `/api/v1/staff/teaching/{id}` | Eliminar docente | ADMIN |
+| DELETE | `/api/v1/staff/teaching/{id}` | Desactivar docente (soft delete) | ADMIN |
 
-### Personal No Docente
+### Personal No Docente — `/api/v1/staff/non-teaching`
 
-| Método | Endpoint | Descripción | Rol Requerido |
-|--------|----------|-------------|---------------|
-| GET | `/api/v1/staff/non-teaching` | Listar todo el personal no docente | ADMIN |
-| GET | `/api/v1/staff/non-teaching/{id}` | Obtener personal por ID | ADMIN, TEACHER |
+| Método | Endpoint | Descripción | Rol |
+|--------|----------|-------------|-----|
+| GET | `/api/v1/staff/non-teaching` | Listar no docentes (paginado) | ADMIN |
+| GET | `/api/v1/staff/non-teaching/{id}` | Detalle con horas y asistencia del mes | ADMIN, TEACHER |
 | GET | `/api/v1/staff/non-teaching/by-role/{role}` | Filtrar por rol | ADMIN |
-| GET | `/api/v1/staff/non-teaching/search?query=` | Buscar personal | ADMIN |
-| POST | `/api/v1/staff/non-teaching` | Crear personal | ADMIN |
-| PUT | `/api/v1/staff/non-teaching/{id}` | Actualizar personal | ADMIN |
-| DELETE | `/api/v1/staff/non-teaching/{id}` | Eliminar personal | ADMIN |
+| GET | `/api/v1/staff/non-teaching/search?query=` | Buscar por nombre/email/doc/empresa | ADMIN |
+| POST | `/api/v1/staff/non-teaching` | Crear no docente | ADMIN |
+| PUT | `/api/v1/staff/non-teaching/{id}` | Actualizar no docente | ADMIN |
+| DELETE | `/api/v1/staff/non-teaching/{id}` | Desactivar no docente (soft delete) | ADMIN |
 
-### Asistencia
+### Asistencia — `/api/v1/staff/attendance`
 
-| Método | Endpoint | Descripción | Rol Requerido |
-|--------|----------|-------------|---------------|
+| Método | Endpoint | Descripción | Rol |
+|--------|----------|-------------|-----|
 | POST | `/api/v1/staff/attendance` | Registrar asistencia | ADMIN |
-| PUT | `/api/v1/staff/attendance/{id}` | Actualizar asistencia | ADMIN |
-| GET | `/api/v1/staff/attendance/teaching/{staffId}` | Asistencia de docente | ADMIN, TEACHER |
-| GET | `/api/v1/staff/attendance/non-teaching/{staffId}` | Asistencia de no docente | ADMIN, TEACHER |
+| PUT | `/api/v1/staff/attendance/{id}` | Actualizar registro | ADMIN |
+| GET | `/api/v1/staff/attendance/teaching/{staffId}` | Asistencia de docente por período | ADMIN, TEACHER |
+| GET | `/api/v1/staff/attendance/non-teaching/{staffId}` | Asistencia de no docente por período | ADMIN, TEACHER |
 | DELETE | `/api/v1/staff/attendance/{id}` | Eliminar registro | ADMIN |
 
-## Ejemplos de Uso
+---
 
-### Crear Personal Docente
+## Modelos de Respuesta
 
+### `TeachingStaffDto`
+
+```json
+{
+  "id": 1,
+  "firstName": "María",
+  "lastName": "González",
+  "fullName": "María González",
+  "email": "maria.gonzalez@sigep.edu.mx",
+  "phoneNumber": "+52 55 1234 5678",
+  "documentNumber": "GOMX850315ABC",
+  "birthDate": "1985-03-15",
+  "address": "Calle Principal 123, CDMX",
+  "hireDate": "2020-01-15",
+  "monthlySalary": 15000.00,
+  "paymentStatus": "UP_TO_DATE",
+  "status": "ACTIVE",
+  "assignedStudentsCount": 24,
+  "assignedCourses": null,
+  "specialization": "Inglés avanzado",
+  "observations": null,
+  "notes": null,
+  "emergencyContactName": "Juan González",
+  "emergencyContactPhone": "+52 55 9876 5432",
+  "totalWorkingDaysInMonth": 22,
+  "attendanceStats": {
+    "totalDays": 18,
+    "presentDays": 16,
+    "absentDays": 1,
+    "lateDays": 1,
+    "attendanceRate": 72.73
+  },
+  "photoUrl": null,
+  "createdAt": "2020-01-15T09:00:00Z",
+  "updatedAt": "2026-03-01T14:30:00Z"
+}
+```
+
+### `NonTeachingStaffDto`
+
+```json
+{
+  "id": 5,
+  "firstName": "Carlos",
+  "lastName": "Ramírez",
+  "fullName": "Carlos Ramírez",
+  "email": "carlos.ramirez@cleaning.com",
+  "phoneNumber": "+52 55 2222 3333",
+  "documentNumber": "RAMC920712XYZ",
+  "birthDate": "1992-07-12",
+  "address": "Av. Reforma 456, CDMX",
+  "hireDate": "2021-06-01",
+  "hourlyRate": 80.00,
+  "role": "CLEANING",
+  "position": "CLEANING",
+  "companyName": "Servicios de Limpieza SA",
+  "company": "Servicios de Limpieza SA",
+  "assignedTasks": "Limpieza de aulas y oficinas",
+  "observations": null,
+  "emergencyContactName": "Ana Ramírez",
+  "emergencyContactPhone": "+52 55 4444 5555",
+  "status": "ACTIVE",
+  "hoursWorkedThisMonth": 144.0,
+  "estimatedEarningsThisMonth": 11520.00,
+  "totalWorkingDaysInMonth": 22,
+  "attendanceStats": {
+    "totalDays": 18,
+    "presentDays": 17,
+    "absentDays": 1,
+    "lateDays": 0,
+    "attendanceRate": 77.27
+  },
+  "photoUrl": null,
+  "createdAt": "2021-06-01T08:00:00Z",
+  "updatedAt": "2026-03-01T14:30:00Z"
+}
+```
+
+---
+
+## Ejemplos de Requests
+
+### Crear Docente — formas equivalentes de enviar contacto de emergencia
+
+**Forma 1 (campos separados — recomendada):**
 ```bash
 POST /api/v1/staff/teaching
-Content-Type: application/json
 Authorization: Bearer {token}
 
 {
@@ -143,18 +207,26 @@ Authorization: Bearer {token}
   "address": "Calle Principal 123, CDMX",
   "hireDate": "2020-01-15",
   "monthlySalary": 15000.00,
-  "specialization": "Inglés avanzado - Certificación TOEFL",
-  "observations": "Excelente desempeño",
+  "specialization": "Inglés avanzado",
   "emergencyContactName": "Juan González",
   "emergencyContactPhone": "+52 55 9876 5432"
 }
 ```
 
-### Crear Personal No Docente
+**Forma 2 (campo único — compatible con frontend legacy):**
+```bash
+{
+  ...
+  "emergencyContact": "Juan González / +52 55 9876 5432"
+}
+```
+
+### Crear No Docente — aliases de campos
+
+El frontend puede enviar `position` en lugar de `role`, y `company` en lugar de `companyName`:
 
 ```bash
 POST /api/v1/staff/non-teaching
-Content-Type: application/json
 Authorization: Bearer {token}
 
 {
@@ -167,12 +239,10 @@ Authorization: Bearer {token}
   "address": "Av. Reforma 456, CDMX",
   "hireDate": "2021-06-01",
   "hourlyRate": 80.00,
-  "role": "CLEANING",
-  "companyName": "Servicios de Limpieza SA",
-  "assignedTasks": "Limpieza de aulas, baños y oficinas administrativas",
-  "observations": "Puntual y responsable",
-  "emergencyContactName": "Ana Ramírez",
-  "emergencyContactPhone": "+52 55 4444 5555"
+  "position": "CLEANING",
+  "company": "Servicios de Limpieza SA",
+  "assignedTasks": "Limpieza de aulas y baños",
+  "emergencyContact": "Ana Ramírez / +52 55 4444 5555"
 }
 ```
 
@@ -180,12 +250,11 @@ Authorization: Bearer {token}
 
 ```bash
 POST /api/v1/staff/attendance
-Content-Type: application/json
 Authorization: Bearer {token}
 
 {
   "teachingStaffId": 1,
-  "attendanceDate": "2025-10-22",
+  "attendanceDate": "2026-03-11",
   "checkInTime": "08:00:00",
   "checkOutTime": "16:00:00",
   "status": "PRESENT",
@@ -193,127 +262,94 @@ Authorization: Bearer {token}
 }
 ```
 
-### Registrar Asistencia de Personal No Docente
+---
 
-```bash
-POST /api/v1/staff/attendance
-Content-Type: application/json
-Authorization: Bearer {token}
+## Enumeraciones
 
-{
-  "nonTeachingStaffId": 5,
-  "attendanceDate": "2025-10-22",
-  "checkInTime": "06:00:00",
-  "checkOutTime": "14:00:00",
-  "status": "PRESENT",
-  "hoursWorked": 8.0,
-  "notes": "Limpieza completa del edificio"
-}
-```
+### `NonTeachingRole`
 
-## Roles de Personal No Docente
+| Valor | Descripción | Alias frontend |
+|-------|-------------|----------------|
+| `CLEANING` | Personal de limpieza | — |
+| `MAINTENANCE` | Mantenimiento | — |
+| `IT_SUPPORT` | Soporte de TI/sistemas | `IT` |
+| `IT` | Alias de IT_SUPPORT | — |
+| `SECURITY` | Seguridad | — |
+| `ADMINISTRATION` | Administración | — |
+| `OTHER` | Otro | — |
 
-- `CLEANING` - Personal de limpieza
-- `MAINTENANCE` - Personal de mantenimiento
-- `IT_SUPPORT` - Soporte de sistemas/TI
-- `SECURITY` - Seguridad
-- `ADMINISTRATION` - Administración
-- `OTHER` - Otro
+> **Nota**: El valor `IT` se acepta en requests y se almacena como `IT`. El frontend puede enviar `IT` o `IT_SUPPORT` indistintamente.
 
-## Estados de Pago (Docentes)
+### `PaymentStatus` (Docentes)
 
-- `UP_TO_DATE` - Al día
-- `PENDING` - Pendiente
-- `OVERDUE` - Atrasado
-- `PARTIALLY_PAID` - Parcialmente pagado
+| Valor | Descripción |
+|-------|-------------|
+| `UP_TO_DATE` | Al día |
+| `PENDING` | Pendiente |
+| `OVERDUE` | Atrasado/Vencido |
+| `PARTIALLY_PAID` | Pago parcial |
 
-## Estados de Asistencia
+### `AttendanceStatus`
 
-- `PRESENT` - Presente
-- `ABSENT` - Ausente
-- `LATE` - Tarde
-- `EXCUSED` - Justificado
-- `SICK_LEAVE` - Licencia por enfermedad
-- `VACATION` - Vacaciones
+| Valor | Descripción |
+|-------|-------------|
+| `PRESENT` | Presente |
+| `ABSENT` | Ausente |
+| `LATE` | Tarde |
+| `EXCUSED` | Justificado |
+| `SICK_LEAVE` | Licencia por enfermedad |
+| `VACATION` | Vacaciones |
 
-## Integración con Otros Módulos
+---
 
-### Módulo de Pagos (Payments)
+## Compatibilidad Frontend ↔ Backend
 
-El módulo de Staff **NO** gestiona pagos directamente. La información de salarios y tarifas por hora se utiliza únicamente para:
-- Visualización en el perfil del empleado
-- Cálculos estimados de ganancias
-- Reportes administrativos
+Esta API fue diseñada para ser compatible con el frontend Angular del proyecto SiGEP. A continuación se detallan los mapeos de compatibilidad:
 
-La gestión real de pagos se realiza en el módulo `payments`, que puede consultar:
-- Salario mensual de docentes desde `TeachingStaff`
-- Tarifa por hora y horas trabajadas de no docentes desde `NonTeachingStaff` y `StaffAttendance`
+| Campo frontend | Campo backend | Estrategia |
+|---|---|---|
+| `position` | `role` | Se aceptan ambos en requests; ambos se devuelven en responses |
+| `company` | `companyName` | Idem |
+| `emergencyContact` (string) | `emergencyContactName` + `emergencyContactPhone` | Split automático por `/`; también se aceptan los campos separados |
+| `IT` (rol) | `IT_SUPPORT` | El enum acepta ambos valores |
+| `status: 'ACTIVE'/'INACTIVE'` | `isActive: boolean` | Conversión automática en la capa de servicio |
+| `totalWorkingDaysInMonth` | — | Calculado por el backend (días L-V del mes actual) |
+| `attendanceRate` | — | Calculado sobre días laborales reales (no sobre registros totales) |
 
-### Módulo de Cursos (Courses)
-
-El módulo de Staff se integra con Courses para:
-- Mostrar cursos asignados a cada docente
-- Contar estudiantes por docente
-- Actualizar el contador `assignedStudentsCount` cuando se asignan/desasignan cursos
-
-### Módulo de Estudiantes (Students)
-
-Relacionado indirectamente a través de:
-- Cursos asignados
-- Tutorías o responsabilidades académicas
-
-## Auditoría
-
-Todas las entidades de Staff extienden `AuditMetadata` y registran automáticamente:
-- `createdAt` - Fecha de creación
-- `createdBy` - Usuario que creó el registro
-- `updatedAt` - Fecha de última modificación
-- `updatedBy` - Usuario que modificó
-- `isActive` - Estado de soft-delete
+---
 
 ## Caché
 
-Los servicios implementan caché de Redis para optimizar el rendimiento:
-- `@Cacheable` en operaciones de lectura
-- `@CacheEvict` en operaciones de escritura
+Los servicios usan Redis Cache para optimizar lecturas:
 
-Claves de caché:
-- `teachingStaff` - Personal docente
-- `nonTeachingStaff` - Personal no docente
+| Cache Key | Invalidación |
+|-----------|-------------|
+| `teachingStaff` | Al crear, actualizar o eliminar cualquier docente |
+| `nonTeachingStaff` | Al crear, actualizar o eliminar cualquier no docente |
 
-## Seguridad
+---
 
-### Permisos por Endpoint
+## Seguridad y Validaciones
 
-- **Solo ADMIN** puede:
-  - Crear, actualizar y eliminar personal
-  - Ver listados completos
-  - Registrar y modificar asistencias
-  
-- **ADMIN y TEACHER** pueden:
-  - Ver detalles individuales del personal
-  - Consultar asistencias
+- **Solo ADMIN**: crear, actualizar, eliminar personal y asistencias; ver listados
+- **ADMIN + TEACHER**: ver detalles individuales y consultar asistencias
+- Email único por tipo de personal
+- Número de documento único por tipo de personal
+- En asistencia: exactamente uno de `teachingStaffId` o `nonTeachingStaffId` debe estar presente
 
-## Validaciones
+---
 
-- Email único por persona
-- Documento de identidad único por persona
-- Fechas válidas (fecha de nacimiento < fecha de contratación < hoy)
-- Salarios y tarifas > 0
-- En asistencia: debe especificarse teachingStaffId O nonTeachingStaffId (no ambos)
+## Integración con Otros Módulos
 
-## Notas Importantes
+- **Courses**: Los cursos asignados a docentes se obtienen vía integración con el módulo `courses`. El campo `assignedCourses` se puebla al obtener el detalle.
+- **Payments**: El módulo staff **no gestiona pagos**. Expone `monthlySalary` y `hourlyRate` para que el módulo `payments` calcule nómina.
+- **Students**: Relacionado indirectamente a través de cursos asignados.
 
-1. **Soft Delete**: Al eliminar personal, solo se marca como inactivo (`isActive = false`)
-2. **Pagos**: Este módulo NO gestiona transacciones de pago, solo información salarial
-3. **Asistencia**: Los registros de asistencia son inmutables (solo se pueden actualizar el mismo día)
-4. **Horas Trabajadas**: Calculadas automáticamente para personal no docente basado en check-in/check-out
+---
 
-## Próximas Mejoras
+## Notas de Implementación
 
-- [ ] Integración con módulo de reportes para generar informes de asistencia
-- [ ] Cálculo automático de nómina basado en asistencia
-- [ ] Sistema de notificaciones para ausentismo recurrente
-- [ ] Dashboard de métricas de personal
-- [ ] Exportación de reportes a PDF/Excel
-
+1. **Soft Delete**: `DELETE` solo marca `isActive = false`. El registro permanece en la base de datos.
+2. **`totalWorkingDaysInMonth`**: Se calcula dinámicamente en el endpoint de detalle como la cantidad de días de lunes a viernes del mes en curso.
+3. **`attendanceRate`**: Se calcula como `(presentDays / totalWorkingDaysInMonth) * 100`, no sobre el total de registros.
+4. **`estimatedEarningsThisMonth`**: `hoursWorkedThisMonth × hourlyRate`, calculado en tiempo real desde los registros de asistencia.

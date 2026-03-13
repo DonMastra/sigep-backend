@@ -119,12 +119,12 @@ class NonTeachingStaffService(
             address = request.address,
             hireDate = request.hireDate,
             hourlyRate = request.hourlyRate,
-            role = request.role,
-            companyName = request.companyName,
+            role = request.resolvedRole,
+            companyName = request.resolvedCompanyName,
             assignedTasks = request.assignedTasks,
             observations = request.observations,
-            emergencyContactName = request.emergencyContactName,
-            emergencyContactPhone = request.emergencyContactPhone
+            emergencyContactName = request.resolvedEmergencyContactName,
+            emergencyContactPhone = request.resolvedEmergencyContactPhone
         )
 
         val savedStaff = nonTeachingStaffRepository.save(staff)
@@ -155,12 +155,12 @@ class NonTeachingStaffService(
             phoneNumber = request.phoneNumber ?: staff.phoneNumber,
             address = request.address ?: staff.address,
             hourlyRate = request.hourlyRate ?: staff.hourlyRate,
-            role = request.role ?: staff.role,
-            companyName = request.companyName ?: staff.companyName,
+            role = request.resolvedRole ?: staff.role,
+            companyName = request.resolvedCompanyName ?: staff.companyName,
             assignedTasks = request.assignedTasks ?: staff.assignedTasks,
             observations = request.observations ?: staff.observations,
-            emergencyContactName = request.emergencyContactName ?: staff.emergencyContactName,
-            emergencyContactPhone = request.emergencyContactPhone ?: staff.emergencyContactPhone
+            emergencyContactName = request.resolvedEmergencyContactName ?: staff.emergencyContactName,
+            emergencyContactPhone = request.resolvedEmergencyContactPhone ?: staff.emergencyContactPhone
         )
 
         val savedStaff = nonTeachingStaffRepository.save(updatedStaff)
@@ -183,6 +183,7 @@ class NonTeachingStaffService(
     }
 
     private fun toDto(staff: NonTeachingStaff): NonTeachingStaffDto {
+        val resolvedRole = staff.role ?: NonTeachingRole.OTHER
         return NonTeachingStaffDto(
             id = staff.id!!,
             firstName = staff.firstName,
@@ -195,12 +196,20 @@ class NonTeachingStaffService(
             address = staff.address,
             hireDate = staff.hireDate,
             hourlyRate = staff.hourlyRate,
-            role = staff.role,
-            companyName = staff.companyName,
+            role = resolvedRole,
+            position = resolvedRole.name,
+            companyName = staff.companyName ?: "",
+            company = staff.companyName ?: "",
             assignedTasks = staff.assignedTasks,
             observations = staff.observations,
             emergencyContactName = staff.emergencyContactName,
-            emergencyContactPhone = staff.emergencyContactPhone
+            emergencyContactPhone = staff.emergencyContactPhone,
+            status = if (staff.isActive) "ACTIVE" else "INACTIVE",
+            attendanceStats = AttendanceStatsDto.EMPTY,
+            hoursWorkedThisMonth = 0.0,
+            estimatedEarningsThisMonth = 0.0,
+            createdAt = staff.createdAt,
+            updatedAt = staff.updatedAt
         )
     }
 
@@ -210,6 +219,11 @@ class NonTeachingStaffService(
         val now = LocalDate.now()
         val startOfMonth = now.withDayOfMonth(1)
         val endOfMonth = YearMonth.now().atEndOfMonth()
+
+        // Calcular días laborales reales del mes (lunes a viernes)
+        val totalWorkingDays = generateSequence(startOfMonth) { it.plusDays(1) }
+            .takeWhile { !it.isAfter(endOfMonth) }
+            .count { it.dayOfWeek.value in 1..5 }
 
         val hoursWorked = attendanceRepository.sumHoursWorkedByNonTeachingStaff(
             staff.id!!, startOfMonth, endOfMonth
@@ -230,7 +244,7 @@ class NonTeachingStaffService(
         ).toInt()
 
         val totalDays = presentDays + absentDays + lateDays
-        val attendanceRate = if (totalDays > 0) (presentDays.toDouble() / totalDays.toDouble()) * 100 else 0.0
+        val attendanceRate = if (totalWorkingDays > 0) (presentDays.toDouble() / totalWorkingDays.toDouble()) * 100 else 0.0
 
         return dto.copy(
             hoursWorkedThisMonth = hoursWorked,
