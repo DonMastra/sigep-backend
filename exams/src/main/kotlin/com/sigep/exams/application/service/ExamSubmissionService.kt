@@ -24,7 +24,8 @@ import java.util.UUID
 class ExamSubmissionService(
     private val submissionRepository: ExamSubmissionRepository,
     private val examRepository: ExamRepository,
-    private val gradeHistoryRepository: ExamGradeHistoryRepository
+    private val gradeHistoryRepository: ExamGradeHistoryRepository,
+    private val examService: ExamService
 ) {
 
     @Cacheable(value = ["submissions"], key = "#id")
@@ -39,7 +40,7 @@ class ExamSubmissionService(
         status: SubmissionStatus?,
         page: Int = 0,
         size: Int = 50,
-        sort: String = "auditMetadata.createdAt",
+        sort: String = "createdAt",
         order: String = "ASC"
     ): PageResponse<ExamSubmissionDto> {
         val pageable = PageRequest.of(
@@ -63,7 +64,7 @@ class ExamSubmissionService(
     }
 
     fun getSubmissionsByStudent(
-        studentId: UUID,
+        studentId: Long,
         page: Int = 0,
         size: Int = 50
     ): PageResponse<ExamSubmissionDto> {
@@ -79,7 +80,7 @@ class ExamSubmissionService(
         )
     }
 
-    fun getStudentExamHistory(studentId: UUID, courseId: UUID): List<ExamResultSummary> {
+    fun getStudentExamHistory(studentId: Long, courseId: Long): List<ExamResultSummary> {
         val submissions = submissionRepository.findStudentSubmissionsByCourse(studentId, courseId)
 
         return submissions.map { submission ->
@@ -89,9 +90,7 @@ class ExamSubmissionService(
                 examTitle = exam?.title ?: "Examen no encontrado",
                 scheduledAt = exam?.scheduledAt,
                 totalPoints = exam?.totalPoints ?: java.math.BigDecimal.ZERO,
-                assignedTeachers = exam?.assignedTeachers?.let {
-                    it.split(",").map { id -> UUID.fromString(id.trim()) }
-                },
+                assignedTeachers = exam?.let { examService.parseAssignedTeachers(it.assignedTeachers) },
                 score = submission.score,
                 status = submission.status,
                 gradedBy = submission.gradedBy,
@@ -103,7 +102,7 @@ class ExamSubmissionService(
 
     @Transactional
     @CacheEvict(value = ["submissions"], allEntries = true)
-    fun createSubmission(request: CreateSubmissionRequest, createdBy: UUID): ExamSubmissionDto {
+    fun createSubmission(request: CreateSubmissionRequest, createdBy: Long): ExamSubmissionDto {
         // Validar que el examen existe
         examRepository.findById(request.examId)
             .orElseThrow { ResourceNotFoundException("Examen no encontrado con ID: ${request.examId}") }
@@ -133,7 +132,7 @@ class ExamSubmissionService(
     fun gradeSubmission(
         submissionId: UUID,
         request: GradeSubmissionRequest,
-        gradedBy: UUID
+        gradedBy: Long
     ): ExamSubmissionDto {
         val submission = submissionRepository.findById(submissionId)
             .orElseThrow { ResourceNotFoundException("Submission no encontrado con ID: $submissionId") }
@@ -180,7 +179,7 @@ class ExamSubmissionService(
     fun updateGrade(
         submissionId: UUID,
         request: UpdateGradeRequest,
-        updatedBy: UUID
+        updatedBy: Long
     ): ExamSubmissionDto {
         val submission = submissionRepository.findById(submissionId)
             .orElseThrow { ResourceNotFoundException("Submission no encontrado con ID: $submissionId") }
@@ -227,7 +226,7 @@ class ExamSubmissionService(
 
     @Transactional
     @CacheEvict(value = ["submissions"], key = "#submissionId")
-    fun cancelSubmission(submissionId: UUID, updatedBy: UUID): ExamSubmissionDto {
+    fun cancelSubmission(submissionId: UUID, updatedBy: Long): ExamSubmissionDto {
         val submission = submissionRepository.findById(submissionId)
             .orElseThrow { ResourceNotFoundException("Submission no encontrado con ID: $submissionId") }
 
@@ -272,7 +271,7 @@ class ExamSubmissionService(
         submissionId = history.submissionId,
         changedAt = history.changedAt,
         changedBy = history.changedBy,
-        changedByName = null, // Se podría enriquecer con info del usuario
+        changedByName = null, // TODO: enriquecer con nombre del usuario vía UserServiceProvider en common
         previousScore = history.previousScore,
         newScore = history.newScore,
         reason = history.reason

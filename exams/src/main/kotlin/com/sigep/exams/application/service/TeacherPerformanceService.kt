@@ -11,7 +11,6 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
 import java.math.RoundingMode
-import java.util.UUID
 
 /**
  * Servicio especializado para análisis de rendimiento de docentes
@@ -25,13 +24,14 @@ import java.util.UUID
 class TeacherPerformanceService(
     private val examRepository: ExamRepository,
     private val submissionRepository: ExamSubmissionRepository,
-    private val examStatisticsService: ExamStatisticsService
+    private val examStatisticsService: ExamStatisticsService,
+    private val examService: ExamService
 ) {
 
     /**
      * Obtiene estadísticas completas de rendimiento para un docente
      */
-    fun getTeacherPerformance(teacherId: UUID): TeacherPerformanceDto {
+    fun getTeacherPerformance(teacherId: Long): TeacherPerformanceDto {
         // Obtener todos los exámenes del docente
         val allExamsPage = examRepository.findByTeacherId(
             teacherId,
@@ -74,7 +74,7 @@ class TeacherPerformanceService(
         } else null
 
         // Agrupar por curso
-        val examsByCourse = allExams.groupBy { it.courseId }
+        val examsByCourse: Map<Long, CourseExamSummaryDto> = allExams.groupBy { it.courseId }
             .mapValues { (courseId, exams) ->
                 val courseExamIds = exams.map { it.id }
                 val courseSubmissions = allSubmissions.filter { it.examId in courseExamIds }
@@ -116,9 +116,7 @@ class TeacherPerformanceService(
                     scheduledAt = exam.scheduledAt,
                     totalPoints = exam.totalPoints,
                     weight = exam.weight,
-                    assignedTeachers = exam.assignedTeachers?.let {
-                        it.split(",").map { id -> UUID.fromString(id.trim()) }
-                    },
+                    assignedTeachers = examService.parseAssignedTeachers(exam.assignedTeachers),
                     totalSubmissions = examSubmissions.size,
                     gradedSubmissions = examSubmissions.count { it.status == SubmissionStatus.GRADED },
                     pendingSubmissions = examSubmissions.count { it.status == SubmissionStatus.PENDING }
@@ -143,7 +141,7 @@ class TeacherPerformanceService(
      * Obtiene los exámenes de un docente con paginación
      */
     fun getTeacherExams(
-        teacherId: UUID,
+        teacherId: Long,
         statuses: List<ExamStatus>? = null,
         page: Int = 0,
         size: Int = 20,
@@ -162,38 +160,13 @@ class TeacherPerformanceService(
             examRepository.findByTeacherId(teacherId, pageable)
         }
 
-        return examsPage.content.map { exam ->
-            ExamDto(
-                id = exam.id,
-                courseId = exam.courseId,
-                title = exam.title,
-                description = exam.description,
-                modality = exam.modality,
-                status = exam.status,
-                totalPoints = exam.totalPoints,
-                weight = exam.weight,
-                timeLimitMinutes = exam.timeLimitMinutes,
-                scheduledAt = exam.scheduledAt,
-                visibilityStart = exam.visibilityStart,
-                visibilityEnd = exam.visibilityEnd,
-                assignedTeachers = exam.assignedTeachers?.let {
-                    it.split(",").map { id -> UUID.fromString(id.trim()) }
-                },
-                notes = exam.notes,
-                roomInfo = exam.roomInfo,
-                version = exam.version,
-                createdAt = exam.createdAt,
-                createdBy = exam.createdBy,
-                updatedAt = exam.updatedAt,
-                updatedBy = exam.updatedBy
-            )
-        }
+        return examsPage.content.map { examService.toDto(it) }
     }
 
     /**
      * Compara el rendimiento de múltiples docentes
      */
-    fun compareTeachersPerformance(teacherIds: List<UUID>): Map<UUID, TeacherPerformanceDto> {
+    fun compareTeachersPerformance(teacherIds: List<Long>): Map<Long, TeacherPerformanceDto> {
         return teacherIds.associateWith { teacherId ->
             getTeacherPerformance(teacherId)
         }

@@ -15,7 +15,6 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
-import java.util.UUID
 
 /**
  * Controlador para análisis de rendimiento de docentes
@@ -42,8 +41,8 @@ class TeacherPerformanceController(
         SwaggerApiResponse(responseCode = "404", description = "Docente no encontrado")
     )
     fun getTeacherPerformance(
-        @Parameter(description = "ID del docente")
-        @PathVariable teacherId: UUID
+        @Parameter(description = "ID del docente (teaching_staff.id)")
+        @PathVariable teacherId: Long
     ): ResponseEntity<ApiResponse<TeacherPerformanceDto>> {
         val performance = teacherPerformanceService.getTeacherPerformance(teacherId)
         return ResponseEntity.ok(
@@ -65,8 +64,8 @@ class TeacherPerformanceController(
         SwaggerApiResponse(responseCode = "403", description = "No autorizado")
     )
     fun getTeacherExams(
-        @Parameter(description = "ID del docente")
-        @PathVariable teacherId: UUID,
+        @Parameter(description = "ID del docente (teaching_staff.id)")
+        @PathVariable teacherId: Long,
 
         @Parameter(description = "Filtrar por estados del examen")
         @RequestParam(required = false) statuses: List<ExamStatus>?,
@@ -110,9 +109,9 @@ class TeacherPerformanceController(
         SwaggerApiResponse(responseCode = "403", description = "No autorizado - Solo administradores")
     )
     fun compareTeachersPerformance(
-        @Parameter(description = "Lista de IDs de docentes a comparar")
-        @RequestBody teacherIds: List<UUID>
-    ): ResponseEntity<ApiResponse<Map<UUID, TeacherPerformanceDto>>> {
+        @Parameter(description = "Lista de IDs de docentes a comparar (teaching_staff.id)")
+        @RequestBody teacherIds: List<Long>
+    ): ResponseEntity<ApiResponse<Map<Long, TeacherPerformanceDto>>> {
         val comparison = teacherPerformanceService.compareTeachersPerformance(teacherIds)
         return ResponseEntity.ok(
             ApiResponse.success(

@@ -12,12 +12,12 @@ import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.util.UUID
-
 @Service
 @Transactional(readOnly = true)
 class ExamStatisticsService(
     private val examRepository: ExamRepository,
-    private val submissionRepository: ExamSubmissionRepository
+    private val submissionRepository: ExamSubmissionRepository,
+    private val examService: ExamService
 ) {
 
     fun getExamStatistics(examId: UUID): ExamStatisticsDto {
@@ -67,9 +67,7 @@ class ExamStatisticsService(
         return ExamStatisticsDto(
             examId = exam.id,
             examTitle = exam.title,
-            assignedTeachers = exam.assignedTeachers?.let {
-                it.split(",").map { id -> UUID.fromString(id.trim()) }
-            },
+            assignedTeachers = examService.parseAssignedTeachers(exam.assignedTeachers),
             totalStudents = submittedCount,
             submittedCount = submittedCount,
             gradedCount = gradedCount,
@@ -82,7 +80,7 @@ class ExamStatisticsService(
         )
     }
 
-    fun getCourseExamStatistics(courseId: UUID): CourseExamStatisticsDto {
+    fun getCourseExamStatistics(courseId: Long): CourseExamStatisticsDto {
         val exams = examRepository.findByCourseId(courseId, PageRequest.of(0, Int.MAX_VALUE)).content
 
         val totalExams = exams.size

@@ -8,7 +8,7 @@ import java.util.UUID
 
 data class ExamDto(
     val id: UUID,
-    val courseId: UUID,
+    val courseId: Long,
     val title: String,
     val description: String?,
     val modality: ExamModality,
@@ -19,18 +19,18 @@ data class ExamDto(
     val scheduledAt: LocalDateTime?,
     val visibilityStart: LocalDateTime?,
     val visibilityEnd: LocalDateTime?,
-    val assignedTeachers: List<UUID>?,
+    val assignedTeachers: List<Long>?,
     val notes: String?,
     val roomInfo: String?,
     val version: Int,
     val createdAt: LocalDateTime,
-    val createdBy: UUID,
+    val createdBy: Long,
     val updatedAt: LocalDateTime?,
-    val updatedBy: UUID?
+    val updatedBy: Long?
 )
 
 data class CreateExamRequest(
-    val courseId: UUID,
+    val courseId: Long,
     val title: String,
     val description: String? = null,
     val totalPoints: BigDecimal = BigDecimal("100.00"),
@@ -39,7 +39,7 @@ data class CreateExamRequest(
     val scheduledAt: LocalDateTime? = null,
     val visibilityStart: LocalDateTime? = null,
     val visibilityEnd: LocalDateTime? = null,
-    val assignedTeachers: List<UUID>? = null,
+    val assignedTeachers: List<Long>? = null,
     val notes: String? = null,
     val roomInfo: String? = null
 )
@@ -53,27 +53,27 @@ data class UpdateExamRequest(
     val scheduledAt: LocalDateTime?,
     val visibilityStart: LocalDateTime?,
     val visibilityEnd: LocalDateTime?,
-    val assignedTeachers: List<UUID>?,
+    val assignedTeachers: List<Long>?,
     val notes: String?,
     val roomInfo: String?
 )
 
 data class ExamSummaryDto(
     val id: UUID,
-    val courseId: UUID,
+    val courseId: Long,
     val title: String,
     val status: ExamStatus,
     val scheduledAt: LocalDateTime?,
     val totalPoints: BigDecimal,
     val weight: BigDecimal,
-    val assignedTeachers: List<UUID>? = null,
+    val assignedTeachers: List<Long>? = null,
     val totalSubmissions: Int = 0,
     val gradedSubmissions: Int = 0,
     val pendingSubmissions: Int = 0
 )
 
 data class TeacherPerformanceDto(
-    val teacherId: UUID,
+    val teacherId: Long,
     val totalExamsCreated: Int,
     val totalExamsPublished: Int,
     val totalExamsClosed: Int,
@@ -81,12 +81,12 @@ data class TeacherPerformanceDto(
     val averageScore: BigDecimal?,
     val passRate: BigDecimal?,
     val examsByStatus: Map<ExamStatus, Int>,
-    val examsByCourse: Map<UUID, CourseExamSummaryDto>,
+    val examsByCourse: Map<Long, CourseExamSummaryDto>,
     val recentExams: List<ExamSummaryDto>
 )
 
 data class CourseExamSummaryDto(
-    val courseId: UUID,
+    val courseId: Long,
     val totalExams: Int,
     val averageScore: BigDecimal?,
     val passRate: BigDecimal?,

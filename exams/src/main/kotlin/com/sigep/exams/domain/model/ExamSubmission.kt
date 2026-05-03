@@ -33,8 +33,8 @@ data class ExamSubmission(
     @Column(name = "exam_id", nullable = false, columnDefinition = "UUID")
     val examId: UUID,
 
-    @Column(name = "student_id", nullable = false, columnDefinition = "UUID")
-    val studentId: UUID,
+    @Column(name = "student_id", nullable = false)
+    val studentId: Long,
 
     @Column(name = "attempt_number", nullable = false)
     val attemptNumber: Int = 1,
@@ -56,8 +56,8 @@ data class ExamSubmission(
     var score: BigDecimal? = null,
 
     // Información del evaluador
-    @Column(name = "graded_by", columnDefinition = "UUID")
-    var gradedBy: UUID? = null,
+    @Column(name = "graded_by")
+    var gradedBy: Long? = null,
 
     @Column(name = "graded_at")
     var gradedAt: LocalDateTime? = null,
@@ -82,16 +82,16 @@ data class ExamSubmission(
     @Column(name = "created_at", nullable = false)
     val createdAt: LocalDateTime = LocalDateTime.now(),
 
-    @Column(name = "created_by", nullable = false, columnDefinition = "UUID")
-    val createdBy: UUID,
+    @Column(name = "created_by", nullable = false)
+    val createdBy: Long,
 
     @Column(name = "updated_at")
     var updatedAt: LocalDateTime? = null,
 
-    @Column(name = "updated_by", columnDefinition = "UUID")
-    var updatedBy: UUID? = null
+    @Column(name = "updated_by")
+    var updatedBy: Long? = null
 ) {
-    fun grade(score: BigDecimal, gradedBy: UUID, feedback: String? = null) {
+    fun grade(score: BigDecimal, gradedBy: Long, feedback: String? = null) {
         require(this.status != SubmissionStatus.CANCELLED) {
             "No se puede calificar un intento cancelado"
         }
@@ -102,7 +102,7 @@ data class ExamSubmission(
         this.status = SubmissionStatus.GRADED
     }
 
-    fun updateScore(newScore: BigDecimal, gradedBy: UUID, feedback: String? = null) {
+    fun updateScore(newScore: BigDecimal, gradedBy: Long, feedback: String? = null) {
         require(this.status == SubmissionStatus.GRADED) {
             "Solo se pueden actualizar calificaciones ya realizadas"
         }

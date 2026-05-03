@@ -22,9 +22,6 @@ data class Student(
     val email: String,
 
     @Column(nullable = false)
-    val phone: String,
-
-    @Column(nullable = false)
     val dateOfBirth: LocalDate,
 
     @Column(nullable = false)
@@ -39,8 +36,9 @@ data class Student(
     @Column(nullable = false)
     val documentNumber: String,
 
-    @Column(nullable = false)
-    val guardianId: Long, // Reference to User with GUARDIAN role
+    /** Referencia al User con rol GUARDIAN. Nullable: un estudiante puede no tener tutor registrado. */
+    @Column(nullable = true)
+    val guardianId: Long? = null,
 
     @Column(nullable = false)
     val enrollmentDate: LocalDate,

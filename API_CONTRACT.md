@@ -1125,141 +1125,234 @@ interface UpdateEnrollmentRequest {
 
 ## 📝 Exams Endpoints
 
-### 1. List Exams
+> **Actualizado**: Mayo 2026 — alineado con backend real (`ExamController` + `ExamSubmissionController`).
 
-**Endpoint:** `GET /api/v1/exams`
+### Tipos y enums relevantes
+
+```typescript
+type ExamId = string; // UUID
+type SubmissionId = string; // UUID
+
+type ExamStatus = 'DRAFT' | 'PUBLISHED' | 'CLOSED' | 'CANCELLED';
+type ExamModality = 'OFFLINE' | 'ONLINE';
+type SubmissionStatus = 'PENDING' | 'GRADED' | 'CANCELLED' | 'UNDER_REVIEW';
+
+interface ExamDto {
+  id: ExamId;
+  courseId: number;
+  title: string;
+  description: string | null;
+  modality: ExamModality;
+  status: ExamStatus;
+  totalPoints: number;
+  weight: number;
+  timeLimitMinutes: number | null;
+  scheduledAt: string | null;
+  visibilityStart: string | null;
+  visibilityEnd: string | null;
+  assignedTeachers: number[] | null;
+  notes: string | null;
+  roomInfo: string | null;
+  version: number;
+  createdAt: string;
+  createdBy: number;
+  updatedAt: string | null;
+  updatedBy: number | null;
+}
+
+interface ExamSubmissionDto {
+  id: SubmissionId;
+  examId: ExamId;
+  studentId: number;
+  attemptNumber: number;
+  status: SubmissionStatus;
+  startedAt: string | null;
+  submittedAt: string | null;
+  score: number | null;
+  gradedBy: number | null;
+  gradedAt: string | null;
+  feedback: string | null;
+  scannedFilePath: string | null;
+  notes: string | null;
+  version: number;
+  createdAt: string;
+  createdBy: number;
+}
+```
+
+---
+
+### Exams (`/api/v1/exams`)
+
+#### 1. Get Exam by ID
+**Endpoint:** `GET /api/v1/exams/{id}`
+
+#### 2. List Exams by Course
+**Endpoint:** `GET /api/v1/exams/course/{courseId}`
 
 **Query Params:**
 ```typescript
-interface ExamListParams {
+{
+  status?: ExamStatus;
+  page?: number;   // default 0
+  size?: number;   // default 20
+  sort?: string;   // default 'scheduledAt'
+  order?: 'ASC' | 'DESC'; // default 'DESC'
+}
+```
+
+#### 3. Get My Exams (docente autenticado)
+**Endpoint:** `GET /api/v1/exams/my-exams`
+
+**Query Params:**
+```typescript
+{
+  courseIds: number[]; // requerido
   page?: number;
   size?: number;
-  courseId?: number;
-  status?: 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
 }
 ```
 
-**Roles:** `ADMIN`, `TEACHER`
+#### 4. Get Visible Exams for Students
+**Endpoint:** `GET /api/v1/exams/visible`
 
-**Response (200 OK):**
-```typescript
-{
-  success: true;
-  data: {
-    content: ExamDto[];
-    // ...pagination
-  };
-}
-
-interface ExamDto {
-  id: number;
-  title: string;
-  description: string;
-  courseId: number;
-  courseName: string;
-  examType: 'WRITTEN' | 'ORAL' | 'PRACTICAL' | 'FINAL';
-  scheduledDate: string;
-  duration: number;        // minutes
-  totalPoints: number;
-  passingScore: number;
-  status: 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
-  createdBy: number;
-  createdByName: string;
-  createdAt: string;
-}
-```
-
----
-
-### 2. Get Exam with Grades
-
-**Endpoint:** `GET /api/v1/exams/{id}/grades`
-
-**Roles:** `ADMIN`, `TEACHER`, `GUARDIAN` (solo estudiantes propios)
-
-**Response (200 OK):**
-```typescript
-{
-  success: true;
-  data: ExamWithGradesDto;
-}
-
-interface ExamWithGradesDto extends ExamDto {
-  grades: ExamGradeDto[];
-  averageScore: number;
-  passRate: number;
-}
-
-interface ExamGradeDto {
-  id: number;
-  studentId: number;
-  studentName: string;
-  score: number;
-  maxScore: number;
-  percentage: number;
-  passed: boolean;
-  feedback: string | null;
-  gradedAt: string;
-  gradedBy: string;
-}
-```
-
----
-
-### 3. Create Exam
-
+#### 5. Create Exam
 **Endpoint:** `POST /api/v1/exams`
-
-**Roles:** `ADMIN`, `TEACHER`
 
 **Request:**
 ```typescript
 interface CreateExamRequest {
-  title: string;
-  description: string;
   courseId: number;
-  examType: 'WRITTEN' | 'ORAL' | 'PRACTICAL' | 'FINAL';
-  scheduledDate: string;   // ISO datetime
-  duration: number;
-  totalPoints: number;
-  passingScore: number;
+  title: string;
+  description?: string;
+  totalPoints?: number;      // default 100.00
+  weight?: number;           // default 1.00
+  timeLimitMinutes?: number;
+  scheduledAt?: string;
+  visibilityStart?: string;
+  visibilityEnd?: string;
+  assignedTeachers?: number[];
+  notes?: string;
+  roomInfo?: string;
 }
 ```
 
-**Response (201 Created):**
-```typescript
-{
-  success: true;
-  data: ExamDto;
-  message: "Exam created successfully";
-}
-```
-
----
-
-### 4. Submit Grade
-
-**Endpoint:** `POST /api/v1/exams/{examId}/grades`
-
-**Roles:** `ADMIN`, `TEACHER` (solo exámenes de cursos asignados)
+#### 6. Update Exam
+**Endpoint:** `PUT /api/v1/exams/{id}`
 
 **Request:**
 ```typescript
-interface SubmitGradeRequest {
-  studentId: number;
-  score: number;
-  feedback?: string;
+interface UpdateExamRequest {
+  title?: string;
+  description?: string;
+  totalPoints?: number;
+  weight?: number;
+  timeLimitMinutes?: number;
+  scheduledAt?: string;
+  visibilityStart?: string;
+  visibilityEnd?: string;
+  assignedTeachers?: number[];
+  notes?: string;
+  roomInfo?: string;
 }
 ```
 
-**Response (201 Created):**
+#### 7. Publish Exam
+**Endpoint:** `POST /api/v1/exams/{id}/publish`
+
+#### 8. Close Exam
+**Endpoint:** `POST /api/v1/exams/{id}/close`
+
+#### 9. Cancel Exam
+**Endpoint:** `POST /api/v1/exams/{id}/cancel`
+
+#### 10. Delete Exam
+**Endpoint:** `DELETE /api/v1/exams/{id}`
+
+**Nota:** retorna `204 No Content`.
+
+#### 11. Exam Statistics
+**Endpoint:** `GET /api/v1/exams/{id}/statistics`
+
+#### 12. Course Exam Statistics
+**Endpoint:** `GET /api/v1/exams/course/{courseId}/statistics`
+
+---
+
+### Exam Submissions (`/api/v1/exam-submissions`)
+
+#### 1. Get Submission by ID
+**Endpoint:** `GET /api/v1/exam-submissions/{id}`
+
+#### 2. List Submissions by Exam
+**Endpoint:** `GET /api/v1/exam-submissions/exam/{examId}`
+
+**Query Params:**
 ```typescript
 {
-  success: true;
-  data: ExamGradeDto;
-  message: "Grade submitted successfully";
+  status?: SubmissionStatus;
+  page?: number;   // default 0
+  size?: number;   // default 50
+  sort?: string;   // default 'createdAt'
+  order?: 'ASC' | 'DESC'; // default 'ASC'
 }
 ```
+
+#### 3. List Submissions by Student
+**Endpoint:** `GET /api/v1/exam-submissions/student/{studentId}`
+
+#### 4. Student Exam History by Course
+**Endpoint:** `GET /api/v1/exam-submissions/student/{studentId}/course/{courseId}/history`
+
+#### 5. Create Submission
+**Endpoint:** `POST /api/v1/exam-submissions`
+
+```typescript
+interface CreateSubmissionRequest {
+  examId: ExamId;
+  studentId: number;
+  notes?: string;
+}
+```
+
+#### 6. Grade Submission
+**Endpoint:** `POST /api/v1/exam-submissions/{id}/grade`
+
+```typescript
+interface GradeSubmissionRequest {
+  score: number;
+  feedback?: string;
+  notes?: string;
+}
+```
+
+#### 7. Update Grade
+**Endpoint:** `PUT /api/v1/exam-submissions/{id}/grade`
+
+```typescript
+interface UpdateGradeRequest {
+  score: number;
+  feedback?: string;
+  reason: string;
+}
+```
+
+#### 8. Attach Scanned File
+**Endpoint:** `POST /api/v1/exam-submissions/{id}/attach-file?filePath={path}`
+
+#### 9. Cancel Submission
+**Endpoint:** `POST /api/v1/exam-submissions/{id}/cancel`
+
+#### 10. Grade History
+**Endpoint:** `GET /api/v1/exam-submissions/{id}/grade-history`
+
+---
+
+### Roles (resumen)
+
+- `RequireAdminOrTeacher`: creación/edición/cierre/calificación.
+- `RequireAdmin`: cancelar/eliminar en operaciones sensibles.
+- Endpoints de consulta visibles (`/visible`, algunos listados) siguen autenticación JWT general del módulo.
 
 ---
 

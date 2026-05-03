@@ -8,7 +8,7 @@ data class GradeHistoryDto(
     val id: UUID,
     val submissionId: UUID,
     val changedAt: LocalDateTime,
-    val changedBy: UUID,
+    val changedBy: Long,
     val changedByName: String?,
     val previousScore: BigDecimal?,
     val newScore: BigDecimal,
@@ -18,7 +18,7 @@ data class GradeHistoryDto(
 data class ExamStatisticsDto(
     val examId: UUID,
     val examTitle: String,
-    val assignedTeachers: List<UUID>? = null,
+    val assignedTeachers: List<Long>? = null,
     val totalStudents: Int,
     val submittedCount: Int,
     val gradedCount: Int,
@@ -31,11 +31,10 @@ data class ExamStatisticsDto(
 )
 
 data class CourseExamStatisticsDto(
-    val courseId: UUID,
+    val courseId: Long,
     val totalExams: Int,
     val publishedExams: Int,
     val closedExams: Int,
     val averageGrade: BigDecimal?,
     val examStats: List<ExamStatisticsDto>
 )
-

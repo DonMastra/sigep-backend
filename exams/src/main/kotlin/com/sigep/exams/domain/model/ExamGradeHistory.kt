@@ -28,8 +28,8 @@ data class ExamGradeHistory(
     @Column(name = "changed_at", nullable = false)
     val changedAt: LocalDateTime = LocalDateTime.now(),
 
-    @Column(name = "changed_by", nullable = false, columnDefinition = "UUID")
-    val changedBy: UUID,
+    @Column(name = "changed_by", nullable = false)
+    val changedBy: Long,
 
     @Column(name = "previous_score", precision = 10, scale = 2)
     val previousScore: BigDecimal?,
@@ -44,13 +44,13 @@ data class ExamGradeHistory(
     @Column(name = "created_at", nullable = false)
     val createdAt: LocalDateTime = LocalDateTime.now(),
 
-    @Column(name = "created_by", nullable = false, columnDefinition = "UUID")
-    val createdBy: UUID,
+    @Column(name = "created_by", nullable = false)
+    val createdBy: Long,
 
     @Column(name = "updated_at")
     var updatedAt: LocalDateTime? = null,
 
-    @Column(name = "updated_by", columnDefinition = "UUID")
-    var updatedBy: UUID? = null
+    @Column(name = "updated_by")
+    var updatedBy: Long? = null
 )
 

@@ -14,9 +14,9 @@ import java.util.UUID
 @Repository
 interface ExamRepository : JpaRepository<Exam, UUID> {
 
-    fun findByCourseId(courseId: UUID, pageable: Pageable): Page<Exam>
+    fun findByCourseId(courseId: Long, pageable: Pageable): Page<Exam>
 
-    fun findByCourseIdAndStatus(courseId: UUID, status: ExamStatus, pageable: Pageable): Page<Exam>
+    fun findByCourseIdAndStatus(courseId: Long, status: ExamStatus, pageable: Pageable): Page<Exam>
 
     @Query("""
         SELECT e FROM Exam e 
@@ -25,7 +25,7 @@ interface ExamRepository : JpaRepository<Exam, UUID> {
         AND e.scheduledAt BETWEEN :start AND :end
     """)
     fun findByCourseAndStatusAndScheduledBetween(
-        @Param("courseId") courseId: UUID,
+        @Param("courseId") courseId: Long,
         @Param("status") status: ExamStatus,
         @Param("start") start: LocalDateTime,
         @Param("end") end: LocalDateTime
@@ -38,7 +38,7 @@ interface ExamRepository : JpaRepository<Exam, UUID> {
         ORDER BY e.scheduledAt DESC
     """)
     fun findByCoursesAndStatuses(
-        @Param("courseIds") courseIds: List<UUID>,
+        @Param("courseIds") courseIds: List<Long>,
         @Param("statuses") statuses: List<ExamStatus>,
         pageable: Pageable
     ): Page<Exam>
@@ -51,16 +51,16 @@ interface ExamRepository : JpaRepository<Exam, UUID> {
     """)
     fun findVisibleExams(@Param("now") now: LocalDateTime, pageable: Pageable): Page<Exam>
 
-    fun existsByCourseIdAndTitleAndIdNot(courseId: UUID, title: String, id: UUID): Boolean
+    fun existsByCourseIdAndTitleAndIdNot(courseId: Long, title: String, id: UUID): Boolean
 
     /**
-     * Encuentra exámenes asignados a un docente específico
+     * Encuentra exámenes asignados a un docente específico (búsqueda por LIKE en JSON de Long IDs)
      */
     @Query("""
         SELECT e FROM Exam e 
         WHERE e.assignedTeachers LIKE CONCAT('%', :teacherId, '%')
     """)
-    fun findByTeacherId(@Param("teacherId") teacherId: UUID, pageable: Pageable): Page<Exam>
+    fun findByTeacherId(@Param("teacherId") teacherId: Long, pageable: Pageable): Page<Exam>
 
     /**
      * Encuentra exámenes asignados a un docente con filtro por estado
@@ -71,7 +71,7 @@ interface ExamRepository : JpaRepository<Exam, UUID> {
         AND e.status IN :statuses
     """)
     fun findByTeacherIdAndStatusIn(
-        @Param("teacherId") teacherId: UUID,
+        @Param("teacherId") teacherId: Long,
         @Param("statuses") statuses: List<ExamStatus>,
         pageable: Pageable
     ): Page<Exam>
@@ -83,7 +83,7 @@ interface ExamRepository : JpaRepository<Exam, UUID> {
         SELECT COUNT(e) FROM Exam e 
         WHERE e.assignedTeachers LIKE CONCAT('%', :teacherId, '%')
     """)
-    fun countByTeacherId(@Param("teacherId") teacherId: UUID): Long
+    fun countByTeacherId(@Param("teacherId") teacherId: Long): Long
 
     /**
      * Encuentra exámenes de un docente en un rango de fechas
@@ -95,9 +95,8 @@ interface ExamRepository : JpaRepository<Exam, UUID> {
         ORDER BY e.scheduledAt DESC
     """)
     fun findByTeacherIdAndScheduledBetween(
-        @Param("teacherId") teacherId: UUID,
+        @Param("teacherId") teacherId: Long,
         @Param("start") start: LocalDateTime,
         @Param("end") end: LocalDateTime
     ): List<Exam>
 }
-

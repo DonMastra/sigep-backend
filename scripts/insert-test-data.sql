@@ -1,290 +1,299 @@
 -- ============================================================================
--- Script de Datos de Prueba - SiGEP Backend
+-- Script de Datos de Prueba - SiGEP Backend (POST-V9)
 -- ============================================================================
+-- Objetivo:
+-- - Poblar TODAS las tablas activas del esquema actual.
+-- - Insertar valores explícitos en TODAS las columnas de cada tabla.
+-- - Mantener consistencia con FKs, CHECKs y UNIQUE vigentes.
 --
--- PROPÓSITO:
--- Insertar datos de prueba en todas las tablas del sistema para desarrollo y testing
+-- Tablas cubiertas (18):
+-- users, students, courses, course_schedules, enrollments, course_sessions,
+-- session_exceptions, course_attendance, course_materials, course_certificates,
+-- teaching_staff, non_teaching_staff, staff_attendance, exams,
+-- exam_submissions, exam_grade_history, payments, notifications
 --
--- ALCANCE:
--- - Módulo Security: users
--- - Módulo Students: students
--- - Módulo Courses: courses, enrollments, course_sessions, course_materials, course_certificates
--- - Módulo Exams: exams, exam_submissions, exam_grade_history
--- - Módulo Staff: teaching_staff, non_teaching_staff, staff_attendance
---
--- IMPORTANTE:
--- - Solo para ambientes de desarrollo/testing
--- - Las contraseñas están hasheadas con BCrypt (strength 12)
--- - Contraseña para todos los usuarios: "password123"
+-- PRECONDICION RECOMENDADA:
+-- Ejecutar con tablas vacías (ver comando de TRUNCATE en la guía de ejecución).
 
--- Iniciar transacción
 BEGIN;
--- ============================================================================
--- MÓDULO SECURITY: USERS
--- ============================================================================
--- Hash BCrypt para "password123": $2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYIr6E8h.9i
-
-INSERT INTO users (id, username, email, password, first_name, last_name, role, active, created_at, updated_at) VALUES
--- Administradores
-(1, 'admin', 'admin@sigep.edu.mx', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYIr6E8h.9i', 'Admin', 'Sistema', 'ADMIN', true, NOW() - INTERVAL '60 days', NOW()),
-(2, 'carlos.admin', 'carlos.admin@sigep.edu.mx', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYIr6E8h.9i', 'Carlos', 'Administrador', 'ADMIN', true, NOW() - INTERVAL '45 days', NOW()),
-
--- Profesores
-(3, 'teacher', 'teacher@sigep.edu.mx', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYIr6E8h.9i', 'Juan', 'Profesor', 'TEACHER', true, NOW() - INTERVAL '50 days', NOW()),
-(4, 'mgarcia', 'maria.garcia@sigep.edu.mx', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYIr6E8h.9i', 'María', 'García', 'TEACHER', true, NOW() - INTERVAL '40 days', NOW()),
-(5, 'jperez', 'jose.perez@sigep.edu.mx', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYIr6E8h.9i', 'José', 'Pérez', 'TEACHER', true, NOW() - INTERVAL '35 days', NOW()),
-(6, 'lmartinez', 'laura.martinez@sigep.edu.mx', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYIr6E8h.9i', 'Laura', 'Martínez', 'TEACHER', true, NOW() - INTERVAL '30 days', NOW()),
-
--- Tutores/Responsables
-(7, 'guardian', 'guardian@sigep.edu.mx', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYIr6E8h.9i', 'Pedro', 'Responsable', 'GUARDIAN', true, NOW() - INTERVAL '55 days', NOW()),
-(8, 'pgomez', 'patricia.gomez@example.com', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYIr6E8h.9i', 'Patricia', 'Gómez', 'GUARDIAN', true, NOW() - INTERVAL '48 days', NOW()),
-(9, 'arodriguez', 'alberto.rodriguez@example.com', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYIr6E8h.9i', 'Alberto', 'Rodríguez', 'GUARDIAN', true, NOW() - INTERVAL '42 days', NOW()),
-(10, 'rlopez', 'rosa.lopez@example.com', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYIr6E8h.9i', 'Rosa', 'López', 'GUARDIAN', true, NOW() - INTERVAL '38 days', NOW());
 
 -- ============================================================================
--- MÓDULO STUDENTS: STUDENTS
+-- USERS
 -- ============================================================================
-
-INSERT INTO students (id, first_name, last_name, email, document_number, date_of_birth, address, phone_number, emergency_contact, guardian_id, enrollment_date, active, created_at, updated_at) VALUES
-(1, 'Ana', 'Martínez', 'ana.martinez@example.com', 'DNI-12345678', '2010-03-15', 'Calle Principal 123, CABA', '+54-11-1234-5678', 'Patricia Gómez: +54-11-9876-5432', 8, NOW() - INTERVAL '45 days', true, NOW() - INTERVAL '45 days', NOW()),
-(2, 'Carlos', 'González', 'carlos.gonzalez@example.com', 'DNI-23456789', '2011-07-22', 'Av. Libertador 456, CABA', '+54-11-2345-6789', 'Alberto Rodríguez: +54-11-8765-4321', 9, NOW() - INTERVAL '40 days', true, NOW() - INTERVAL '40 days', NOW()),
-(3, 'Lucía', 'Fernández', 'lucia.fernandez@example.com', 'DNI-34567890', '2010-11-08', 'Belgrano 789, CABA', '+54-11-3456-7890', 'Rosa López: +54-11-7654-3210', 10, NOW() - INTERVAL '38 days', true, NOW() - INTERVAL '38 days', NOW()),
-(4, 'Diego', 'Ramírez', 'diego.ramirez@example.com', 'DNI-45678901', '2011-02-14', 'San Martin 234, CABA', '+54-11-4567-8901', 'Patricia Gómez: +54-11-9876-5432', 8, NOW() - INTERVAL '35 days', true, NOW() - INTERVAL '35 days', NOW()),
-(5, 'Sofía', 'Torres', 'sofia.torres@example.com', 'DNI-56789012', '2010-09-30', 'Corrientes 567, CABA', '+54-11-5678-9012', 'Alberto Rodríguez: +54-11-8765-4321', 9, NOW() - INTERVAL '32 days', true, NOW() - INTERVAL '32 days', NOW()),
-(6, 'Mateo', 'Silva', 'mateo.silva@example.com', 'DNI-67890123', '2011-05-18', 'Santa Fe 890, CABA', '+54-11-6789-0123', 'Rosa López: +54-11-7654-3210', 10, NOW() - INTERVAL '30 days', true, NOW() - INTERVAL '30 days', NOW()),
-(7, 'Valentina', 'Morales', 'valentina.morales@example.com', 'DNI-78901234', '2010-12-25', 'Rivadavia 345, CABA', '+54-11-7890-1234', 'Pedro Responsable: +54-11-6543-2109', 7, NOW() - INTERVAL '28 days', true, NOW() - INTERVAL '28 days', NOW()),
-(8, 'Benjamín', 'Castro', 'benjamin.castro@example.com', 'DNI-89012345', '2011-04-10', 'Callao 678, CABA', '+54-11-8901-2345', 'Pedro Responsable: +54-11-6543-2109', 7, NOW() - INTERVAL '25 days', true, NOW() - INTERVAL '25 days', NOW());
-
--- ============================================================================
--- MÓDULO COURSES: COURSES
--- ============================================================================
-
-INSERT INTO courses (id, name, description, level, status, start_date, end_date, max_capacity, schedule, classroom, created_at, updated_at) VALUES
-(1, 'English Beginner A1', 'Curso introductorio de inglés nivel básico. Enfocado en gramática fundamental y vocabulario esencial.', 'BEGINNER', 'ACTIVE', NOW() - INTERVAL '30 days', NOW() + INTERVAL '60 days', 15, 'Lunes y Miércoles 10:00-12:00', 'Aula 101', NOW() - INTERVAL '35 days', NOW()),
-(2, 'English Intermediate B1', 'Curso de inglés nivel intermedio. Desarrollo de habilidades conversacionales y escritura.', 'INTERMEDIATE', 'ACTIVE', NOW() - INTERVAL '25 days', NOW() + INTERVAL '65 days', 12, 'Martes y Jueves 14:00-16:00', 'Aula 102', NOW() - INTERVAL '30 days', NOW()),
-(3, 'English Advanced C1', 'Curso avanzado de inglés. Preparación para certificaciones internacionales.', 'ADVANCED', 'ACTIVE', NOW() - INTERVAL '20 days', NOW() + INTERVAL '70 days', 10, 'Miércoles y Viernes 16:00-18:00', 'Aula 201', NOW() - INTERVAL '25 days', NOW()),
-(4, 'English Conversation B2', 'Taller de conversación en inglés nivel intermedio-avanzado. Enfoque en fluidez oral.', 'INTERMEDIATE', 'ACTIVE', NOW() - INTERVAL '15 days', NOW() + INTERVAL '75 days', 8, 'Viernes 18:00-20:00', 'Sala de Conferencias', NOW() - INTERVAL '20 days', NOW());
+-- BCrypt hash para "password123"
+INSERT INTO users (
+    id, username, email, password, first_name, last_name, role, active, created_at, updated_at
+) VALUES
+    (1, 'admin', 'admin@sigep.edu.mx', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYIr6E8h.9i', 'Admin', 'Sistema', 'ADMIN', true, NOW() - INTERVAL '120 days', NOW() - INTERVAL '1 days'),
+    (2, 'coordinator', 'coordinator@sigep.edu.mx', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYIr6E8h.9i', 'Carla', 'Coordinadora', 'ADMIN', true, NOW() - INTERVAL '100 days', NOW() - INTERVAL '2 days'),
+    (3, 'teacher.juan', 'juan.teacher@sigep.edu.mx', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYIr6E8h.9i', 'Juan', 'Paredes', 'TEACHER', true, NOW() - INTERVAL '90 days', NOW() - INTERVAL '3 days'),
+    (4, 'teacher.maria', 'maria.teacher@sigep.edu.mx', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYIr6E8h.9i', 'Maria', 'Gomez', 'TEACHER', true, NOW() - INTERVAL '88 days', NOW() - INTERVAL '4 days'),
+    (5, 'teacher.luis', 'luis.teacher@sigep.edu.mx', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYIr6E8h.9i', 'Luis', 'Romero', 'TEACHER', true, NOW() - INTERVAL '85 days', NOW() - INTERVAL '5 days'),
+    (6, 'guardian.ana', 'ana.guardian@sigep.edu.mx', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYIr6E8h.9i', 'Ana', 'Lopez', 'GUARDIAN', true, NOW() - INTERVAL '80 days', NOW() - INTERVAL '2 days'),
+    (7, 'guardian.pablo', 'pablo.guardian@sigep.edu.mx', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYIr6E8h.9i', 'Pablo', 'Diaz', 'GUARDIAN', true, NOW() - INTERVAL '78 days', NOW() - INTERVAL '2 days'),
+    (8, 'guardian.sofia', 'sofia.guardian@sigep.edu.mx', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYIr6E8h.9i', 'Sofia', 'Ruiz', 'GUARDIAN', true, NOW() - INTERVAL '75 days', NOW() - INTERVAL '1 days');
 
 -- ============================================================================
--- MÓDULO COURSES: ENROLLMENTS
+-- STUDENTS
 -- ============================================================================
-
-INSERT INTO enrollments (id, student_id, course_id, enrollment_date, status, final_grade, completion_date, notes, created_at, updated_at) VALUES
--- Curso 1: English Beginner A1
-(1, 1, 1, NOW() - INTERVAL '30 days', 'ACTIVE', NULL, NULL, 'Estudiante comprometida, asistencia regular', NOW() - INTERVAL '30 days', NOW()),
-(2, 2, 1, NOW() - INTERVAL '30 days', 'ACTIVE', NULL, NULL, 'Buen progreso en gramática', NOW() - INTERVAL '30 days', NOW()),
-(3, 7, 1, NOW() - INTERVAL '28 days', 'ACTIVE', NULL, NULL, NULL, NOW() - INTERVAL '28 days', NOW()),
-
--- Curso 2: English Intermediate B1
-(4, 3, 2, NOW() - INTERVAL '25 days', 'ACTIVE', NULL, NULL, 'Excelente participación en clase', NOW() - INTERVAL '25 days', NOW()),
-(5, 4, 2, NOW() - INTERVAL '25 days', 'ACTIVE', NULL, NULL, NULL, NOW() - INTERVAL '25 days', NOW()),
-
--- Curso 3: English Advanced C1
-(6, 5, 3, NOW() - INTERVAL '20 days', 'ACTIVE', NULL, NULL, 'Preparándose para TOEFL', NOW() - INTERVAL '20 days', NOW()),
-(7, 6, 3, NOW() - INTERVAL '20 days', 'ACTIVE', NULL, NULL, 'Nivel muy alto de comprensión', NOW() - INTERVAL '20 days', NOW()),
-
--- Curso 4: English Conversation B2
-(8, 8, 4, NOW() - INTERVAL '15 days', 'ACTIVE', NULL, NULL, 'Gran habilidad conversacional', NOW() - INTERVAL '15 days', NOW());
+INSERT INTO students (
+    id, first_name, last_name, email, document_number, date_of_birth, address,
+    phone_number, emergency_contact, guardian_id, enrollment_date, active,
+    medical_notes, current_level, created_at, updated_at
+) VALUES
+    (1, 'Lara', 'Mendez', 'lara.mendez@student.sigep.edu.mx', 'STU-1001', '2011-03-10', 'Av. Rivadavia 1234', '+54-11-4000-1001', 'Ana Lopez +54-11-5000-1001', 6, '2026-01-20', true, 'Alergia estacional', 'BEGINNER', NOW() - INTERVAL '70 days', NOW() - INTERVAL '1 days'),
+    (2, 'Tomas', 'Rios', 'tomas.rios@student.sigep.edu.mx', 'STU-1002', '2010-11-25', 'Av. Cabildo 2200', '+54-11-4000-1002', 'Pablo Diaz +54-11-5000-1002', 7, '2026-01-22', true, 'Sin observaciones', 'ELEMENTARY', NOW() - INTERVAL '68 days', NOW() - INTERVAL '1 days'),
+    (3, 'Camila', 'Suarez', 'camila.suarez@student.sigep.edu.mx', 'STU-1003', '2011-07-14', 'Av. Santa Fe 3300', '+54-11-4000-1003', 'Sofia Ruiz +54-11-5000-1003', 8, '2026-01-25', true, 'Usa lentes', 'PRE_INTERMEDIATE', NOW() - INTERVAL '65 days', NOW() - INTERVAL '2 days'),
+    (4, 'Nicolas', 'Acosta', 'nicolas.acosta@student.sigep.edu.mx', 'STU-1004', '2010-02-18', 'Av. Corrientes 1500', '+54-11-4000-1004', 'Ana Lopez +54-11-5000-1004', 6, '2026-01-28', true, 'Sin observaciones', 'INTERMEDIATE', NOW() - INTERVAL '62 days', NOW() - INTERVAL '2 days'),
+    (5, 'Valentina', 'Paz', 'valentina.paz@student.sigep.edu.mx', 'STU-1005', '2011-09-02', 'Av. Belgrano 980', '+54-11-4000-1005', 'Pablo Diaz +54-11-5000-1005', 7, '2026-02-01', true, 'Apto fisico presentado', 'UPPER_INTERMEDIATE', NOW() - INTERVAL '59 days', NOW() - INTERVAL '3 days'),
+    (6, 'Bruno', 'Farias', 'bruno.farias@student.sigep.edu.mx', 'STU-1006', '2010-05-30', 'Av. Callao 245', '+54-11-4000-1006', 'Sofia Ruiz +54-11-5000-1006', 8, '2026-02-04', true, 'Sin observaciones', 'ADVANCED', NOW() - INTERVAL '56 days', NOW() - INTERVAL '3 days');
 
 -- ============================================================================
--- MÓDULO COURSES: COURSE_SESSIONS
+-- COURSES
 -- ============================================================================
-
-INSERT INTO course_sessions (id, course_id, session_number, scheduled_date, topic, status, classroom, notes, created_at, updated_at, created_by, updated_by) VALUES
--- Sesiones Curso 1 (Beginner A1)
-(1, 1, 1, NOW() - INTERVAL '28 days', 'Introduction to English - Alphabet and Basic Greetings', 'COMPLETED', 'Aula 101', 'Primera sesión exitosa, 3 estudiantes presentes', NOW() - INTERVAL '28 days', NOW(), 1, 1),
-(2, 1, 2, NOW() - INTERVAL '26 days', 'Numbers and Basic Vocabulary', 'COMPLETED', 'Aula 101', NULL, NOW() - INTERVAL '26 days', NOW(), 1, 1),
-(3, 1, 3, NOW() + INTERVAL '2 days', 'Present Simple Tense', 'SCHEDULED', 'Aula 101', NULL, NOW() - INTERVAL '25 days', NOW(), 1, NULL),
-
--- Sesiones Curso 2 (Intermediate B1)
-(4, 2, 1, NOW() - INTERVAL '23 days', 'Review of Past Tenses', 'COMPLETED', 'Aula 102', 'Repaso general muy productivo', NOW() - INTERVAL '23 days', NOW(), 1, 1),
-(5, 2, 2, NOW() - INTERVAL '21 days', 'Modal Verbs and Conditionals', 'COMPLETED', 'Aula 102', NULL, NOW() - INTERVAL '21 days', NOW(), 1, 1),
-(6, 2, 3, NOW() + INTERVAL '3 days', 'Writing Skills - Formal Letters', 'SCHEDULED', 'Aula 102', NULL, NOW() - INTERVAL '20 days', NOW(), 1, NULL),
-
--- Sesiones Curso 3 (Advanced C1)
-(7, 3, 1, NOW() - INTERVAL '18 days', 'Academic Writing Techniques', 'COMPLETED', 'Aula 201', 'Nivel muy alto del grupo', NOW() - INTERVAL '18 days', NOW(), 1, 1),
-(8, 3, 2, NOW() + INTERVAL '5 days', 'Advanced Grammar - Subjunctive Mood', 'SCHEDULED', 'Aula 201', NULL, NOW() - INTERVAL '17 days', NOW(), 1, NULL);
+INSERT INTO courses (
+    id, code, name, description, level, duration, max_students, min_students,
+    teacher_id, price, start_date, end_date, status, is_published, created_at, updated_at
+) VALUES
+    (1, 'ENG-A1-2026', 'English Beginner A1', 'Curso inicial para nivel A1 con foco en speaking y bases gramaticales.', 'BEGINNER', 120, 16, 6, 3, 45000.00, '2026-02-01', '2026-07-01', 'ACTIVE', true, NOW() - INTERVAL '80 days', NOW() - INTERVAL '2 days'),
+    (2, 'ENG-B1-2026', 'English Intermediate B1', 'Curso intermedio para consolidar tiempos verbales y writing.', 'INTERMEDIATE', 140, 14, 5, 4, 52000.00, '2026-02-05', '2026-07-10', 'ACTIVE', true, NOW() - INTERVAL '78 days', NOW() - INTERVAL '2 days'),
+    (3, 'ENG-C1-2026', 'English Advanced C1', 'Curso avanzado orientado a certificaciones internacionales.', 'ADVANCED', 160, 12, 5, 5, 61000.00, '2026-02-10', '2026-07-15', 'ACTIVE', true, NOW() - INTERVAL '75 days', NOW() - INTERVAL '2 days'),
+    (4, 'ENG-CONV-2026', 'Conversation Lab', 'Taller intensivo de conversacion para fluidez oral.', 'UPPER_INTERMEDIATE', 80, 10, 4, 4, 39000.00, '2026-02-12', '2026-06-20', 'INACTIVE', false, NOW() - INTERVAL '72 days', NOW() - INTERVAL '3 days');
 
 -- ============================================================================
--- MÓDULO COURSES: COURSE_MATERIALS
+-- COURSE_SCHEDULES
 -- ============================================================================
-
-INSERT INTO course_materials (id, course_id, title, description, file_url, uploaded_at, uploaded_by, created_at, updated_at) VALUES
-(1, 1, 'English Alphabet Practice Sheet', 'Hoja de práctica con el alfabeto en inglés y ejercicios de pronunciación', '/materials/beginner/alphabet-practice.pdf', NOW() - INTERVAL '30 days', 3, NOW() - INTERVAL '30 days', NOW()),
-(2, 1, 'Basic Greetings Audio', 'Audio con pronunciación de saludos básicos en inglés', '/materials/beginner/greetings-audio.mp3', NOW() - INTERVAL '28 days', 3, NOW() - INTERVAL '28 days', NOW()),
-(3, 2, 'Modal Verbs Guide', 'Guía completa de verbos modales con ejemplos y ejercicios', '/materials/intermediate/modal-verbs-guide.pdf', NOW() - INTERVAL '22 days', 4, NOW() - INTERVAL '22 days', NOW()),
-(4, 3, 'Academic Writing Samples', 'Ejemplos de escritura académica nivel avanzado', '/materials/advanced/academic-writing-samples.pdf', NOW() - INTERVAL '18 days', 5, NOW() - INTERVAL '18 days', NOW());
-
--- ============================================================================
--- MÓDULO STAFF: TEACHING_STAFF
--- ============================================================================
-
-INSERT INTO teaching_staff (id, first_name, last_name, email, phone_number, document_number, specialization, hire_date, status, monthly_salary, payment_status, qualifications, notes, created_at, updated_at, created_by, updated_by, is_active) VALUES
-(1, 'María', 'García', 'maria.garcia@sigep.edu.mx', '+54-11-3344-5566', 'DNI-20123456', 'English Language Teaching', NOW() - INTERVAL '400 days', 'ACTIVE', 85000.00, 'UP_TO_DATE', 'Master in TESOL, Cambridge CELTA', 'Excelente profesora con gran experiencia', NOW() - INTERVAL '400 days', NOW(), 1, 1, true),
-(2, 'José', 'Pérez', 'jose.perez@sigep.edu.mx', '+54-11-4455-6677', 'DNI-20234567', 'English Conversation', NOW() - INTERVAL '300 days', 'ACTIVE', 78000.00, 'UP_TO_DATE', 'Bachelor in English Literature, TEFL Certified', 'Especialista en conversación', NOW() - INTERVAL '300 days', NOW(), 1, 1, true),
-(3, 'Laura', 'Martínez', 'laura.martinez@sigep.edu.mx', '+54-11-5566-7788', 'DNI-20345678', 'Business English', NOW() - INTERVAL '200 days', 'ACTIVE', 82000.00, 'UP_TO_DATE', 'MBA, Business English Specialist', 'Enfocada en inglés de negocios', NOW() - INTERVAL '200 days', NOW(), 1, 1, true);
+INSERT INTO course_schedules (
+    id, course_id, day_of_week, start_time, end_time
+) VALUES
+    (1, 1, 'MONDAY', '09:00', '11:00'),
+    (2, 1, 'WEDNESDAY', '09:00', '11:00'),
+    (3, 2, 'TUESDAY', '14:00', '16:00'),
+    (4, 2, 'THURSDAY', '14:00', '16:00'),
+    (5, 3, 'MONDAY', '17:00', '19:00'),
+    (6, 3, 'FRIDAY', '17:00', '19:00'),
+    (7, 4, 'SATURDAY', '10:00', '12:00'),
+    (8, 4, 'SUNDAY', '10:00', '12:00');
 
 -- ============================================================================
--- MÓDULO STAFF: NON_TEACHING_STAFF
+-- ENROLLMENTS
 -- ============================================================================
-
-INSERT INTO non_teaching_staff (id, first_name, last_name, email, phone_number, position, company, hourly_rate, assigned_tasks, status, created_at, updated_at, created_by, updated_by, is_active) VALUES
-(1, 'Roberto', 'Sánchez', 'roberto.sanchez@cleaning.com', '+54-11-6677-8899', 'CLEANING', 'CleanPro Services', 850.00, 'Limpieza de aulas y oficinas, mantenimiento básico', 'ACTIVE', NOW() - INTERVAL '100 days', NOW(), 1, 1, true),
-(2, 'Carmen', 'Díaz', 'carmen.diaz@cleaning.com', '+54-11-7788-9900', 'CLEANING', 'CleanPro Services', 850.00, 'Limpieza de baños y áreas comunes', 'ACTIVE', NOW() - INTERVAL '80 days', NOW(), 1, 1, true),
-(3, 'Miguel', 'Ruiz', 'miguel.ruiz@techsupport.com', '+54-11-8899-0011', 'IT_SUPPORT', 'TechSupport SA', 1500.00, 'Soporte técnico, mantenimiento de equipos', 'ACTIVE', NOW() - INTERVAL '60 days', NOW(), 1, 1, true);
-
--- ============================================================================
--- MÓDULO STAFF: STAFF_ATTENDANCE
--- ============================================================================
-
-INSERT INTO staff_attendance (id, teaching_staff_id, staff_id, staff_type, attendance_date, status, hours_worked, notes, created_at, updated_at, created_by, updated_by) VALUES
--- Asistencias de teaching staff
-(1, 1, 1, 'TEACHING', NOW() - INTERVAL '5 days', 'PRESENT', 6.0, NULL, NOW() - INTERVAL '5 days', NOW(), 1, 1),
-(2, 1, 1, 'TEACHING', NOW() - INTERVAL '3 days', 'PRESENT', 6.0, NULL, NOW() - INTERVAL '3 days', NOW(), 1, 1),
-(3, 2, 2, 'TEACHING', NOW() - INTERVAL '4 days', 'PRESENT', 5.0, NULL, NOW() - INTERVAL '4 days', NOW(), 1, 1);
-
--- Asistencias de non-teaching staff
-INSERT INTO staff_attendance (id, non_teaching_staff_id, staff_id, staff_type, attendance_date, status, hours_worked, notes, created_at, updated_at, created_by, updated_by) VALUES
-(4, 1, 1, 'NON_TEACHING', NOW() - INTERVAL '2 days', 'PRESENT', 8.0, 'Limpieza completa realizada', NOW() - INTERVAL '2 days', NOW(), 1, 1),
-(5, 2, 2, 'NON_TEACHING', NOW() - INTERVAL '2 days', 'PRESENT', 8.0, NULL, NOW() - INTERVAL '2 days', NOW(), 1, 1),
-(6, 3, 3, 'NON_TEACHING', NOW() - INTERVAL '1 day', 'PRESENT', 4.0, 'Mantenimiento preventivo equipos', NOW() - INTERVAL '1 day', NOW(), 1, 1);
+INSERT INTO enrollments (
+    id, student_id, course_id, enrollment_date, status, final_grade, completion_date,
+    notes, created_at, updated_at
+) VALUES
+    (1, 1, 1, '2026-02-01', 'COMPLETED', 88.50, '2026-04-15', 'Completado con buen desempeno', NOW() - INTERVAL '70 days', NOW() - INTERVAL '10 days'),
+    (2, 2, 1, '2026-02-02', 'COMPLETED', 91.00, '2026-04-15', 'Excelente participacion', NOW() - INTERVAL '69 days', NOW() - INTERVAL '10 days'),
+    (3, 3, 2, '2026-02-06', 'ACTIVE', NULL, NULL, 'Asistencia regular', NOW() - INTERVAL '65 days', NOW() - INTERVAL '2 days'),
+    (4, 4, 2, '2026-02-06', 'ACTIVE', NULL, NULL, 'Buen rendimiento', NOW() - INTERVAL '65 days', NOW() - INTERVAL '2 days'),
+    (5, 5, 3, '2026-02-11', 'ACTIVE', NULL, NULL, 'Enfocada en certificacion', NOW() - INTERVAL '60 days', NOW() - INTERVAL '2 days'),
+    (6, 6, 3, '2026-02-11', 'SUSPENDED', 55.00, '2026-03-20', 'Suspension temporal por inasistencias', NOW() - INTERVAL '60 days', NOW() - INTERVAL '20 days');
 
 -- ============================================================================
--- MÓDULO EXAMS: EXAMS
+-- COURSE_SESSIONS
 -- ============================================================================
--- Nota: La tabla exams usa UUID para IDs (no BIGINT como otros módulos)
--- Generamos UUIDs deterministas para facilitar referencias posteriores
-
--- Usar UUIDs fijos para poder referenciarlos en exam_submissions
-INSERT INTO exams (id, course_id, title, description, modality, status, total_points, weight, time_limit_minutes, scheduled_at, visibility_start, visibility_end, assigned_teachers, notes, room_info, version, created_at, created_by, updated_at, updated_by) VALUES
--- Exámenes Curso 1 (Beginner A1) - course_id debe convertirse de BIGINT 1 a UUID
-('00000000-0000-0000-0000-000000000101'::UUID, '00000000-0000-0000-0000-000000000001'::UUID, 'Unit 1 - Alphabet and Greetings Quiz', 'Evaluación básica sobre alfabeto y saludos en inglés', 'OFFLINE', 'PUBLISHED', 50.00, 0.15, 30, NOW() + INTERVAL '5 days', NOW(), NOW() + INTERVAL '10 days', NULL, 'Primer examen del curso', 'Aula 101', 1, NOW() - INTERVAL '10 days', '00000000-0000-0000-0000-000000000003'::UUID, NOW(), '00000000-0000-0000-0000-000000000003'::UUID),
-('00000000-0000-0000-0000-000000000102'::UUID, '00000000-0000-0000-0000-000000000001'::UUID, 'Mid-Term Exam', 'Examen de medio término - Temas 1-4', 'OFFLINE', 'PUBLISHED', 100.00, 0.35, 90, NOW() + INTERVAL '20 days', NOW() + INTERVAL '15 days', NOW() + INTERVAL '25 days', NULL, NULL, 'Aula 101', 1, NOW() - INTERVAL '8 days', '00000000-0000-0000-0000-000000000003'::UUID, NOW(), '00000000-0000-0000-0000-000000000003'::UUID),
-
--- Exámenes Curso 2 (Intermediate B1) - course_id debe convertirse de BIGINT 2 a UUID
-('00000000-0000-0000-0000-000000000201'::UUID, '00000000-0000-0000-0000-000000000002'::UUID, 'Modal Verbs Test', 'Evaluación sobre verbos modales y condicionales', 'OFFLINE', 'GRADED', 75.00, 0.20, 60, NOW() - INTERVAL '3 days', NOW() - INTERVAL '8 days', NOW() + INTERVAL '2 days', NULL, 'Ya calificado', 'Aula 102', 1, NOW() - INTERVAL '15 days', '00000000-0000-0000-0000-000000000004'::UUID, NOW(), '00000000-0000-0000-0000-000000000004'::UUID),
-('00000000-0000-0000-0000-000000000202'::UUID, '00000000-0000-0000-0000-000000000002'::UUID, 'Writing Assessment', 'Evaluación de escritura - Carta formal', 'OFFLINE', 'PUBLISHED', 100.00, 0.30, 120, NOW() + INTERVAL '12 days', NOW() + INTERVAL '8 days', NOW() + INTERVAL '18 days', NULL, NULL, 'Aula 102', 1, NOW() - INTERVAL '5 days', '00000000-0000-0000-0000-000000000004'::UUID, NOW(), '00000000-0000-0000-0000-000000000004'::UUID),
-
--- Exámenes Curso 3 (Advanced C1) - course_id debe convertirse de BIGINT 3 a UUID
-('00000000-0000-0000-0000-000000000301'::UUID, '00000000-0000-0000-0000-000000000003'::UUID, 'Academic Writing Exam', 'Examen de escritura académica nivel avanzado', 'OFFLINE', 'PUBLISHED', 100.00, 0.40, 150, NOW() + INTERVAL '15 days', NOW() + INTERVAL '10 days', NOW() + INTERVAL '20 days', NULL, 'Simulación de examen TOEFL', 'Aula 201', 1, NOW() - INTERVAL '7 days', '00000000-0000-0000-0000-000000000005'::UUID, NOW(), '00000000-0000-0000-0000-000000000005'::UUID),
-('00000000-0000-0000-0000-000000000302'::UUID, '00000000-0000-0000-0000-000000000003'::UUID, 'Oral Proficiency Test', 'Evaluación oral de fluidez y pronunciación', 'OFFLINE', 'DRAFT', 50.00, 0.25, 20, NULL, NULL, NULL, NULL, 'Examen individual, agendar con cada estudiante', 'Sala de Conferencias', 1, NOW() - INTERVAL '3 days', '00000000-0000-0000-0000-000000000005'::UUID, NULL, NULL);
+INSERT INTO course_sessions (
+    id, course_id, session_date, start_time, end_time, classroom_id, classroom_name,
+    status, topic, notes, is_recurring, recurrence_rule, parent_session_id,
+    created_at, updated_at
+) VALUES
+    (1, 1, '2026-03-01', '09:00', '11:00', 101, 'Aula 101', 'COMPLETED', 'Greetings and introductions', 'Sesion dictada sin novedades', true, 'FREQ=WEEKLY;BYDAY=MO,WE', NULL, NOW() - INTERVAL '40 days', NOW() - INTERVAL '39 days'),
+    (2, 1, '2026-03-03', '09:00', '11:00', 101, 'Aula 101', 'COMPLETED', 'Present simple basics', 'Participacion alta', true, 'FREQ=WEEKLY;BYDAY=MO,WE', 1, NOW() - INTERVAL '38 days', NOW() - INTERVAL '37 days'),
+    (3, 2, '2026-03-04', '14:00', '16:00', 102, 'Aula 102', 'COMPLETED', 'Modal verbs review', 'Sesion con evaluacion corta', true, 'FREQ=WEEKLY;BYDAY=TU,TH', NULL, NOW() - INTERVAL '37 days', NOW() - INTERVAL '36 days'),
+    (4, 2, '2026-03-06', '14:00', '16:00', 102, 'Aula 102', 'RESCHEDULED', 'Conditionals practice', 'Reprogramada por feriado local', true, 'FREQ=WEEKLY;BYDAY=TU,TH', 3, NOW() - INTERVAL '35 days', NOW() - INTERVAL '34 days'),
+    (5, 3, '2026-03-08', '17:00', '19:00', 201, 'Aula 201', 'IN_PROGRESS', 'Academic writing', 'Trabajo en ensayo', true, 'FREQ=WEEKLY;BYDAY=MO,FR', NULL, NOW() - INTERVAL '33 days', NOW() - INTERVAL '32 days'),
+    (6, 4, '2026-03-09', '10:00', '12:00', 301, 'Sala Conversacion', 'CANCELLED', 'Conversation drills', 'Cancelada por mantenimiento', false, 'FREQ=DAILY;COUNT=1', 5, NOW() - INTERVAL '32 days', NOW() - INTERVAL '31 days');
 
 -- ============================================================================
--- MÓDULO EXAMS: EXAM_SUBMISSIONS
+-- SESSION_EXCEPTIONS
 -- ============================================================================
--- Nota: La tabla exam_submissions usa UUID para IDs
--- Usamos UUIDs fijos para mejor legibilidad y referencia
-
-INSERT INTO exam_submissions (id, exam_id, student_id, attempt_number, status, started_at, submitted_at, score, graded_by, graded_at, feedback, scanned_file_path, notes, version, created_at, created_by, updated_at, updated_by) VALUES
--- Submissions para Modal Verbs Test (ID: 00000000-0000-0000-0000-000000000201)
-('00000000-0000-0000-0000-000000001001'::UUID,
- '00000000-0000-0000-0000-000000000201'::UUID,  -- Modal Verbs Test
- '00000000-0000-0000-0000-000000000003'::UUID,  -- Student 3
- 1, 'GRADED',
- NOW() - INTERVAL '3 days', NOW() - INTERVAL '3 days',
- 68.50,
- '00000000-0000-0000-0000-000000000004'::UUID,  -- Teacher mgarcia (user id=4)
- NOW() - INTERVAL '2 days',
- 'Buen manejo de modales básicos. Revisar would/could en contexto formal.',
- '/scans/exam_modal_verbs_student3.pdf', NULL, 1,
- NOW() - INTERVAL '3 days', '00000000-0000-0000-0000-000000000003'::UUID,
- NOW() - INTERVAL '2 days', '00000000-0000-0000-0000-000000000004'::UUID),
-
-('00000000-0000-0000-0000-000000001002'::UUID,
- '00000000-0000-0000-0000-000000000201'::UUID,  -- Modal Verbs Test
- '00000000-0000-0000-0000-000000000004'::UUID,  -- Student 4
- 1, 'GRADED',
- NOW() - INTERVAL '3 days', NOW() - INTERVAL '3 days',
- 71.00,
- '00000000-0000-0000-0000-000000000004'::UUID,  -- Teacher mgarcia (user id=4)
- NOW() - INTERVAL '2 days',
- 'Excelente comprensión general. Algunos errores menores en might/may.',
- '/scans/exam_modal_verbs_student4.pdf', NULL, 1,
- NOW() - INTERVAL '3 days', '00000000-0000-0000-0000-000000000004'::UUID,
- NOW() - INTERVAL '2 days', '00000000-0000-0000-0000-000000000004'::UUID),
-
--- Submissions pendientes para Unit 1 Quiz (ID: 00000000-0000-0000-0000-000000000101)
-('00000000-0000-0000-0000-000000001003'::UUID,
- '00000000-0000-0000-0000-000000000101'::UUID,  -- Unit 1 Quiz
- '00000000-0000-0000-0000-000000000001'::UUID,  -- Student 1
- 1, 'PENDING',
- NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 1,
- NOW() - INTERVAL '5 days', '00000000-0000-0000-0000-000000000001'::UUID, NULL, NULL),
-
-('00000000-0000-0000-0000-000000001004'::UUID,
- '00000000-0000-0000-0000-000000000101'::UUID,  -- Unit 1 Quiz
- '00000000-0000-0000-0000-000000000002'::UUID,  -- Student 2
- 1, 'PENDING',
- NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 1,
- NOW() - INTERVAL '5 days', '00000000-0000-0000-0000-000000000002'::UUID, NULL, NULL);
+INSERT INTO session_exceptions (
+    id, session_id, exception_date, exception_type, new_start_time, new_end_time,
+    new_classroom_id, reason, created_at
+) VALUES
+    (1, 4, '2026-03-10', 'RESCHEDULED', '15:00', '17:00', 103, 'Ajuste por feriado', NOW() - INTERVAL '34 days'),
+    (2, 6, '2026-03-09', 'CANCELLED', '10:30', '12:30', 302, 'Mantenimiento edilicio', NOW() - INTERVAL '31 days');
 
 -- ============================================================================
--- MÓDULO EXAMS: EXAM_GRADE_HISTORY
+-- COURSE_ATTENDANCE
 -- ============================================================================
-
-INSERT INTO exam_grade_history (id, submission_id, previous_score, new_score, change_reason, changed_by, changed_at, version, created_at, created_by, updated_at, updated_by) VALUES
-('00000000-0000-0000-0000-000000002001'::UUID,
- '00000000-0000-0000-0000-000000001001'::UUID,  -- Submission de student 3 para Modal Verbs Test
- 65.00, 68.50,
- 'Recalificación: se otorgaron puntos adicionales por respuesta parcialmente correcta en pregunta 5',
- '00000000-0000-0000-0000-000000000004'::UUID,  -- Teacher mgarcia
- NOW() - INTERVAL '1 day',
- 1, NOW() - INTERVAL '1 day',
- '00000000-0000-0000-0000-000000000004'::UUID,
- NOW() - INTERVAL '1 day',
- '00000000-0000-0000-0000-000000000004'::UUID);
+INSERT INTO course_attendance (
+    id, enrollment_id, attendance_date, status, notes, recorded_by, created_at, updated_at
+) VALUES
+    (1, 1, '2026-03-01', 'PRESENT', 'Puntual y participativa', 3, NOW() - INTERVAL '40 days', NOW() - INTERVAL '40 days'),
+    (2, 2, '2026-03-01', 'LATE', 'Ingreso 10 minutos tarde', 3, NOW() - INTERVAL '40 days', NOW() - INTERVAL '40 days'),
+    (3, 3, '2026-03-04', 'ABSENT', 'Ausente sin aviso', 4, NOW() - INTERVAL '37 days', NOW() - INTERVAL '37 days'),
+    (4, 4, '2026-03-04', 'EXCUSED_ABSENCE', 'Certificado medico presentado', 4, NOW() - INTERVAL '37 days', NOW() - INTERVAL '37 days'),
+    (5, 5, '2026-03-08', 'SICK_LEAVE', 'Reposo por gripe', 5, NOW() - INTERVAL '33 days', NOW() - INTERVAL '33 days'),
+    (6, 6, '2026-03-08', 'PRESENT', 'Asistencia normal', 5, NOW() - INTERVAL '33 days', NOW() - INTERVAL '33 days');
 
 -- ============================================================================
--- MÓDULO COURSES: COURSE_CERTIFICATES
+-- COURSE_MATERIALS
 -- ============================================================================
+INSERT INTO course_materials (
+    id, course_id, title, description, type, file_url, file_name, file_size,
+    mime_type, uploaded_by, is_visible, order_index, created_at, updated_at
+) VALUES
+    (1, 1, 'A1 Starter Pack', 'Guia inicial de vocabulario y gramatica', 'PDF', '/materials/a1/starter-pack.pdf', 'starter-pack.pdf', 245760, 'application/pdf', 3, true, 1, NOW() - INTERVAL '50 days', NOW() - INTERVAL '48 days'),
+    (2, 2, 'Modal Verbs Audio', 'Practica auditiva de modal verbs', 'AUDIO', '/materials/b1/modal-verbs.mp3', 'modal-verbs.mp3', 5242880, 'audio/mpeg', 4, true, 2, NOW() - INTERVAL '45 days', NOW() - INTERVAL '43 days'),
+    (3, 3, 'Academic Writing Slides', 'Presentacion de writing academico', 'PRESENTATION', '/materials/c1/academic-writing.pptx', 'academic-writing.pptx', 7340032, 'application/vnd.openxmlformats-officedocument.presentationml.presentation', 5, true, 3, NOW() - INTERVAL '40 days', NOW() - INTERVAL '38 days'),
+    (4, 4, 'Conversation Video', 'Video de role-plays para speaking', 'VIDEO', '/materials/conv/roleplays.mp4', 'roleplays.mp4', 15728640, 'video/mp4', 4, false, 4, NOW() - INTERVAL '35 days', NOW() - INTERVAL '34 days');
 
-INSERT INTO course_certificates (id, enrollment_id, certificate_code, issue_date, expiration_date, certificate_url, issued_by, notes, created_at, updated_at) VALUES
--- Nota: Solo se emiten certificados para enrollments completados
--- Como todos están ACTIVE, este es un ejemplo de cómo se verían
-(1, 1, 'CERT-2025-BEG-001', NOW() - INTERVAL '10 days', NOW() + INTERVAL '3 years', '/certificates/2025/CERT-2025-BEG-001.pdf', 1, 'Certificado emitido por completar nivel Beginner A1', NOW() - INTERVAL '10 days', NOW());
+-- ============================================================================
+-- COURSE_CERTIFICATES
+-- ============================================================================
+INSERT INTO course_certificates (
+    id, enrollment_id, certificate_code, issue_date, expiry_date, final_grade, honors,
+    notes, pdf_url, status, issued_by, revoked_by, revoked_at, revocation_reason,
+    created_at, updated_at
+) VALUES
+    (1, 1, 'CERT-2026-A1-0001', '2026-04-20', '2029-04-20', 88.50, 'MERIT', 'Certificado por aprobacion del nivel A1', '/certs/CERT-2026-A1-0001.pdf', 'ACTIVE', 1, NULL, NULL, NULL, NOW() - INTERVAL '10 days', NOW() - INTERVAL '10 days'),
+    (2, 2, 'CERT-2026-A1-0002', '2026-04-20', '2029-04-20', 91.00, 'DISTINCTION', 'Certificado revocado por correccion administrativa', '/certs/CERT-2026-A1-0002.pdf', 'REVOKED', 2, 1, NOW() - INTERVAL '5 days', 'Error de datos en documento original', NOW() - INTERVAL '10 days', NOW() - INTERVAL '4 days');
 
 -- ============================================================================
--- COMMIT TRANSACTION
+-- TEACHING_STAFF
 -- ============================================================================
+INSERT INTO teaching_staff (
+    id, first_name, last_name, email, phone_number, document_number, birth_date,
+    address, hire_date, monthly_salary, payment_status, assigned_students_count,
+    specialization, qualifications, observations, notes,
+    emergency_contact_name, emergency_contact_phone,
+    created_at, created_by, updated_at, updated_by, is_active
+) VALUES
+    (1, 'Maria', 'Gomez', 'maria.staff@sigep.edu.mx', '+54-11-6111-1001', 'TS-2001', '1988-05-10', 'Lavalle 500', '2024-01-15', 980000.00, 'UP_TO_DATE', 22, 'General English', 'CELTA, TKT', 'Excelente feedback de alumnos', 'Disponible para clases extra', 'Laura Mendez', '+54-11-7000-1001', NOW() - INTERVAL '400 days', 'system', NOW() - INTERVAL '2 days', 'system', true),
+    (2, 'Juan', 'Paredes', 'juan.staff@sigep.edu.mx', '+54-11-6111-1002', 'TS-2002', '1985-09-22', 'Chile 850', '2023-08-10', 920000.00, 'PENDING', 18, 'Conversation', 'TEFL Advanced', 'Buen manejo de grupo', 'Requiere apoyo en admin', 'Cecilia Paredes', '+54-11-7000-1002', NOW() - INTERVAL '500 days', 'system', NOW() - INTERVAL '3 days', 'system', true),
+    (3, 'Luis', 'Romero', 'luis.staff@sigep.edu.mx', '+54-11-6111-1003', 'TS-2003', '1990-02-02', 'Viamonte 1200', '2024-06-01', 870000.00, 'OVERDUE', 14, 'Exam Prep', 'IELTS Trainer', 'Alta exigencia academica', 'Coordinar reemplazos', 'Diego Romero', '+54-11-7000-1003', NOW() - INTERVAL '300 days', 'system', NOW() - INTERVAL '5 days', 'system', true);
+
+-- ============================================================================
+-- NON_TEACHING_STAFF
+-- ============================================================================
+INSERT INTO non_teaching_staff (
+    id, first_name, last_name, email, phone_number, document_number, birth_date,
+    address, hire_date, hourly_rate, role, company_name, assigned_tasks, observations,
+    emergency_contact_name, emergency_contact_phone,
+    created_at, created_by, updated_at, updated_by, is_active
+) VALUES
+    (1, 'Roberto', 'Sanchez', 'roberto.nstaff@sigep.edu.mx', '+54-11-6222-2001', 'NTS-3001', '1982-01-12', 'Mexico 300', '2024-03-01', 5500.00, 'CLEANING', 'CleanPro SA', 'Limpieza de aulas y pasillos', 'Cumple cronograma diario', 'Elena Sanchez', '+54-11-7100-2001', NOW() - INTERVAL '200 days', 'system', NOW() - INTERVAL '2 days', 'system', true),
+    (2, 'Carla', 'Molina', 'carla.nstaff@sigep.edu.mx', '+54-11-6222-2002', 'NTS-3002', '1989-04-18', 'Peru 700', '2024-05-15', 7200.00, 'IT_SUPPORT', 'TechCare SRL', 'Soporte de red y equipos', 'Atencion rapida de incidencias', 'Nestor Molina', '+54-11-7100-2002', NOW() - INTERVAL '180 days', 'system', NOW() - INTERVAL '2 days', 'system', true),
+    (3, 'Martin', 'Quiroga', 'martin.nstaff@sigep.edu.mx', '+54-11-6222-2003', 'NTS-3003', '1991-11-30', 'Moreno 940', '2024-07-10', 6800.00, 'IT', 'InfraOps SA', 'Automatizacion de inventario', 'Rol IT alias valido en V9', 'Silvia Quiroga', '+54-11-7100-2003', NOW() - INTERVAL '150 days', 'system', NOW() - INTERVAL '1 days', 'system', true);
+
+-- ============================================================================
+-- STAFF_ATTENDANCE
+-- ============================================================================
+INSERT INTO staff_attendance (
+    id, attendance_date, check_in_time, check_out_time, status, notes, hours_worked,
+    teaching_staff_id, non_teaching_staff_id, created_at, updated_at
+) VALUES
+    (1, '2026-04-01', '08:55', '15:05', 'PRESENT', 'Jornada completa docente', 6.17, 1, NULL, NOW() - INTERVAL '10 days', NOW() - INTERVAL '10 days'),
+    (2, '2026-04-01', '09:10', '14:00', 'LATE', 'Ingreso tarde por trafico', 4.83, 2, NULL, NOW() - INTERVAL '10 days', NOW() - INTERVAL '10 days'),
+    (3, '2026-04-01', '07:45', '16:00', 'PRESENT', 'Cobertura limpieza total', 8.25, NULL, 1, NOW() - INTERVAL '10 days', NOW() - INTERVAL '10 days'),
+    (4, '2026-04-02', '08:00', '12:30', 'SICK_LEAVE', 'Retiro anticipado por malestar', 4.50, NULL, 2, NOW() - INTERVAL '9 days', NOW() - INTERVAL '9 days');
+
+-- ============================================================================
+-- EXAMS
+-- ============================================================================
+INSERT INTO exams (
+    id, course_id, title, description, modality, status, total_points, weight,
+    time_limit_minutes, scheduled_at, visibility_start, visibility_end,
+    assigned_teachers, notes, room_info, version,
+    created_at, created_by, updated_at, updated_by
+) VALUES
+    ('11111111-1111-1111-1111-111111111101'::UUID, 1, 'A1 Unit Test', 'Evaluacion de unidades 1 y 2', 'OFFLINE', 'PUBLISHED', 100.00, 0.30, 60, NOW() + INTERVAL '7 days', NOW() - INTERVAL '1 days', NOW() + INTERVAL '10 days', '[3,4]', 'Examen presencial con hoja impresa', 'Aula 101', 1, NOW() - INTERVAL '12 days', 3, NOW() - INTERVAL '1 days', 3),
+    ('22222222-2222-2222-2222-222222222202'::UUID, 2, 'B1 Midterm', 'Midterm de gramatica y writing', 'OFFLINE', 'CLOSED', 100.00, 0.40, 90, NOW() - INTERVAL '20 days', NOW() - INTERVAL '30 days', NOW() - INTERVAL '19 days', '[4]', 'Examen ya cerrado', 'Aula 102', 2, NOW() - INTERVAL '35 days', 4, NOW() - INTERVAL '18 days', 4),
+    ('33333333-3333-3333-3333-333333333303'::UUID, 3, 'C1 Draft Evaluation', 'Borrador de examen oral', 'ONLINE', 'DRAFT', 50.00, 0.20, 30, NOW() + INTERVAL '14 days', NOW() + INTERVAL '10 days', NOW() + INTERVAL '20 days', '[5]', 'Pendiente de publicacion', 'Sala C1', 1, NOW() - INTERVAL '8 days', 5, NOW() - INTERVAL '1 days', 5);
+
+-- ============================================================================
+-- EXAM_SUBMISSIONS
+-- ============================================================================
+INSERT INTO exam_submissions (
+    id, exam_id, student_id, attempt_number, status, started_at, submitted_at,
+    score, graded_by, graded_at, feedback, scanned_file_path, notes, version,
+    created_at, created_by, updated_at, updated_by
+) VALUES
+    ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaa1001'::UUID, '22222222-2222-2222-2222-222222222202'::UUID, 3, 1, 'GRADED', NOW() - INTERVAL '20 days', NOW() - INTERVAL '20 days' + INTERVAL '85 minutes', 78.50, 4, NOW() - INTERVAL '18 days', 'Buen dominio general, mejorar cohesion.', '/scans/submission-1001.pdf', 'Primera correccion', 2, NOW() - INTERVAL '20 days', 4, NOW() - INTERVAL '18 days', 4),
+    ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaa1002'::UUID, '22222222-2222-2222-2222-222222222202'::UUID, 4, 1, 'UNDER_REVIEW', NOW() - INTERVAL '20 days', NOW() - INTERVAL '20 days' + INTERVAL '80 minutes', 72.00, 4, NOW() - INTERVAL '18 days', 'Solicita revision de seccion 3.', '/scans/submission-1002.pdf', 'Apelacion abierta', 2, NOW() - INTERVAL '20 days', 4, NOW() - INTERVAL '17 days', 4),
+    ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaa1003'::UUID, '11111111-1111-1111-1111-111111111101'::UUID, 1, 1, 'PENDING', NOW() - INTERVAL '1 days', NOW() - INTERVAL '1 days' + INTERVAL '58 minutes', 0.00, NULL, NULL, 'Pendiente de calificacion', '/scans/submission-1003.pdf', 'Subida automatica', 1, NOW() - INTERVAL '1 days', 3, NOW() - INTERVAL '1 days', 3),
+    ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaa1004'::UUID, '11111111-1111-1111-1111-111111111101'::UUID, 2, 1, 'CANCELLED', NOW() - INTERVAL '1 days', NOW() - INTERVAL '1 days' + INTERVAL '10 minutes', 15.00, 3, NOW() - INTERVAL '1 days', 'Intento cancelado por incidencia tecnica.', '/scans/submission-1004.pdf', 'Reagendar examen', 1, NOW() - INTERVAL '1 days', 3, NOW() - INTERVAL '1 days', 3);
+
+-- ============================================================================
+-- EXAM_GRADE_HISTORY
+-- ============================================================================
+INSERT INTO exam_grade_history (
+    id, submission_id, changed_at, changed_by, previous_score, new_score,
+    reason, created_at, created_by, updated_at, updated_by
+) VALUES
+    ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbb2001'::UUID, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaa1001'::UUID, NOW() - INTERVAL '17 days', 4, 74.00, 78.50, 'Se agregaron puntos por respuesta parcialmente correcta', NOW() - INTERVAL '17 days', 4, NOW() - INTERVAL '17 days', 4),
+    ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbb2002'::UUID, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaa1002'::UUID, NOW() - INTERVAL '16 days', 4, 69.00, 72.00, 'Reevaluacion tras consulta del estudiante', NOW() - INTERVAL '16 days', 4, NOW() - INTERVAL '16 days', 4);
+
+-- ============================================================================
+-- PAYMENTS
+-- ============================================================================
+INSERT INTO payments (
+    id, student_id, amount, concept, payment_date, due_date, status,
+    payment_method, receipt_number, notes, created_at, updated_at
+) VALUES
+    (1, 1, 45000.00, 'Cuota Marzo A1', '2026-03-05', '2026-03-10', 'PAID', 'BANK_TRANSFER', 'RCPT-2026-0001', 'Pago en termino', NOW() - INTERVAL '40 days', NOW() - INTERVAL '40 days'),
+    (2, 2, 45000.00, 'Cuota Marzo A1', '2026-03-15', '2026-03-10', 'OVERDUE', 'CREDIT_CARD', 'RCPT-2026-0002', 'Pago fuera de termino', NOW() - INTERVAL '35 days', NOW() - INTERVAL '35 days'),
+    (3, 3, 52000.00, 'Cuota Marzo B1', '2026-03-08', '2026-03-12', 'PAID', 'DEBIT_CARD', 'RCPT-2026-0003', 'Pago normal', NOW() - INTERVAL '33 days', NOW() - INTERVAL '33 days'),
+    (4, 4, 52000.00, 'Cuota Marzo B1', '2026-03-11', '2026-03-12', 'PENDING', 'CASH', 'RCPT-2026-0004', 'Pendiente acreditacion final', NOW() - INTERVAL '32 days', NOW() - INTERVAL '32 days');
+
+-- ============================================================================
+-- NOTIFICATIONS
+-- ============================================================================
+INSERT INTO notifications (
+    id, title, message, type, recipient_id, recipient_type, status,
+    send_date, read_date, created_at, updated_at
+) VALUES
+    (1, 'Bienvenida', 'Bienvenido al ciclo lectivo 2026 en SiGEP.', 'INFO', 1, 'STUDENT', 'READ', NOW() - INTERVAL '60 days', NOW() - INTERVAL '59 days', NOW() - INTERVAL '60 days', NOW() - INTERVAL '59 days'),
+    (2, 'Recordatorio de Pago', 'Tu cuota vence en 48 horas.', 'REMINDER', 2, 'STUDENT', 'DELIVERED', NOW() - INTERVAL '34 days', NOW() - INTERVAL '33 days', NOW() - INTERVAL '34 days', NOW() - INTERVAL '33 days'),
+    (3, 'Actualizacion Docente', 'Se actualizo la planificacion de B1.', 'SUCCESS', 4, 'TEACHER', 'SENT', NOW() - INTERVAL '5 days', NOW() - INTERVAL '4 days', NOW() - INTERVAL '5 days', NOW() - INTERVAL '4 days'),
+    (4, 'Alerta Operativa', 'Se detecto incidencia menor en aula 102.', 'WARNING', 1, 'ADMIN', 'FAILED', NOW() - INTERVAL '2 days', NOW() - INTERVAL '1 days', NOW() - INTERVAL '2 days', NOW() - INTERVAL '1 days');
+
+-- ============================================================================
+-- Ajuste de secuencias BIGINT para evitar colisiones futuras
+-- ============================================================================
+DO $$
+DECLARE
+    t TEXT;
+    seq_name TEXT;
+BEGIN
+    FOREACH t IN ARRAY ARRAY[
+        'users','students','courses','course_schedules','enrollments','course_sessions',
+        'session_exceptions','course_attendance','course_materials','course_certificates',
+        'teaching_staff','non_teaching_staff','staff_attendance','payments','notifications'
+    ]
+    LOOP
+        SELECT pg_get_serial_sequence(t, 'id') INTO seq_name;
+        IF seq_name IS NOT NULL THEN
+            EXECUTE format(
+                'SELECT setval(%L, (SELECT COALESCE(MAX(id), 1) FROM %I), true);',
+                seq_name, t
+            );
+        END IF;
+    END LOOP;
+END $$;
 
 COMMIT;
 
 -- ============================================================================
--- VERIFICACIÓN DE DATOS INSERTADOS
+-- Verificacion rapida
 -- ============================================================================
-
-SELECT 'Datos insertados exitosamente:' as mensaje;
-SELECT '';
-SELECT 'users' as tabla, COUNT(*) as registros FROM users
+SELECT 'users' AS table_name, COUNT(*) AS rows FROM users
 UNION ALL SELECT 'students', COUNT(*) FROM students
 UNION ALL SELECT 'courses', COUNT(*) FROM courses
+UNION ALL SELECT 'course_schedules', COUNT(*) FROM course_schedules
 UNION ALL SELECT 'enrollments', COUNT(*) FROM enrollments
 UNION ALL SELECT 'course_sessions', COUNT(*) FROM course_sessions
+UNION ALL SELECT 'session_exceptions', COUNT(*) FROM session_exceptions
+UNION ALL SELECT 'course_attendance', COUNT(*) FROM course_attendance
 UNION ALL SELECT 'course_materials', COUNT(*) FROM course_materials
+UNION ALL SELECT 'course_certificates', COUNT(*) FROM course_certificates
 UNION ALL SELECT 'teaching_staff', COUNT(*) FROM teaching_staff
 UNION ALL SELECT 'non_teaching_staff', COUNT(*) FROM non_teaching_staff
 UNION ALL SELECT 'staff_attendance', COUNT(*) FROM staff_attendance
 UNION ALL SELECT 'exams', COUNT(*) FROM exams
 UNION ALL SELECT 'exam_submissions', COUNT(*) FROM exam_submissions
 UNION ALL SELECT 'exam_grade_history', COUNT(*) FROM exam_grade_history
-UNION ALL SELECT 'course_certificates', COUNT(*) FROM course_certificates
-ORDER BY tabla;
-
--- ============================================================================
--- INFORMACIÓN DE ACCESO
--- ============================================================================
-
-SELECT '';
-SELECT '============================================================================' as info;
-SELECT 'USUARIOS DE PRUEBA - Contraseña para todos: password123' as info;
-SELECT '============================================================================' as info;
-SELECT '';
-SELECT 'ADMIN:' as tipo, username, email, role FROM users WHERE role = 'ADMIN'
-UNION ALL SELECT 'TEACHER:', username, email, role FROM users WHERE role = 'TEACHER'
-UNION ALL SELECT 'GUARDIAN:', username, email, role FROM users WHERE role = 'GUARDIAN'
-ORDER BY tipo, username;
-
--- ============================================================================
--- FIN DEL SCRIPT
--- ============================================================================
-
+UNION ALL SELECT 'payments', COUNT(*) FROM payments
+UNION ALL SELECT 'notifications', COUNT(*) FROM notifications
+ORDER BY table_name;
