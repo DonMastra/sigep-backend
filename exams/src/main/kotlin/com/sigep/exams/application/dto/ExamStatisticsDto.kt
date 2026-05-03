@@ -19,6 +19,7 @@ data class ExamStatisticsDto(
     val examId: UUID,
     val examTitle: String,
     val assignedTeachers: List<Long>? = null,
+    val teacherNames: List<String>? = null,
     val totalStudents: Int,
     val submittedCount: Int,
     val gradedCount: Int,

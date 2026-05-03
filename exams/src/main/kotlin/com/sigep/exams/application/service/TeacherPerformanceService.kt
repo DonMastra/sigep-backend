@@ -1,5 +1,6 @@
 package com.sigep.exams.application.service
 
+import com.sigep.common.application.service.TeacherInfoProvider
 import com.sigep.exams.application.dto.*
 import com.sigep.exams.domain.model.ExamStatus
 import com.sigep.exams.domain.model.SubmissionStatus
@@ -24,8 +25,8 @@ import java.math.RoundingMode
 class TeacherPerformanceService(
     private val examRepository: ExamRepository,
     private val submissionRepository: ExamSubmissionRepository,
-    private val examStatisticsService: ExamStatisticsService,
-    private val examService: ExamService
+    private val examService: ExamService,
+    private val teacherInfoProvider: TeacherInfoProvider
 ) {
 
     /**
@@ -43,9 +44,8 @@ class TeacherPerformanceService(
         val examsByStatus = allExams.groupBy { it.status }
             .mapValues { it.value.size }
 
-        val totalExamsCreated = allExams.size
-        val totalExamsPublished = examsByStatus[ExamStatus.PUBLISHED] ?: 0
-        val totalExamsClosed = examsByStatus[ExamStatus.CLOSED] ?: 0
+        val totalExamCount = allExams.size
+        val publishedExamCount = examsByStatus[ExamStatus.PUBLISHED] ?: 0
 
         // Obtener todas las calificaciones de los exámenes del docente
         val examIds = allExams.map { it.id }
@@ -74,8 +74,8 @@ class TeacherPerformanceService(
         } else null
 
         // Agrupar por curso
-        val examsByCourse: Map<Long, CourseExamSummaryDto> = allExams.groupBy { it.courseId }
-            .mapValues { (courseId, exams) ->
+        val courseExams: List<CourseExamSummaryDto> = allExams.groupBy { it.courseId }
+            .map { (courseId, exams) ->
                 val courseExamIds = exams.map { it.id }
                 val courseSubmissions = allSubmissions.filter { it.examId in courseExamIds }
                 val courseGradedSubmissions = courseSubmissions.filter { it.status == SubmissionStatus.GRADED }
@@ -101,6 +101,7 @@ class TeacherPerformanceService(
                     totalStudents = courseSubmissions.size
                 )
             }
+            .sortedBy { it.courseId }
 
         // Exámenes recientes (últimos 10)
         val recentExams = allExams
@@ -108,6 +109,7 @@ class TeacherPerformanceService(
             .take(10)
             .map { exam ->
                 val examSubmissions = allSubmissions.filter { it.examId == exam.id }
+                val assignedTeachers = examService.parseAssignedTeachers(exam.assignedTeachers)
                 ExamSummaryDto(
                     id = exam.id,
                     courseId = exam.courseId,
@@ -116,7 +118,8 @@ class TeacherPerformanceService(
                     scheduledAt = exam.scheduledAt,
                     totalPoints = exam.totalPoints,
                     weight = exam.weight,
-                    assignedTeachers = examService.parseAssignedTeachers(exam.assignedTeachers),
+                    assignedTeachers = assignedTeachers,
+                    teacherNames = examService.resolveTeacherNames(assignedTeachers),
                     totalSubmissions = examSubmissions.size,
                     gradedSubmissions = examSubmissions.count { it.status == SubmissionStatus.GRADED },
                     pendingSubmissions = examSubmissions.count { it.status == SubmissionStatus.PENDING }
@@ -125,14 +128,13 @@ class TeacherPerformanceService(
 
         return TeacherPerformanceDto(
             teacherId = teacherId,
-            totalExamsCreated = totalExamsCreated,
-            totalExamsPublished = totalExamsPublished,
-            totalExamsClosed = totalExamsClosed,
+            fullName = teacherInfoProvider.getTeacherNameById(teacherId) ?: teacherId.toString(),
+            totalExamCount = totalExamCount,
+            publishedExamCount = publishedExamCount,
             totalStudentsEvaluated = totalStudentsEvaluated,
             averageScore = averageScore,
             passRate = passRate,
-            examsByStatus = examsByStatus,
-            examsByCourse = examsByCourse,
+            courseExams = courseExams,
             recentExams = recentExams
         )
     }

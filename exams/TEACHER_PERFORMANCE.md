@@ -21,15 +21,14 @@ Proporcionar métricas objetivas y cuantificables sobre el desempeño de los doc
 Contiene las métricas completas de rendimiento de un docente:
 ```kotlin
 data class TeacherPerformanceDto(
-    val teacherId: UUID,
-    val totalExamsCreated: Int,
-    val totalExamsPublished: Int,
-    val totalExamsClosed: Int,
+    val teacherId: Long,
+    val fullName: String?,
+    val totalExamCount: Int,
+    val publishedExamCount: Int,
     val totalStudentsEvaluated: Int,
     val averageScore: BigDecimal?,
     val passRate: BigDecimal?,
-    val examsByStatus: Map<ExamStatus, Int>,
-    val examsByCourse: Map<UUID, CourseExamSummaryDto>,
+    val courseExams: List<CourseExamSummaryDto>,
     val recentExams: List<ExamSummaryDto>
 )
 ```
@@ -38,7 +37,7 @@ data class TeacherPerformanceDto(
 Resume las estadísticas de exámenes por curso:
 ```kotlin
 data class CourseExamSummaryDto(
-    val courseId: UUID,
+    val courseId: Long,
     val totalExams: Int,
     val averageScore: BigDecimal?,
     val passRate: BigDecimal?,
@@ -62,16 +61,16 @@ Servicios especializados:
 Nuevas consultas agregadas:
 ```kotlin
 // Buscar exámenes por docente
-fun findByTeacherId(teacherId: UUID, pageable: Pageable): Page<Exam>
+fun findByTeacherId(teacherId: Long, pageable: Pageable): Page<Exam>
 
 // Buscar por docente y estados
-fun findByTeacherIdAndStatusIn(teacherId: UUID, statuses: List<ExamStatus>, pageable: Pageable): Page<Exam>
+fun findByTeacherIdAndStatusIn(teacherId: Long, statuses: List<ExamStatus>, pageable: Pageable): Page<Exam>
 
 // Contar exámenes del docente
-fun countByTeacherId(teacherId: UUID): Long
+fun countByTeacherId(teacherId: Long): Long
 
 // Buscar en rango de fechas
-fun findByTeacherIdAndScheduledBetween(teacherId: UUID, start: LocalDateTime, end: LocalDateTime): List<Exam>
+fun findByTeacherIdAndScheduledBetween(teacherId: Long, start: LocalDateTime, end: LocalDateTime): List<Exam>
 ```
 
 ### 4. Controller REST
@@ -94,8 +93,8 @@ Endpoints disponibles:
 #### `POST /api/v1/teachers/compare`
 - **Descripción**: Comparar rendimiento entre docentes
 - **Autorización**: Solo ADMIN
-- **Body**: Lista de UUIDs de docentes
-- **Respuesta**: Map<UUID, TeacherPerformanceDto>
+- **Body**: `{ teacherIds: number[] }`
+- **Respuesta**: `Map<Long, TeacherPerformanceDto>`
 
 ## 📈 Métricas Calculadas
 
@@ -162,9 +161,9 @@ export class TeacherPerformanceComponent {
 
 // teacher-comparison.component.ts
 export class TeacherComparisonComponent {
-  comparison$: Observable<Map<string, TeacherPerformanceDto>>;
+  comparison$: Observable<Map<number, TeacherPerformanceDto>>;
   
-  compareTeachers(teacherIds: string[]) {
+  compareTeachers(teacherIds: number[]) {
     this.comparison$ = this.examService.compareTeachers(teacherIds);
   }
 }
@@ -185,23 +184,23 @@ export class TeacherComparisonComponent {
 @Injectable()
 export class ExamService {
   
-  getTeacherPerformance(teacherId: string): Observable<ApiResponse<TeacherPerformanceDto>> {
+  getTeacherPerformance(teacherId: number): Observable<ApiResponse<TeacherPerformanceDto>> {
     return this.http.get<ApiResponse<TeacherPerformanceDto>>(
       `${this.apiUrl}/teachers/${teacherId}/performance`
     );
   }
   
-  getTeacherExams(teacherId: string, params?: ExamQueryParams): Observable<ApiResponse<ExamDto[]>> {
+  getTeacherExams(teacherId: number, params?: ExamQueryParams): Observable<ApiResponse<ExamDto[]>> {
     return this.http.get<ApiResponse<ExamDto[]>>(
       `${this.apiUrl}/teachers/${teacherId}/exams`,
       { params }
     );
   }
   
-  compareTeachers(teacherIds: string[]): Observable<ApiResponse<Map<string, TeacherPerformanceDto>>> {
-    return this.http.post<ApiResponse<Map<string, TeacherPerformanceDto>>>(
+  compareTeachers(teacherIds: number[]): Observable<ApiResponse<Map<number, TeacherPerformanceDto>>> {
+    return this.http.post<ApiResponse<Map<number, TeacherPerformanceDto>>>(
       `${this.apiUrl}/teachers/compare`,
-      teacherIds
+      { teacherIds }
     );
   }
 }
@@ -228,27 +227,22 @@ export class ExamService {
   "status": "success",
   "message": "Estadísticas de rendimiento obtenidas exitosamente",
   "data": {
-    "teacherId": "123e4567-e89b-12d3-a456-426614174000",
-    "totalExamsCreated": 45,
-    "totalExamsPublished": 38,
-    "totalExamsClosed": 35,
+    "teacherId": 10,
+    "fullName": "Ana Gomez",
+    "totalExamCount": 45,
+    "publishedExamCount": 38,
     "totalStudentsEvaluated": 450,
     "averageScore": 78.5,
     "passRate": 85.3,
-    "examsByStatus": {
-      "DRAFT": 7,
-      "PUBLISHED": 3,
-      "CLOSED": 35
-    },
-    "examsByCourse": {
-      "course-uuid-1": {
-        "courseId": "course-uuid-1",
+    "courseExams": [
+      {
+        "courseId": 101,
         "totalExams": 15,
         "averageScore": 80.2,
         "passRate": 88.5,
         "totalStudents": 150
       }
-    },
+    ],
     "recentExams": [...]
   }
 }

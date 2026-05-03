@@ -116,3 +116,13 @@ data class UpdateTeachingStaffRequest(
     val resolvedEmergencyContactPhone: String?
         get() = emergencyContactPhone ?: emergencyContact?.split("/")?.getOrNull(1)?.trim()
 }
+
+data class ResolveTeachersRequest(
+    val ids: List<Long>
+)
+
+data class TeacherResolutionDto(
+    val id: Long,
+    val fullName: String
+)
+

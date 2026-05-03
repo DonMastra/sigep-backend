@@ -5,7 +5,9 @@ import com.sigep.common.application.dto.PageResponse
 import com.sigep.security.application.annotation.RequireAdmin
 import com.sigep.security.application.annotation.RequireAdminOrTeacher
 import com.sigep.staff.application.dto.CreateTeachingStaffRequest
+import com.sigep.staff.application.dto.ResolveTeachersRequest
 import com.sigep.staff.application.dto.TeachingStaffDto
+import com.sigep.staff.application.dto.TeacherResolutionDto
 import com.sigep.staff.application.dto.UpdateTeachingStaffRequest
 import com.sigep.staff.application.service.TeachingStaffService
 import io.swagger.v3.oas.annotations.Operation
@@ -55,6 +57,16 @@ class TeachingStaffController(
     ): ResponseEntity<ApiResponse<PageResponse<TeachingStaffDto>>> {
         val staff = teachingStaffService.searchTeachingStaff(query, page, limit)
         return ResponseEntity.ok(ApiResponse.success(staff))
+    }
+
+    @PostMapping("/resolve")
+    @RequireAdminOrTeacher
+    @Operation(summary = "Resolve teacher IDs", description = "Resolve multiple teacher IDs to full names")
+    fun resolveTeacherIds(
+        @RequestBody request: ResolveTeachersRequest
+    ): ResponseEntity<ApiResponse<List<TeacherResolutionDto>>> {
+        val resolved = teachingStaffService.resolveTeacherNames(request.ids)
+        return ResponseEntity.ok(ApiResponse.success(resolved))
     }
 
     @PostMapping

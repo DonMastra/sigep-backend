@@ -64,10 +64,13 @@ class ExamStatisticsService(
             distribution[range] = distribution.getOrDefault(range, 0) + 1
         }
 
+        val assignedTeachers = examService.parseAssignedTeachers(exam.assignedTeachers)
+
         return ExamStatisticsDto(
             examId = exam.id,
             examTitle = exam.title,
-            assignedTeachers = examService.parseAssignedTeachers(exam.assignedTeachers),
+            assignedTeachers = assignedTeachers,
+            teacherNames = examService.resolveTeacherNames(assignedTeachers),
             totalStudents = submittedCount,
             submittedCount = submittedCount,
             gradedCount = gradedCount,

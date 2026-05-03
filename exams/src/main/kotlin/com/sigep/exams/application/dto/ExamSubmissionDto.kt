@@ -15,6 +15,7 @@ data class ExamSubmissionDto(
     val submittedAt: LocalDateTime?,
     val score: BigDecimal?,
     val gradedBy: Long?,
+    val gradedByName: String? = null,
     val gradedAt: LocalDateTime?,
     val feedback: String?,
     val scannedFilePath: String?,
@@ -47,6 +48,7 @@ data class SubmissionWithStudentDto(
     val examId: UUID,
     val examTitle: String,
     val examAssignedTeachers: List<Long>? = null,
+    val examTeacherNames: List<String>? = null,
     val studentId: Long,
     val studentName: String,
     val studentEmail: String,
@@ -54,6 +56,7 @@ data class SubmissionWithStudentDto(
     val status: SubmissionStatus,
     val score: BigDecimal?,
     val gradedBy: Long?,
+    val gradedByName: String? = null,
     val gradedAt: LocalDateTime?,
     val feedback: String?,
     val scannedFilePath: String?
@@ -72,9 +75,11 @@ data class ExamResultSummary(
     val scheduledAt: LocalDateTime?,
     val totalPoints: BigDecimal,
     val assignedTeachers: List<Long>? = null,
+    val teacherNames: List<String>? = null,
     val score: BigDecimal?,
     val status: SubmissionStatus,
     val gradedBy: Long?,
+    val gradedByName: String? = null,
     val gradedAt: LocalDateTime?,
     val feedback: String?
 )

@@ -1151,6 +1151,7 @@ interface ExamDto {
   visibilityStart: string | null;
   visibilityEnd: string | null;
   assignedTeachers: number[] | null;
+  teacherNames: string[] | null;
   notes: string | null;
   roomInfo: string | null;
   version: number;
@@ -1170,6 +1171,7 @@ interface ExamSubmissionDto {
   submittedAt: string | null;
   score: number | null;
   gradedBy: number | null;
+  gradedByName: string | null;
   gradedAt: string | null;
   feedback: string | null;
   scannedFilePath: string | null;
@@ -1353,6 +1355,58 @@ interface UpdateGradeRequest {
 - `RequireAdminOrTeacher`: creación/edición/cierre/calificación.
 - `RequireAdmin`: cancelar/eliminar en operaciones sensibles.
 - Endpoints de consulta visibles (`/visible`, algunos listados) siguen autenticación JWT general del módulo.
+
+---
+
+### Teacher Performance (`/api/v1/teachers`)
+
+```typescript
+interface TeacherPerformanceDto {
+  teacherId: number;
+  fullName: string | null;
+  totalExamCount: number;
+  publishedExamCount: number;
+  totalStudentsEvaluated: number;
+  averageScore: number | null;
+  passRate: number | null;
+  courseExams: CourseExamSummaryDto[];
+  recentExams: ExamSummaryDto[];
+}
+
+interface CourseExamSummaryDto {
+  courseId: number;
+  totalExams: number;
+  averageScore: number | null;
+  passRate: number | null;
+  totalStudents: number;
+}
+```
+
+#### 1. Teacher Performance by ID
+**Endpoint:** `GET /api/v1/teachers/{teacherId}/performance`
+
+#### 2. Teacher Exams
+**Endpoint:** `GET /api/v1/teachers/{teacherId}/exams`
+
+**Query Params:**
+```typescript
+{
+  statuses?: ExamStatus[];
+  page?: number;
+  size?: number;
+  sort?: string;
+  order?: 'ASC' | 'DESC';
+}
+```
+
+#### 3. Compare Teachers
+**Endpoint:** `POST /api/v1/teachers/compare`
+
+```typescript
+interface CompareTeachersRequest {
+  teacherIds: number[];
+}
+```
 
 ---
 
@@ -1575,6 +1629,34 @@ interface UpdateTeachingStaffRequest {
 {
   success: true;
   message: "Teaching staff deleted successfully";
+}
+```
+
+---
+
+#### 6.1 Resolver IDs de Docentes (Batch)
+
+**Endpoint:** `POST /api/v1/staff/teaching/resolve`
+
+**Roles:** `ADMIN`, `TEACHER`
+
+**Request Body:**
+```typescript
+interface ResolveTeachersRequest {
+  ids: number[];
+}
+```
+
+**Response (200 OK):**
+```typescript
+{
+  success: true;
+  data: TeacherResolutionDto[];
+}
+
+interface TeacherResolutionDto {
+  id: number;
+  fullName: string;
 }
 ```
 

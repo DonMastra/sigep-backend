@@ -17,6 +17,10 @@ interface TeachingStaffRepository : JpaRepository<TeachingStaff, Long> {
 
     fun findByDocumentNumber(documentNumber: String): TeachingStaff?
 
+    fun findByIdAndIsActiveTrue(id: Long): TeachingStaff?
+
+    fun findAllByIdInAndIsActiveTrue(ids: Collection<Long>): List<TeachingStaff>
+
     @Query("""
         SELECT t FROM TeachingStaff t 
         WHERE t.isActive = true 
