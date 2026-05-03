@@ -1,5 +1,6 @@
 package com.sigep.exams.application.service
 
+import com.fasterxml.jackson.core.type.TypeReference
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.sigep.common.application.dto.PageResponse
 import com.sigep.common.domain.exception.ResourceNotFoundException
@@ -27,6 +28,8 @@ class ExamService(
     private val objectMapper: ObjectMapper
 ) {
 
+    private val longListType = object : TypeReference<List<Long>>() {}
+
     @Cacheable(value = ["exams"], key = "#id")
     fun getExamById(id: UUID): ExamDto {
         val exam = examRepository.findById(id)
@@ -35,7 +38,7 @@ class ExamService(
     }
 
     fun getExamsByCourse(
-        courseId: UUID,
+        courseId: Long,
         status: ExamStatus?,
         page: Int = 0,
         size: Int = 20,
@@ -63,8 +66,8 @@ class ExamService(
     }
 
     fun getExamsByTeacher(
-        teacherId: UUID,
-        courseIds: List<UUID>,
+        teacherId: Long,
+        courseIds: List<Long>,
         statuses: List<ExamStatus> = listOf(ExamStatus.DRAFT, ExamStatus.PUBLISHED),
         page: Int = 0,
         size: Int = 20
@@ -104,7 +107,7 @@ class ExamService(
 
     @Transactional
     @CacheEvict(value = ["exams"], allEntries = true)
-    fun createExam(request: CreateExamRequest, createdBy: UUID): ExamDto {
+    fun createExam(request: CreateExamRequest, createdBy: Long): ExamDto {
         // Validar que no exista otro examen con el mismo título en el curso
         val exists = examRepository.existsByCourseIdAndTitleAndIdNot(
             request.courseId,
@@ -139,7 +142,7 @@ class ExamService(
 
     @Transactional
     @CacheEvict(value = ["exams"], key = "#id")
-    fun updateExam(id: UUID, request: UpdateExamRequest, updatedBy: UUID): ExamDto {
+    fun updateExam(id: UUID, request: UpdateExamRequest, updatedBy: Long): ExamDto {
         val exam = examRepository.findById(id)
             .orElseThrow { ResourceNotFoundException("Examen no encontrado con ID: $id") }
 
@@ -172,48 +175,36 @@ class ExamService(
 
     @Transactional
     @CacheEvict(value = ["exams"], key = "#id")
-    fun publishExam(id: UUID, updatedBy: UUID): ExamDto {
+    fun publishExam(id: UUID, updatedBy: Long): ExamDto {
         val exam = examRepository.findById(id)
             .orElseThrow { ResourceNotFoundException("Examen no encontrado con ID: $id") }
 
         exam.publish()
-        val updated = exam.copy(
-            updatedBy = updatedBy,
-            updatedAt = LocalDateTime.now()
-        )
-
+        val updated = exam.copy(updatedBy = updatedBy, updatedAt = LocalDateTime.now())
         val saved = examRepository.save(updated)
         return toDto(saved)
     }
 
     @Transactional
     @CacheEvict(value = ["exams"], key = "#id")
-    fun closeExam(id: UUID, updatedBy: UUID): ExamDto {
+    fun closeExam(id: UUID, updatedBy: Long): ExamDto {
         val exam = examRepository.findById(id)
             .orElseThrow { ResourceNotFoundException("Examen no encontrado con ID: $id") }
 
         exam.close()
-        val updated = exam.copy(
-            updatedBy = updatedBy,
-            updatedAt = LocalDateTime.now()
-        )
-
+        val updated = exam.copy(updatedBy = updatedBy, updatedAt = LocalDateTime.now())
         val saved = examRepository.save(updated)
         return toDto(saved)
     }
 
     @Transactional
     @CacheEvict(value = ["exams"], key = "#id")
-    fun cancelExam(id: UUID, updatedBy: UUID): ExamDto {
+    fun cancelExam(id: UUID, updatedBy: Long): ExamDto {
         val exam = examRepository.findById(id)
             .orElseThrow { ResourceNotFoundException("Examen no encontrado con ID: $id") }
 
         exam.cancel()
-        val updated = exam.copy(
-            updatedBy = updatedBy,
-            updatedAt = LocalDateTime.now()
-        )
-
+        val updated = exam.copy(updatedBy = updatedBy, updatedAt = LocalDateTime.now())
         val saved = examRepository.save(updated)
         return toDto(saved)
     }
@@ -238,7 +229,7 @@ class ExamService(
     }
 
     // Métodos auxiliares
-    private fun toDto(exam: Exam): ExamDto = ExamDto(
+    fun toDto(exam: Exam): ExamDto = ExamDto(
         id = exam.id,
         courseId = exam.courseId,
         title = exam.title,
@@ -252,7 +243,7 @@ class ExamService(
         visibilityStart = exam.visibilityStart,
         visibilityEnd = exam.visibilityEnd,
         assignedTeachers = exam.assignedTeachers?.let {
-            objectMapper.readValue(it, List::class.java) as List<UUID>
+            objectMapper.readValue(it, longListType)
         },
         notes = exam.notes,
         roomInfo = exam.roomInfo,
@@ -262,5 +253,7 @@ class ExamService(
         updatedAt = exam.updatedAt,
         updatedBy = exam.updatedBy
     )
-}
 
+    fun parseAssignedTeachers(json: String?): List<Long>? =
+        json?.let { objectMapper.readValue(it, longListType) }
+}

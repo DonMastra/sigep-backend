@@ -48,6 +48,10 @@ data class TeachingStaff(
     @Column(columnDefinition = "TEXT")
     val specialization: String? = null,
 
+    /** Titulaciones y certificaciones del docente */
+    @Column(columnDefinition = "TEXT")
+    val qualifications: String? = null,
+
     @Column(columnDefinition = "TEXT")
     val observations: String? = null,
 

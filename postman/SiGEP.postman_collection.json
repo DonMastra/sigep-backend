@@ -1,0 +1,589 @@
+{
+  "info": {
+    "name": "SiGEP Backend API",
+    "description": "Coleccion Postman para endpoints actuales de SiGEP (modular monolith).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "c0f8f9ad-7f8f-4af8-9e89-cd2f9d7a1122"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "token", "value": "" },
+    { "key": "refreshToken", "value": "" },
+    { "key": "studentId", "value": "1" },
+    { "key": "guardianId", "value": "6" },
+    { "key": "courseId", "value": "1" },
+    { "key": "enrollmentId", "value": "1" },
+    { "key": "sessionId", "value": "1" },
+    { "key": "materialId", "value": "1" },
+    { "key": "certificateId", "value": "1" },
+    { "key": "teachingStaffId", "value": "1" },
+    { "key": "nonTeachingStaffId", "value": "1" },
+    { "key": "staffAttendanceId", "value": "1" },
+    { "key": "examId", "value": "11111111-1111-1111-1111-111111111101" },
+    { "key": "submissionId", "value": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaa1001" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.data) {",
+                  "  pm.collectionVariables.set('token', json.data.token || '');",
+                  "  pm.collectionVariables.set('refreshToken', json.data.refreshToken || '');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/auth/login"
+          }
+        },
+        {
+          "name": "Register",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"qa.user\",\n  \"email\": \"qa.user@sigep.edu.mx\",\n  \"password\": \"password123\",\n  \"firstName\": \"QA\",\n  \"lastName\": \"User\",\n  \"role\": \"TEACHER\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/auth/register"
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/auth/refresh-token"
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/auth/logout"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Students",
+      "item": [
+        {
+          "name": "Get All Students",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/students?page=0&limit=10&sort=id&order=ASC"
+          }
+        },
+        {
+          "name": "Create Student",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.data && json.data.id) pm.collectionVariables.set('studentId', String(json.data.id));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Nuevo\",\n  \"lastName\": \"Estudiante\",\n  \"email\": \"nuevo.estudiante@sigep.edu.mx\",\n  \"documentNumber\": \"STU-POSTMAN-001\",\n  \"dateOfBirth\": \"2011-06-15\",\n  \"address\": \"Calle 123\",\n  \"phoneNumber\": \"+54-11-7000-9001\",\n  \"emergencyContact\": \"Ana Lopez +54-11-7000-9002\",\n  \"guardianId\": 6,\n  \"medicalNotes\": \"Sin observaciones\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/students"
+          }
+        },
+        {
+          "name": "Get Student By ID",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/students/{{studentId}}"
+          }
+        },
+        {
+          "name": "Search Students",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/students/search?query=lara&page=0&limit=10"
+          }
+        },
+        {
+          "name": "Get Students By Guardian",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/students/guardian/{{guardianId}}?page=0&limit=10"
+          }
+        },
+        {
+          "name": "Update Student",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"address\": \"Direccion actualizada via Postman\",\n  \"phoneNumber\": \"+54-11-7999-0001\",\n  \"active\": true\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/students/{{studentId}}"
+          }
+        },
+        {
+          "name": "Get Student Payment Status",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/students/{{studentId}}/payment-status"
+          }
+        },
+        {
+          "name": "Delete Student",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/api/v1/students/{{studentId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Courses",
+      "item": [
+        {
+          "name": "Get All Courses",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/courses?page=0&limit=10&sort=id&order=ASC"
+          }
+        },
+        {
+          "name": "Create Course",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.data && json.data.id) pm.collectionVariables.set('courseId', String(json.data.id));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"ENG-PM-001\",\n  \"name\": \"Postman Course\",\n  \"description\": \"Curso creado desde Postman para pruebas integrales.\",\n  \"level\": \"BEGINNER\",\n  \"duration\": 80,\n  \"maxStudents\": 12,\n  \"minStudents\": 4,\n  \"teacherId\": 3,\n  \"price\": 25000.00,\n  \"startDate\": \"2026-06-01\",\n  \"endDate\": \"2026-10-01\",\n  \"isPublished\": false,\n  \"schedules\": [\n    {\n      \"dayOfWeek\": \"MONDAY\",\n      \"startTime\": \"09:00\",\n      \"endTime\": \"11:00\"\n    }\n  ]\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/courses"
+          }
+        },
+        {
+          "name": "Get Course By ID",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/courses/{{courseId}}"
+          }
+        },
+        {
+          "name": "Search Courses",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/courses/search?query=English&page=0&limit=10"
+          }
+        },
+        {
+          "name": "Get Courses By Teacher",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/courses/teacher/3?page=0&limit=10"
+          }
+        },
+        {
+          "name": "Filter Courses",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"level\": \"BEGINNER\",\n  \"status\": \"ACTIVE\",\n  \"isPublished\": true\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/courses/filter?page=0&limit=10"
+          }
+        },
+        {
+          "name": "Enroll Student in Course",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"studentId\": 1,\n  \"notes\": \"Inscripcion desde Postman\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/courses/{{courseId}}/enroll"
+          }
+        },
+        {
+          "name": "Publish Course",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/v1/courses/{{courseId}}/publish"
+          }
+        },
+        {
+          "name": "Unpublish Course",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/v1/courses/{{courseId}}/unpublish"
+          }
+        },
+        {
+          "name": "Activate Course",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/v1/courses/{{courseId}}/activate"
+          }
+        },
+        {
+          "name": "Deactivate Course",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/v1/courses/{{courseId}}/deactivate"
+          }
+        },
+        {
+          "name": "Get Published Courses (Public)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/courses/published?page=0&limit=10"
+          }
+        },
+        {
+          "name": "Get Course Statistics",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/courses/statistics"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Enrollments",
+      "item": [
+        {
+          "name": "Get Enrollment By ID",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/enrollments/{{enrollmentId}}"
+          }
+        },
+        {
+          "name": "Get Student Enrollments",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/enrollments/student/{{studentId}}?page=0&limit=10"
+          }
+        },
+        {
+          "name": "Get Student Enrollment History",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/enrollments/student/{{studentId}}/history"
+          }
+        },
+        {
+          "name": "Get Course Enrollments",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/enrollments/course/{{courseId}}?page=0&limit=10"
+          }
+        },
+        {
+          "name": "Update Enrollment",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"ACTIVE\",\n  \"notes\": \"Actualizado desde Postman\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/enrollments/{{enrollmentId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Sessions / Attendance / Materials / Certificates",
+      "item": [
+        {
+          "name": "Get Session By ID",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/sessions/{{sessionId}}" }
+        },
+        {
+          "name": "Create Session",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"courseId\": {{courseId}},\n  \"sessionDate\": \"2026-06-10\",\n  \"startTime\": \"09:00:00\",\n  \"endTime\": \"11:00:00\",\n  \"classroomId\": 100,\n  \"classroomName\": \"Aula PM\",\n  \"topic\": \"Topic from Postman\",\n  \"notes\": \"Manual session\",\n  \"isRecurring\": false\n}" },
+            "url": "{{baseUrl}}/api/v1/sessions"
+          }
+        },
+        {
+          "name": "Record Attendance",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"enrollmentId\": 1,\n  \"attendanceDate\": \"2026-06-10\",\n  \"status\": \"PRESENT\",\n  \"notes\": \"Recorded from Postman\"\n}" },
+            "url": "{{baseUrl}}/api/v1/attendance"
+          }
+        },
+        {
+          "name": "Create Material",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"courseId\": {{courseId}},\n  \"title\": \"Material Postman\",\n  \"description\": \"Material creado para prueba\",\n  \"type\": \"PDF\",\n  \"fileUrl\": \"/materials/postman/demo.pdf\",\n  \"fileName\": \"demo.pdf\",\n  \"fileSize\": 1024,\n  \"mimeType\": \"application/pdf\",\n  \"isVisible\": true,\n  \"orderIndex\": 99\n}" },
+            "url": "{{baseUrl}}/api/v1/materials"
+          }
+        },
+        {
+          "name": "Issue Certificate",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"enrollmentId\": 1,\n  \"issueDate\": \"2026-06-15\",\n  \"expiryDate\": \"2029-06-15\",\n  \"finalGrade\": 95.5,\n  \"honors\": \"DISTINCTION\",\n  \"notes\": \"Issued from Postman\"\n}" },
+            "url": "{{baseUrl}}/api/v1/certificates"
+          }
+        },
+        {
+          "name": "Verify Certificate (Public)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/certificates/verify/CERT-2026-A1-0001"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Exams",
+      "item": [
+        {
+          "name": "Create Exam",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.id) pm.collectionVariables.set('examId', String(json.id));",
+                  "if (json && json.data && json.data.id) pm.collectionVariables.set('examId', String(json.data.id));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"courseId\": {{courseId}},\n  \"title\": \"Examen Postman\",\n  \"description\": \"Prueba de endpoint create exam\",\n  \"totalPoints\": 100.00,\n  \"weight\": 0.2,\n  \"timeLimitMinutes\": 60,\n  \"scheduledAt\": \"2026-06-20T10:00:00\",\n  \"visibilityStart\": \"2026-06-18T00:00:00\",\n  \"visibilityEnd\": \"2026-06-21T23:59:59\",\n  \"assignedTeachers\": [3,4],\n  \"notes\": \"Creado por Postman\",\n  \"roomInfo\": \"Aula 101\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/exams"
+          }
+        },
+        {
+          "name": "Get Exam By ID",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/exams/{{examId}}" }
+        },
+        {
+          "name": "Get Exams By Course",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/exams/course/{{courseId}}?page=0&size=20&sort=scheduledAt&order=DESC" }
+        },
+        {
+          "name": "Get My Exams",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/exams/my-exams?courseIds=1&courseIds=2&page=0&size=20" }
+        },
+        {
+          "name": "Get Visible Exams",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/exams/visible?page=0&size=20" }
+        },
+        {
+          "name": "Update Exam",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"title\": \"Examen Postman Actualizado\",\n  \"notes\": \"Update test\"\n}" },
+            "url": "{{baseUrl}}/api/v1/exams/{{examId}}"
+          }
+        },
+        { "name": "Publish Exam", "request": { "method": "POST", "url": "{{baseUrl}}/api/v1/exams/{{examId}}/publish" } },
+        { "name": "Close Exam", "request": { "method": "POST", "url": "{{baseUrl}}/api/v1/exams/{{examId}}/close" } },
+        { "name": "Cancel Exam", "request": { "method": "POST", "url": "{{baseUrl}}/api/v1/exams/{{examId}}/cancel" } },
+        { "name": "Exam Statistics", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/exams/{{examId}}/statistics" } },
+        { "name": "Course Exam Statistics", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/exams/course/{{courseId}}/statistics" } }
+      ]
+    },
+    {
+      "name": "Exam Submissions",
+      "item": [
+        {
+          "name": "Create Submission",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.id) pm.collectionVariables.set('submissionId', String(json.id));",
+                  "if (json && json.data && json.data.id) pm.collectionVariables.set('submissionId', String(json.data.id));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"examId\": \"{{examId}}\",\n  \"studentId\": 1,\n  \"notes\": \"Submission from Postman\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/exam-submissions"
+          }
+        },
+        { "name": "Get Submission By ID", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/exam-submissions/{{submissionId}}" } },
+        { "name": "Get Submissions By Exam", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/exam-submissions/exam/{{examId}}?page=0&size=50&sort=createdAt&order=ASC" } },
+        { "name": "Get Submissions By Student", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/exam-submissions/student/{{studentId}}?page=0&size=50" } },
+        { "name": "Get Student Exam History", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/exam-submissions/student/{{studentId}}/course/{{courseId}}/history" } },
+        {
+          "name": "Grade Submission",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"score\": 89.5,\n  \"feedback\": \"Buen trabajo\",\n  \"notes\": \"Grade from Postman\"\n}" },
+            "url": "{{baseUrl}}/api/v1/exam-submissions/{{submissionId}}/grade"
+          }
+        },
+        {
+          "name": "Update Grade",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"score\": 91.0,\n  \"feedback\": \"Ajuste de nota\",\n  \"reason\": \"Reevaluacion\"\n}" },
+            "url": "{{baseUrl}}/api/v1/exam-submissions/{{submissionId}}/grade"
+          }
+        },
+        { "name": "Attach Scanned File", "request": { "method": "POST", "url": "{{baseUrl}}/api/v1/exam-submissions/{{submissionId}}/attach-file?filePath=/scans/postman.pdf" } },
+        { "name": "Cancel Submission", "request": { "method": "POST", "url": "{{baseUrl}}/api/v1/exam-submissions/{{submissionId}}/cancel" } },
+        { "name": "Get Grade History", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/exam-submissions/{{submissionId}}/grade-history" } }
+      ]
+    },
+    {
+      "name": "Staff",
+      "item": [
+        { "name": "Get Teaching Staff", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/staff/teaching?page=0&limit=10&sort=lastName&order=ASC" } },
+        {
+          "name": "Create Teaching Staff",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"firstName\": \"Docente\",\n  \"lastName\": \"Postman\",\n  \"email\": \"docente.postman@sigep.edu.mx\",\n  \"phoneNumber\": \"+54-11-7333-0001\",\n  \"documentNumber\": \"DOC-PM-001\",\n  \"birthDate\": \"1990-01-01\",\n  \"address\": \"Av. Demo 123\",\n  \"hireDate\": \"2026-01-01\",\n  \"monthlySalary\": 800000,\n  \"specialization\": \"General English\",\n  \"emergencyContactName\": \"Contacto\",\n  \"emergencyContactPhone\": \"+54-11-7333-0002\",\n  \"qualifications\": \"CELTA\",\n  \"notes\": \"Creado para QA\"\n}" },
+            "url": "{{baseUrl}}/api/v1/staff/teaching"
+          }
+        },
+        { "name": "Get Non-Teaching Staff", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/staff/non-teaching?page=0&limit=10&sort=lastName&order=ASC" } },
+        {
+          "name": "Create Non-Teaching Staff",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"firstName\": \"NoDoc\",\n  \"lastName\": \"Postman\",\n  \"email\": \"nodoc.postman@sigep.edu.mx\",\n  \"phoneNumber\": \"+54-11-7444-0001\",\n  \"documentNumber\": \"NODOC-PM-001\",\n  \"birthDate\": \"1992-04-10\",\n  \"address\": \"Calle QA 321\",\n  \"hireDate\": \"2026-01-15\",\n  \"hourlyRate\": 7000,\n  \"role\": \"IT_SUPPORT\",\n  \"companyName\": \"TechOps\",\n  \"assignedTasks\": \"Soporte\",\n  \"emergencyContactName\": \"Contacto ND\",\n  \"emergencyContactPhone\": \"+54-11-7444-0002\"\n}" },
+            "url": "{{baseUrl}}/api/v1/staff/non-teaching"
+          }
+        },
+        {
+          "name": "Create Staff Attendance",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"teachingStaffId\": 1,\n  \"attendanceDate\": \"2026-06-01\",\n  \"checkInTime\": \"08:55:00\",\n  \"checkOutTime\": \"15:00:00\",\n  \"status\": \"PRESENT\",\n  \"notes\": \"Registro desde Postman\",\n  \"hoursWorked\": 6.08\n}" },
+            "url": "{{baseUrl}}/api/v1/staff/attendance"
+          }
+        },
+        {
+          "name": "Get Teaching Staff Attendance",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/staff/attendance/teaching/{{teachingStaffId}}?startDate=2026-05-01&endDate=2026-06-30&page=0&limit=10"
+          }
+        },
+        {
+          "name": "Get Non-Teaching Staff Attendance",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/staff/attendance/non-teaching/{{nonTeachingStaffId}}?startDate=2026-05-01&endDate=2026-06-30&page=0&limit=10"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Teacher Performance & Admin",
+      "item": [
+        { "name": "Get Teacher Performance", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/teachers/{{teachingStaffId}}/performance" } },
+        { "name": "Get Teacher Exams", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/teachers/{{teachingStaffId}}/exams?page=0&size=20&sort=scheduledAt&order=DESC" } },
+        {
+          "name": "Compare Teachers Performance",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "[1,2,3]" },
+            "url": "{{baseUrl}}/api/v1/teachers/compare"
+          }
+        },
+        { "name": "Clear Cache", "request": { "method": "DELETE", "url": "{{baseUrl}}/api/v1/admin/cache/clear" } }
+      ]
+    }
+  ]
+}
+

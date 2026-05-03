@@ -10,9 +10,9 @@ import com.sigep.security.application.annotation.RequireAdminOrTeacher
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
+import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
-import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
 import java.util.UUID
 
@@ -36,7 +36,7 @@ class ExamController(
     @GetMapping("/course/{courseId}")
     @Operation(summary = "Listar exámenes de un curso")
     fun getExamsByCourse(
-        @PathVariable courseId: UUID,
+        @PathVariable courseId: Long,
         @RequestParam(required = false) status: ExamStatus?,
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(defaultValue = "20") size: Int,
@@ -50,12 +50,12 @@ class ExamController(
     @Operation(summary = "Obtener exámenes del docente autenticado")
     @RequireAdminOrTeacher
     fun getMyExams(
-        @RequestParam courseIds: List<UUID>,
+        @RequestParam courseIds: List<Long>,
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(defaultValue = "20") size: Int,
-        authentication: Authentication
+        httpRequest: HttpServletRequest
     ): PageResponse<ExamDto> {
-        val teacherId = UUID.fromString(authentication.name)
+        val teacherId = httpRequest.getAttribute("userId") as Long
         return examService.getExamsByTeacher(teacherId, courseIds, page = page, size = size)
     }
 
@@ -74,9 +74,9 @@ class ExamController(
     @Operation(summary = "Crear nuevo examen")
     fun createExam(
         @Valid @RequestBody request: CreateExamRequest,
-        authentication: Authentication
+        httpRequest: HttpServletRequest
     ): ExamDto {
-        val createdBy = UUID.fromString(authentication.name)
+        val createdBy = httpRequest.getAttribute("userId") as Long
         return examService.createExam(request, createdBy)
     }
 
@@ -86,9 +86,9 @@ class ExamController(
     fun updateExam(
         @PathVariable id: UUID,
         @Valid @RequestBody request: UpdateExamRequest,
-        authentication: Authentication
+        httpRequest: HttpServletRequest
     ): ExamDto {
-        val updatedBy = UUID.fromString(authentication.name)
+        val updatedBy = httpRequest.getAttribute("userId") as Long
         return examService.updateExam(id, request, updatedBy)
     }
 
@@ -97,9 +97,9 @@ class ExamController(
     @Operation(summary = "Publicar examen (hacerlo visible)")
     fun publishExam(
         @PathVariable id: UUID,
-        authentication: Authentication
+        httpRequest: HttpServletRequest
     ): ExamDto {
-        val updatedBy = UUID.fromString(authentication.name)
+        val updatedBy = httpRequest.getAttribute("userId") as Long
         return examService.publishExam(id, updatedBy)
     }
 
@@ -108,9 +108,9 @@ class ExamController(
     @Operation(summary = "Cerrar examen (finalizar calificaciones)")
     fun closeExam(
         @PathVariable id: UUID,
-        authentication: Authentication
+        httpRequest: HttpServletRequest
     ): ExamDto {
-        val updatedBy = UUID.fromString(authentication.name)
+        val updatedBy = httpRequest.getAttribute("userId") as Long
         return examService.closeExam(id, updatedBy)
     }
 
@@ -119,9 +119,9 @@ class ExamController(
     @Operation(summary = "Cancelar examen")
     fun cancelExam(
         @PathVariable id: UUID,
-        authentication: Authentication
+        httpRequest: HttpServletRequest
     ): ExamDto {
-        val updatedBy = UUID.fromString(authentication.name)
+        val updatedBy = httpRequest.getAttribute("userId") as Long
         return examService.cancelExam(id, updatedBy)
     }
 
@@ -148,7 +148,7 @@ class ExamController(
     @RequireAdminOrTeacher
     @Operation(summary = "Obtener estadísticas de todos los exámenes del curso")
     fun getCourseStatistics(
-        @PathVariable courseId: UUID
+        @PathVariable courseId: Long
     ): CourseExamStatisticsDto {
         return statisticsService.getCourseExamStatistics(courseId)
     }

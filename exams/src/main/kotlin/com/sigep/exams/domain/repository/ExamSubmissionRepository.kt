@@ -16,13 +16,13 @@ interface ExamSubmissionRepository : JpaRepository<ExamSubmission, UUID> {
 
     fun findByExamId(examId: UUID, pageable: Pageable): Page<ExamSubmission>
 
-    fun findByStudentId(studentId: UUID, pageable: Pageable): Page<ExamSubmission>
+    fun findByStudentId(studentId: Long, pageable: Pageable): Page<ExamSubmission>
 
-    fun findByExamIdAndStudentId(examId: UUID, studentId: UUID): List<ExamSubmission>
+    fun findByExamIdAndStudentId(examId: UUID, studentId: Long): List<ExamSubmission>
 
     fun findByExamIdAndStudentIdAndAttemptNumber(
         examId: UUID,
-        studentId: UUID,
+        studentId: Long,
         attemptNumber: Int
     ): Optional<ExamSubmission>
 
@@ -44,7 +44,7 @@ interface ExamSubmissionRepository : JpaRepository<ExamSubmission, UUID> {
     """)
     fun countAttemptsByExamAndStudent(
         @Param("examId") examId: UUID,
-        @Param("studentId") studentId: UUID
+        @Param("studentId") studentId: Long
     ): Int
 
     @Query("""
@@ -56,8 +56,8 @@ interface ExamSubmissionRepository : JpaRepository<ExamSubmission, UUID> {
         ORDER BY s.createdAt DESC
     """)
     fun findStudentSubmissionsByCourse(
-        @Param("studentId") studentId: UUID,
-        @Param("courseId") courseId: UUID
+        @Param("studentId") studentId: Long,
+        @Param("courseId") courseId: Long
     ): List<ExamSubmission>
 
     @Query("""
@@ -67,4 +67,3 @@ interface ExamSubmissionRepository : JpaRepository<ExamSubmission, UUID> {
     """)
     fun findGradedSubmissionsByExams(@Param("examIds") examIds: List<UUID>): List<ExamSubmission>
 }
-

@@ -9,6 +9,7 @@ import com.sigep.security.application.annotation.RequireAdminOrTeacher
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
+import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.springframework.security.core.Authentication
@@ -39,7 +40,7 @@ class ExamSubmissionController(
         @RequestParam(required = false) status: SubmissionStatus?,
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(defaultValue = "50") size: Int,
-        @RequestParam(defaultValue = "auditMetadata.createdAt") sort: String,
+        @RequestParam(defaultValue = "createdAt") sort: String,
         @RequestParam(defaultValue = "ASC") order: String
     ): PageResponse<ExamSubmissionDto> {
         return submissionService.getSubmissionsByExam(examId, status, page, size, sort, order)
@@ -48,7 +49,7 @@ class ExamSubmissionController(
     @GetMapping("/student/{studentId}")
     @Operation(summary = "Listar submissions de un estudiante")
     fun getSubmissionsByStudent(
-        @PathVariable studentId: UUID,
+        @PathVariable studentId: Long,
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(defaultValue = "50") size: Int,
         authentication: Authentication
@@ -60,8 +61,8 @@ class ExamSubmissionController(
     @GetMapping("/student/{studentId}/course/{courseId}/history")
     @Operation(summary = "Obtener historial de exámenes de un estudiante en un curso")
     fun getStudentExamHistory(
-        @PathVariable studentId: UUID,
-        @PathVariable courseId: UUID
+        @PathVariable studentId: Long,
+        @PathVariable courseId: Long
     ): List<ExamResultSummary> {
         return submissionService.getStudentExamHistory(studentId, courseId)
     }
@@ -72,9 +73,9 @@ class ExamSubmissionController(
     @Operation(summary = "Registrar que un estudiante rindió el examen")
     fun createSubmission(
         @Valid @RequestBody request: CreateSubmissionRequest,
-        authentication: Authentication
+        httpRequest: HttpServletRequest
     ): ExamSubmissionDto {
-        val createdBy = UUID.fromString(authentication.name)
+        val createdBy = httpRequest.getAttribute("userId") as Long
         return submissionService.createSubmission(request, createdBy)
     }
 
@@ -84,9 +85,9 @@ class ExamSubmissionController(
     fun gradeSubmission(
         @PathVariable id: UUID,
         @Valid @RequestBody request: GradeSubmissionRequest,
-        authentication: Authentication
+        httpRequest: HttpServletRequest
     ): ExamSubmissionDto {
-        val gradedBy = UUID.fromString(authentication.name)
+        val gradedBy = httpRequest.getAttribute("userId") as Long
         return submissionService.gradeSubmission(id, request, gradedBy)
     }
 
@@ -96,9 +97,9 @@ class ExamSubmissionController(
     fun updateGrade(
         @PathVariable id: UUID,
         @Valid @RequestBody request: UpdateGradeRequest,
-        authentication: Authentication
+        httpRequest: HttpServletRequest
     ): ExamSubmissionDto {
-        val updatedBy = UUID.fromString(authentication.name)
+        val updatedBy = httpRequest.getAttribute("userId") as Long
         return submissionService.updateGrade(id, request, updatedBy)
     }
 
@@ -117,9 +118,9 @@ class ExamSubmissionController(
     @Operation(summary = "Cancelar un submission")
     fun cancelSubmission(
         @PathVariable id: UUID,
-        authentication: Authentication
+        httpRequest: HttpServletRequest
     ): ExamSubmissionDto {
-        val updatedBy = UUID.fromString(authentication.name)
+        val updatedBy = httpRequest.getAttribute("userId") as Long
         return submissionService.cancelSubmission(id, updatedBy)
     }
 
@@ -132,4 +133,3 @@ class ExamSubmissionController(
         return submissionService.getGradeHistory(id)
     }
 }
-

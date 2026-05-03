@@ -23,6 +23,7 @@ data class TeachingStaffDto(
     val assignedStudentsCount: Int,
     val assignedCourses: List<CourseAssignmentDto>? = null,
     val specialization: String? = null,
+    val qualifications: String? = null,
     val observations: String? = null,
     val notes: String? = null,
     val emergencyContactName: String,

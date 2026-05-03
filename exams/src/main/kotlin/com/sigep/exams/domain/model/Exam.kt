@@ -5,6 +5,10 @@ import java.math.BigDecimal
 import java.time.LocalDateTime
 import java.util.UUID
 
+// NOTE: Exam.id / ExamSubmission.id / ExamGradeHistory.id keep UUID as own PKs.
+// Cross-module references (courseId, createdBy, updatedBy) use Long to match
+// the BIGINT PKs of courses and users tables.
+
 /**
  * Aggregate Root - Exam
  * Representa un examen presencial con gestión de calificaciones
@@ -25,8 +29,8 @@ data class Exam(
     @Column(columnDefinition = "UUID")
     val id: UUID = UUID.randomUUID(),
 
-    @Column(name = "course_id", nullable = false, columnDefinition = "UUID")
-    val courseId: UUID,
+    @Column(name = "course_id", nullable = false)
+    val courseId: Long,
 
     @Column(nullable = false, length = 200)
     val title: String,
@@ -68,7 +72,7 @@ data class Exam(
 
     // Docentes asignados (JSON simple para Fase 1)
     @Column(name = "assigned_teachers", columnDefinition = "TEXT")
-    var assignedTeachers: String? = null, // JSON array de UUIDs
+    var assignedTeachers: String? = null, // JSON array de IDs (Long) de teaching_staff
 
     // Notas adicionales del examen
     @Column(columnDefinition = "TEXT")
@@ -86,14 +90,14 @@ data class Exam(
     @Column(name = "created_at", nullable = false)
     val createdAt: LocalDateTime = LocalDateTime.now(),
 
-    @Column(name = "created_by", nullable = false, columnDefinition = "UUID")
-    val createdBy: UUID,
+    @Column(name = "created_by", nullable = false)
+    val createdBy: Long,
 
     @Column(name = "updated_at")
     var updatedAt: LocalDateTime? = null,
 
-    @Column(name = "updated_by", columnDefinition = "UUID")
-    var updatedBy: UUID? = null
+    @Column(name = "updated_by")
+    var updatedBy: Long? = null
 ) {
     fun publish() {
         require(status == ExamStatus.DRAFT) { "Solo se pueden publicar exámenes en borrador" }
@@ -117,7 +121,7 @@ data class Exam(
                (visibilityEnd == null || now.isBefore(visibilityEnd))
     }
 
-    fun canBeEditedBy(isAdmin: Boolean, teacherId: UUID): Boolean {
+    fun canBeEditedBy(isAdmin: Boolean, teacherId: Long): Boolean {
         if (isAdmin) return true
         if (status == ExamStatus.CLOSED) return false
         return assignedTeachers?.contains(teacherId.toString()) == true

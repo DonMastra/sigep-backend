@@ -23,7 +23,7 @@ data class Payment(
     val concept: String,
 
     @Column(nullable = false)
-    val paymentDate: LocalDate?,
+    val paymentDate: LocalDate,
 
     @Column(nullable = false)
     val dueDate: LocalDate,
