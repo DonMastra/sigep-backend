@@ -2,6 +2,7 @@ package com.sigep.exams.presentation.controller
 
 import com.sigep.common.application.dto.ApiResponse
 import com.sigep.exams.application.dto.ExamDto
+import com.sigep.exams.application.dto.CompareTeachersRequest
 import com.sigep.exams.application.dto.TeacherPerformanceDto
 import com.sigep.exams.application.service.TeacherPerformanceService
 import com.sigep.exams.domain.model.ExamStatus
@@ -110,9 +111,9 @@ class TeacherPerformanceController(
     )
     fun compareTeachersPerformance(
         @Parameter(description = "Lista de IDs de docentes a comparar (teaching_staff.id)")
-        @RequestBody teacherIds: List<Long>
+        @RequestBody request: CompareTeachersRequest
     ): ResponseEntity<ApiResponse<Map<Long, TeacherPerformanceDto>>> {
-        val comparison = teacherPerformanceService.compareTeachersPerformance(teacherIds)
+        val comparison = teacherPerformanceService.compareTeachersPerformance(request.teacherIds)
         return ResponseEntity.ok(
             ApiResponse.success(
                 data = comparison,

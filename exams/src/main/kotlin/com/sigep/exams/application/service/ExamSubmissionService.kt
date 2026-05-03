@@ -1,6 +1,7 @@
 package com.sigep.exams.application.service
 
 import com.sigep.common.application.dto.PageResponse
+import com.sigep.common.application.service.TeacherInfoProvider
 import com.sigep.common.domain.exception.ResourceNotFoundException
 import com.sigep.common.application.exception.ValidationException
 import com.sigep.exams.application.dto.*
@@ -25,7 +26,8 @@ class ExamSubmissionService(
     private val submissionRepository: ExamSubmissionRepository,
     private val examRepository: ExamRepository,
     private val gradeHistoryRepository: ExamGradeHistoryRepository,
-    private val examService: ExamService
+    private val examService: ExamService,
+    private val teacherInfoProvider: TeacherInfoProvider
 ) {
 
     @Cacheable(value = ["submissions"], key = "#id")
@@ -85,15 +87,18 @@ class ExamSubmissionService(
 
         return submissions.map { submission ->
             val exam = examRepository.findById(submission.examId).orElse(null)
+            val assignedTeachers = exam?.let { examService.parseAssignedTeachers(it.assignedTeachers) }
             ExamResultSummary(
                 examId = submission.examId,
                 examTitle = exam?.title ?: "Examen no encontrado",
                 scheduledAt = exam?.scheduledAt,
                 totalPoints = exam?.totalPoints ?: java.math.BigDecimal.ZERO,
-                assignedTeachers = exam?.let { examService.parseAssignedTeachers(it.assignedTeachers) },
+                assignedTeachers = assignedTeachers,
+                teacherNames = examService.resolveTeacherNames(assignedTeachers),
                 score = submission.score,
                 status = submission.status,
                 gradedBy = submission.gradedBy,
+                gradedByName = submission.gradedBy?.let { teacherInfoProvider.getTeacherNameById(it) ?: it.toString() },
                 gradedAt = submission.gradedAt,
                 feedback = submission.feedback
             )
@@ -257,6 +262,7 @@ class ExamSubmissionService(
         submittedAt = submission.submittedAt,
         score = submission.score,
         gradedBy = submission.gradedBy,
+        gradedByName = submission.gradedBy?.let { teacherInfoProvider.getTeacherNameById(it) ?: it.toString() },
         gradedAt = submission.gradedAt,
         feedback = submission.feedback,
         scannedFilePath = submission.scannedFilePath,

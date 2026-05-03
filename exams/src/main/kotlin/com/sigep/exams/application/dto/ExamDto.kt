@@ -20,6 +20,7 @@ data class ExamDto(
     val visibilityStart: LocalDateTime?,
     val visibilityEnd: LocalDateTime?,
     val assignedTeachers: List<Long>?,
+    val teacherNames: List<String>? = null,
     val notes: String?,
     val roomInfo: String?,
     val version: Int,
@@ -67,6 +68,7 @@ data class ExamSummaryDto(
     val totalPoints: BigDecimal,
     val weight: BigDecimal,
     val assignedTeachers: List<Long>? = null,
+    val teacherNames: List<String>? = null,
     val totalSubmissions: Int = 0,
     val gradedSubmissions: Int = 0,
     val pendingSubmissions: Int = 0
@@ -74,14 +76,13 @@ data class ExamSummaryDto(
 
 data class TeacherPerformanceDto(
     val teacherId: Long,
-    val totalExamsCreated: Int,
-    val totalExamsPublished: Int,
-    val totalExamsClosed: Int,
+    val fullName: String?,
+    val totalExamCount: Int,
+    val publishedExamCount: Int,
     val totalStudentsEvaluated: Int,
     val averageScore: BigDecimal?,
     val passRate: BigDecimal?,
-    val examsByStatus: Map<ExamStatus, Int>,
-    val examsByCourse: Map<Long, CourseExamSummaryDto>,
+    val courseExams: List<CourseExamSummaryDto>,
     val recentExams: List<ExamSummaryDto>
 )
 
@@ -91,5 +92,9 @@ data class CourseExamSummaryDto(
     val averageScore: BigDecimal?,
     val passRate: BigDecimal?,
     val totalStudents: Int
+)
+
+data class CompareTeachersRequest(
+    val teacherIds: List<Long>
 )
 

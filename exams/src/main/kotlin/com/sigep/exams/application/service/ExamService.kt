@@ -3,6 +3,7 @@ package com.sigep.exams.application.service
 import com.fasterxml.jackson.core.type.TypeReference
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.sigep.common.application.dto.PageResponse
+import com.sigep.common.application.service.TeacherInfoProvider
 import com.sigep.common.domain.exception.ResourceNotFoundException
 import com.sigep.common.application.exception.ValidationException
 import com.sigep.exams.application.dto.*
@@ -25,7 +26,8 @@ import java.util.UUID
 class ExamService(
     private val examRepository: ExamRepository,
     private val submissionRepository: ExamSubmissionRepository,
-    private val objectMapper: ObjectMapper
+    private val objectMapper: ObjectMapper,
+    private val teacherInfoProvider: TeacherInfoProvider
 ) {
 
     private val longListType = object : TypeReference<List<Long>>() {}
@@ -229,31 +231,43 @@ class ExamService(
     }
 
     // Métodos auxiliares
-    fun toDto(exam: Exam): ExamDto = ExamDto(
-        id = exam.id,
-        courseId = exam.courseId,
-        title = exam.title,
-        description = exam.description,
-        modality = exam.modality,
-        status = exam.status,
-        totalPoints = exam.totalPoints,
-        weight = exam.weight,
-        timeLimitMinutes = exam.timeLimitMinutes,
-        scheduledAt = exam.scheduledAt,
-        visibilityStart = exam.visibilityStart,
-        visibilityEnd = exam.visibilityEnd,
-        assignedTeachers = exam.assignedTeachers?.let {
-            objectMapper.readValue(it, longListType)
-        },
-        notes = exam.notes,
-        roomInfo = exam.roomInfo,
-        version = exam.version,
-        createdAt = exam.createdAt,
-        createdBy = exam.createdBy,
-        updatedAt = exam.updatedAt,
-        updatedBy = exam.updatedBy
-    )
+    fun toDto(exam: Exam): ExamDto {
+        val assignedTeachers = parseAssignedTeachers(exam.assignedTeachers)
+
+        return ExamDto(
+            id = exam.id,
+            courseId = exam.courseId,
+            title = exam.title,
+            description = exam.description,
+            modality = exam.modality,
+            status = exam.status,
+            totalPoints = exam.totalPoints,
+            weight = exam.weight,
+            timeLimitMinutes = exam.timeLimitMinutes,
+            scheduledAt = exam.scheduledAt,
+            visibilityStart = exam.visibilityStart,
+            visibilityEnd = exam.visibilityEnd,
+            assignedTeachers = assignedTeachers,
+            teacherNames = resolveTeacherNames(assignedTeachers),
+            notes = exam.notes,
+            roomInfo = exam.roomInfo,
+            version = exam.version,
+            createdAt = exam.createdAt,
+            createdBy = exam.createdBy,
+            updatedAt = exam.updatedAt,
+            updatedBy = exam.updatedBy
+        )
+    }
 
     fun parseAssignedTeachers(json: String?): List<Long>? =
         json?.let { objectMapper.readValue(it, longListType) }
+
+    fun resolveTeacherNames(assignedTeachers: List<Long>?): List<String>? {
+        if (assignedTeachers.isNullOrEmpty()) {
+            return null
+        }
+
+        val namesById = teacherInfoProvider.getTeacherNamesByIds(assignedTeachers)
+        return assignedTeachers.map { teacherId -> namesById[teacherId] ?: teacherId.toString() }
+    }
 }

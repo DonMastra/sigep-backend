@@ -79,6 +79,17 @@ class TeachingStaffService(
         )
     }
 
+    @Transactional(readOnly = true)
+    fun resolveTeacherNames(ids: Collection<Long>): List<TeacherResolutionDto> {
+        if (ids.isEmpty()) {
+            return emptyList()
+        }
+
+        return teachingStaffRepository.findAllByIdInAndIsActiveTrue(ids)
+            .map { TeacherResolutionDto(id = it.id!!, fullName = it.fullName) }
+            .sortedBy { it.id }
+    }
+
     @CacheEvict(value = ["teachingStaff"], allEntries = true)
     fun createTeachingStaff(request: CreateTeachingStaffRequest): TeachingStaffDto {
         log.info("Creating new teaching staff: {} {}", request.firstName, request.lastName)

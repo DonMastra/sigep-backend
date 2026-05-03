@@ -12,7 +12,7 @@ Se ha actualizado el módulo de exámenes para incluir **información de los doc
 ```typescript
 interface ExamDto {
   id: string;
-  courseId: string;
+  courseId: number;
   title: string;
   description?: string;
   modality: ExamModality;
@@ -23,14 +23,15 @@ interface ExamDto {
   scheduledAt?: Date;
   visibilityStart?: Date;
   visibilityEnd?: Date;
-  assignedTeachers?: string[];  // Lista de UUIDs de docentes
+  assignedTeachers?: number[];  // IDs numéricos de docentes
+  teacherNames?: string[];      // Nombres resueltos en el mismo orden
   notes?: string;
   roomInfo?: string;
   version: number;
   createdAt: Date;
-  createdBy: string;
+  createdBy: number;
   updatedAt?: Date;
-  updatedBy?: string;
+  updatedBy?: number;
 }
 ```
 
@@ -48,13 +49,14 @@ interface ExamDto {
 ```typescript
 interface ExamSummaryDto {
   id: string;
-  courseId: string;
+  courseId: number;
   title: string;
   status: ExamStatus;
   scheduledAt?: Date;
   totalPoints: number;
   weight: number;
-  assignedTeachers?: string[];  // 🆕 NUEVO - Lista de UUIDs de docentes
+  assignedTeachers?: number[];  // 🆕 NUEVO - IDs de docentes
+  teacherNames?: string[];      // 🆕 NUEVO - Nombres de docentes
   totalSubmissions: number;
   gradedSubmissions: number;
   pendingSubmissions: number;
@@ -100,7 +102,8 @@ interface ExamSummaryDto {
 interface ExamStatisticsDto {
   examId: string;
   examTitle: string;
-  assignedTeachers?: string[];  // 🆕 NUEVO - Docentes del examen
+  assignedTeachers?: number[];  // 🆕 NUEVO - IDs de docentes
+  teacherNames?: string[];      // 🆕 NUEVO - Nombres de docentes
   totalStudents: number;
   submittedCount: number;
   gradedCount: number;
@@ -167,10 +170,12 @@ interface ExamResultSummary {
   examTitle: string;
   scheduledAt?: Date;
   totalPoints: number;
-  assignedTeachers?: string[];  // 🆕 NUEVO - Docentes del examen
+  assignedTeachers?: number[];  // 🆕 NUEVO - IDs de docentes
+  teacherNames?: string[];      // 🆕 NUEVO - Nombres de docentes
   score?: number;
   status: SubmissionStatus;
-  gradedBy?: string;           // 🆕 ACTUALIZADO - Docente que calificó
+  gradedBy?: number;           // 🆕 ACTUALIZADO - ID docente que calificó
+  gradedByName?: string;       // 🆕 NUEVO - Nombre docente que calificó
   gradedAt?: Date;
   feedback?: string;
 }
@@ -189,7 +194,7 @@ export class StudentHistoryComponent {
     );
   }
   
-  getTeacherName(teacherId: string): Observable<string> {
+  getTeacherName(teacherId: number): Observable<string> {
     return this.staffService.getTeacher(teacherId).pipe(
       map(teacher => teacher.fullName)
     );
@@ -249,14 +254,16 @@ interface SubmissionWithStudentDto {
   id: string;
   examId: string;
   examTitle: string;
-  examAssignedTeachers?: string[];  // 🆕 NUEVO - Docentes del examen
-  studentId: string;
+  examAssignedTeachers?: number[];  // 🆕 NUEVO - IDs de docentes del examen
+  examTeacherNames?: string[];      // 🆕 NUEVO - Nombres de docentes del examen
+  studentId: number;
   studentName: string;
   studentEmail: string;
   attemptNumber: number;
   status: SubmissionStatus;
   score?: number;
-  gradedBy?: string;
+  gradedBy?: number;
+  gradedByName?: string;
   gradedAt?: Date;
   feedback?: string;
   scannedFilePath?: string;
@@ -411,9 +418,9 @@ export class ExamService {
 export class StaffService {
   
   // Método para obtener múltiples docentes por IDs
-  getTeachersByIds(teacherIds: string[]): Observable<TeacherDto[]> {
-    return this.http.post<ApiResponse<TeacherDto[]>>(
-      `${this.apiUrl}/staff/teachers/bulk`,
+  getTeachersByIds(teacherIds: number[]): Observable<TeacherResolutionDto[]> {
+    return this.http.post<ApiResponse<TeacherResolutionDto[]>>(
+      `${this.apiUrl}/staff/teaching/resolve`,
       { ids: teacherIds }
     ).pipe(
       map(response => response.data)
@@ -421,9 +428,9 @@ export class StaffService {
   }
   
   // Método para obtener un docente individual
-  getTeacher(teacherId: string): Observable<TeacherDto> {
+  getTeacher(teacherId: number): Observable<TeacherDto> {
     return this.http.get<ApiResponse<TeacherDto>>(
-      `${this.apiUrl}/staff/teachers/${teacherId}`
+      `${this.apiUrl}/staff/teaching/${teacherId}`
     ).pipe(
       map(response => response.data)
     );
@@ -469,7 +476,7 @@ export class ExamListComponent implements OnInit {
 ```typescript
 export class TeacherDashboardComponent implements OnInit {
   performance$: Observable<TeacherPerformanceDto>;
-  teacherId: string;
+  teacherId: number;
   
   ngOnInit() {
     this.teacherId = this.authService.getCurrentUserId();
@@ -492,7 +499,7 @@ export class StudentProfileComponent implements OnInit {
   }
   
   // Helper para mostrar nombres de docentes
-  getTeacherNames(teacherIds?: string[]): Observable<string> {
+  getTeacherNames(teacherIds?: number[]): Observable<string> {
     if (!teacherIds || teacherIds.length === 0) {
       return of('Sin asignar');
     }
