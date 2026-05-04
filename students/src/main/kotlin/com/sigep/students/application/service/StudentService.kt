@@ -138,6 +138,7 @@ class StudentService(
             email = request.email ?: student.email,
             documentNumber = request.documentNumber ?: student.documentNumber,
             dateOfBirth = request.dateOfBirth ?: student.dateOfBirth,
+            enrollmentDate = request.enrollmentDate ?: student.enrollmentDate,
             phoneNumber = request.phoneNumber ?: student.phoneNumber,
             address = request.address ?: student.address,
             emergencyContact = request.emergencyContact ?: student.emergencyContact,

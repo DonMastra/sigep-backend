@@ -97,6 +97,8 @@ data class UpdateStudentRequest(
     @field:Past(message = "Date of birth must be in the past")
     val dateOfBirth: LocalDate?,
 
+    val enrollmentDate: LocalDate?,
+
     val address: String?,
 
     val phoneNumber: String?,
