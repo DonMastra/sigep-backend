@@ -97,9 +97,9 @@ class StudentService(
             address = request.address,
             emergencyContact = request.emergencyContact,
             guardianId = request.guardianId,
-            enrollmentDate = LocalDate.now(),
+            enrollmentDate = request.enrollmentDate ?: LocalDate.now(),
             medicalNotes = request.medicalNotes,
-            active = true,
+            active = request.active,
             currentLevel = "BEGINNER", // Default
             createdAt = LocalDateTime.now(),
             updatedAt = LocalDateTime.now()

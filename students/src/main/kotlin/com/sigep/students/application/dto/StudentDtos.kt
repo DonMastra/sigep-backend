@@ -77,6 +77,10 @@ data class CreateStudentRequest(
     @field:NotBlank(message = "Emergency contact is required")
     val emergencyContact: String,
 
+    val enrollmentDate: LocalDate? = null,
+
+    val active: Boolean = true,
+
     val guardianId: Long?,
 
     val medicalNotes: String?
