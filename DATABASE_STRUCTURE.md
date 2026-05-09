@@ -2,8 +2,8 @@
 
 ## Estado actual de estructura de Base de Datos (SiGEP)
 
-**Fecha de relevamiento:** 2026-05-03  
-**Última actualización:** 2026-05-03 (V6 + V7 + V8 + V9 aplicadas)  
+**Fecha de relevamiento:** 2026-05-05  
+**Última actualización:** 2026-05-05 (V6 + V7 + V8 + V9 + V10 aplicadas)  
 **Entorno auditado:** `sigep_db` en contenedor `sigep-postgres` (Docker local)
 
 ## 1) Fuente de verdad operativa
@@ -16,8 +16,8 @@ Orden de prioridad:
 
 ## 2) Snapshot real actual
 
-### Tablas detectadas: 18
-`course_attendance`, `course_certificates`, `course_materials`, `course_schedules`, `course_sessions`, `courses`, `enrollments`, `exam_grade_history`, `exam_submissions`, `exams`, `non_teaching_staff`, `notifications`, `payments`, `session_exceptions`, `staff_attendance`, `students`, `teaching_staff`, `users`.
+### Tablas detectadas: 19
+`course_attendance`, `course_certificates`, `course_materials`, `course_schedules`, `course_sessions`, `courses`, `enrollments`, `exam_grade_history`, `exam_submissions`, `exams`, `non_teaching_staff`, `notifications`, `payments`, `registration_requests`, `session_exceptions`, `staff_attendance`, `students`, `teaching_staff`, `users`.
 
 ### PK por módulo
 - Módulos generales (`users`, `students`, `courses`, `staff`, `payments`, etc.): **BIGINT**.
@@ -38,6 +38,7 @@ Orden de prioridad:
 | V7 | `scripts/migrations/V7__fix_schema_integrity.sql` | `students.guardian_id` nullable + NOT NULL en campos críticos + normalización de `course_sessions` |
 | V8 | `scripts/migrations/V8__cleanup_legacy_schema.sql` | limpieza de columnas legacy + eliminación de tablas huérfanas |
 | V9 | `scripts/migrations/V9__align_check_constraints_with_enums.sql` | CHECKs alineados con enums (`exams.status`, `non_teaching_staff.role`) |
+| V10 | `scripts/migrations/V10__auth_registration_approval_workflow.sql` | `users.status` + tabla `registration_requests` para workflow de aprobación |
 
 ## 4) Brechas cerradas
 
@@ -78,10 +79,14 @@ Se actualizó `API_CONTRACT.md` en sección de Exams:
    - `scripts/insert-test-data.sql` referencia columnas eliminadas en V8.
    - No afecta endpoints/productivo, pero sí bootstrap manual con ese script.
 
+3. **Pendiente de hardening para producción del flujo de registro**:
+   - en dev se validó con migración manual V10; en ambientes superiores conviene mover este script a pipeline automatizado y ejecutar con ventana controlada.
+
 ## 6) Archivos impactados
 
 - `scripts/migrations/V8__cleanup_legacy_schema.sql` (nuevo)
 - `scripts/migrations/V9__align_check_constraints_with_enums.sql` (nuevo)
+- `scripts/migrations/V10__auth_registration_approval_workflow.sql` (nuevo)
 - `payments/src/main/kotlin/com/sigep/payments/domain/model/Payment.kt` (nullable fix)
 - `API_CONTRACT.md` (actualizado sección Exams)
 - `DATABASE_STRUCTURE.md` (este archivo)

@@ -13,9 +13,19 @@
 - [x] Documentación completa (API Contract, Security)
 - [x] Swagger UI
 
-### 🚧 En Desarrollo (v1.1)
+### ✅ Completado (v1.1 — Auth Registration Workflow)
+- [x] Registro público con cuenta en `PENDING_APPROVAL`
+- [x] Login bloqueado para cuentas no `ACTIVE` (403 con mensaje de negocio)
+- [x] `GET /api/v1/auth/registration-status` para estado de cuenta pre-login
+- [x] Bandeja admin: listado paginado con filtro por estado
+- [x] `approve` con transiciones `PENDING_APPROVAL -> ACTIVE` y `REJECTED -> ACTIVE`
+- [x] `reject` con transiciones `PENDING_APPROVAL -> REJECTED` y `ACTIVE -> REJECTED`
+- [x] `reviewedBy`, `reviewedAt` y `adminNotes` persistidos en cada decisión
+- [x] Migración BD: `users.status` + tabla `registration_requests` (V10)
+
+### 🚧 En Desarrollo (v1.2)
 - [ ] Módulo de pagos completo
-- [ ] Módulo de comunicaciones/notificaciones
+- [ ] Módulo de comunicaciones/notificaciones (SMTP para aprobación/rechazo)
 - [ ] Módulo de reportes avanzados
 - [ ] Tests unitarios e integración
 - [ ] Migraciones de base de datos (Flyway)
@@ -846,7 +856,7 @@ class StudentServiceTest {
     @Test
     fun `should create student successfully`() {
         // Given
-        val request = CreateStudentRequest(...)
+        val request = CreateStudentRequest(expression)
         
         // When
         val result = studentService.createStudent(request)
