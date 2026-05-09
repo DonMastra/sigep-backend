@@ -3,6 +3,7 @@ package com.sigep.security.presentation.controller
 import com.sigep.common.application.dto.ApiResponse
 import com.sigep.security.application.dto.*
 import com.sigep.security.application.service.AuthService
+import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
@@ -17,17 +18,26 @@ class AuthController(
 ) {
 
     @PostMapping("/login")
+    @Operation(summary = "Iniciar sesion", description = "Solo permite login para cuentas ACTIVE")
     fun login(@Valid @RequestBody request: LoginRequest): ResponseEntity<ApiResponse<LoginResponse>> {
         val response = authService.login(request)
         return ResponseEntity.ok(ApiResponse.success(response, "Login successful"))
     }
 
     @PostMapping("/register")
+    @Operation(summary = "Registro publico", description = "Crea la cuenta en estado PENDING_APPROVAL")
     fun register(@Valid @RequestBody request: RegisterRequest): ResponseEntity<ApiResponse<UserDto>> {
         val user = authService.register(request)
         return ResponseEntity
             .status(HttpStatus.CREATED)
-            .body(ApiResponse.success(user, "User registered successfully"))
+            .body(ApiResponse.success(user, "Registro creado. Pendiente de aprobacion administrativa."))
+    }
+
+    @GetMapping("/registration-status")
+    @Operation(summary = "Consultar estado de registro", description = "Retorna el estado de cuenta para flujo de login")
+    fun registrationStatus(@RequestParam username: String): ResponseEntity<ApiResponse<RegistrationStatusResponseDto>> {
+        val response = authService.getRegistrationStatus(username)
+        return ResponseEntity.ok(ApiResponse.success(response, "OK"))
     }
 
     @PostMapping("/refresh-token")

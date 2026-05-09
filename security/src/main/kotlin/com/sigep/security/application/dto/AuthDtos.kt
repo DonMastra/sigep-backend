@@ -2,10 +2,12 @@ package com.sigep.security.application.dto
 
 import com.fasterxml.jackson.annotation.JsonCreator
 import com.fasterxml.jackson.annotation.JsonProperty
+import com.sigep.security.domain.model.AccountStatus
 import com.sigep.security.domain.model.UserRole
 import jakarta.validation.constraints.Email
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
+import java.time.LocalDateTime
 
 data class LoginRequest @JsonCreator constructor(
     @JsonProperty("username")
@@ -58,7 +60,42 @@ data class UserDto(
     val firstName: String,
     val lastName: String,
     val role: UserRole,
+    val status: AccountStatus,
     val active: Boolean
+)
+
+data class RegistrationStatusResponseDto(
+    val username: String,
+    val status: AccountStatus,
+    val adminNotes: String?,
+    val reviewedAt: LocalDateTime?
+)
+
+data class RegistrationRequestDto(
+    val id: String,
+    val userId: Long,
+    val username: String,
+    val email: String,
+    val firstName: String,
+    val lastName: String,
+    val requestedRole: UserRole,
+    val status: AccountStatus,
+    val createdAt: LocalDateTime,
+    val reviewedAt: LocalDateTime?,
+    val reviewedBy: Long?,
+    val adminNotes: String?
+)
+
+data class RegistrationRequestPageDto(
+    val items: List<RegistrationRequestDto>,
+    val page: Int,
+    val size: Int,
+    val total: Long
+)
+
+data class RegistrationDecisionRequest @JsonCreator constructor(
+    @JsonProperty("adminNotes")
+    val adminNotes: String? = null
 )
 
 data class RefreshTokenRequest @JsonCreator constructor(

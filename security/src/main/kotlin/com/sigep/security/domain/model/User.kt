@@ -31,6 +31,10 @@ data class User(
     @Column(nullable = false)
     val role: UserRole,
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    val status: AccountStatus = AccountStatus.ACTIVE,
+
     @Column(nullable = false)
     val active: Boolean = true,
 
@@ -45,5 +49,11 @@ enum class UserRole {
     ADMIN,
     TEACHER,
     GUARDIAN
+}
+
+enum class AccountStatus {
+    PENDING_APPROVAL,
+    ACTIVE,
+    REJECTED
 }
 

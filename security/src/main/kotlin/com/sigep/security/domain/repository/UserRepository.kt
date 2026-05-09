@@ -1,6 +1,7 @@
 package com.sigep.security.domain.repository
 
 import com.sigep.security.domain.model.User
+import com.sigep.security.domain.model.AccountStatus
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.stereotype.Repository
 import java.util.Optional
@@ -11,5 +12,6 @@ interface UserRepository : JpaRepository<User, Long> {
     fun findByEmail(email: String): Optional<User>
     fun existsByUsername(username: String): Boolean
     fun existsByEmail(email: String): Boolean
+    fun countByStatus(status: AccountStatus): Long
 }
 

@@ -166,12 +166,14 @@ interface UserDto {
   firstName: string;
   lastName: string;
   role: 'ADMIN' | 'TEACHER' | 'GUARDIAN';
+  status: 'PENDING_APPROVAL' | 'ACTIVE' | 'REJECTED';
   active: boolean;
 }
 ```
 
 **Errores:**
 - `401 Unauthorized`: Credenciales inválidas
+- `403 Forbidden`: Cuenta en `PENDING_APPROVAL` (`"Tu cuenta esta pendiente de aprobacion administrativa."`) o `REJECTED` (`"Tu cuenta fue rechazada. Contacta a administracion."`)
 - `429 Too Many Requests`: Demasiados intentos
 
 ---
@@ -188,7 +190,7 @@ interface RegisterRequest {
   password: string;      // min: 6, max: 100
   firstName: string;
   lastName: string;
-  role: 'ADMIN' | 'TEACHER' | 'GUARDIAN';
+  role: 'TEACHER' | 'GUARDIAN'; // ADMIN no permitido en registro publico
 }
 ```
 
@@ -197,17 +199,37 @@ interface RegisterRequest {
 {
   success: true;
   data: UserDto;
-  message: "User registered successfully";
+  message: "Registro creado. Pendiente de aprobacion administrativa.";
 }
 ```
 
 **Errores:**
 - `400 Bad Request`: Validación fallida
+- `400 Bad Request`: Rol `ADMIN` no permitido en registro público
 - `409 Conflict`: Username o email ya existe
 
 ---
 
-### 3. Refresh Token
+### 3. Registration Status
+
+**Endpoint:** `GET /api/v1/auth/registration-status?username={username}`
+
+**Response (200 OK):**
+```typescript
+interface RegistrationStatusResponseDto {
+  username: string;
+  status: 'PENDING_APPROVAL' | 'ACTIVE' | 'REJECTED';
+  adminNotes: string | null;
+  reviewedAt: string | null; // ISO-8601
+}
+```
+
+**Errores:**
+- `404 Not Found`: Usuario no encontrado
+
+---
+
+### 4. Refresh Token
 
 **Endpoint:** `POST /api/v1/auth/refresh-token`
 
@@ -232,7 +254,7 @@ interface RefreshTokenRequest {
 
 ---
 
-### 4. Logout
+### 5. Logout
 
 **Endpoint:** `POST /api/v1/auth/logout`
 
@@ -248,6 +270,93 @@ interface RefreshTokenRequest {
 ```
 
 > **Nota Frontend**: Eliminar tokens del storage al hacer logout.
+
+---
+
+### 6. Admin Registration Requests
+
+#### `GET /api/v1/admin/registration-requests`
+
+**Query Params:**
+- `status`: `PENDING_APPROVAL | ACTIVE | REJECTED` (opcional)
+- `page`, `size`, `sort`, `order`
+
+**Valores recomendados para `sort`:**
+- `createdAt` (default)
+- `status`
+- `username`
+- `requestedRole`
+- `reviewedAt`
+
+> Compatibilidad: el backend también acepta `created_at`, `requested_role` y `reviewed_at`.
+
+**Response (200 OK):**
+```typescript
+interface RegistrationRequestDto {
+  id: string;
+  userId: number;
+  username: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  requestedRole: 'GUARDIAN' | 'TEACHER';
+  status: 'PENDING_APPROVAL' | 'ACTIVE' | 'REJECTED';
+  createdAt: string;
+  reviewedAt: string | null;
+  reviewedBy: number | null;
+  adminNotes: string | null;
+}
+
+interface RegistrationRequestPageDto {
+  items: RegistrationRequestDto[];
+  page: number;
+  size: number;
+  total: number;
+}
+```
+
+**Autorizacion:** `ADMIN`
+
+#### `PUT /api/v1/admin/registration-requests/{requestId}/approve`
+
+**Body (opcional):**
+```typescript
+interface RegistrationDecisionRequest {
+  adminNotes?: string;
+}
+```
+
+Transicion permitida: `PENDING_APPROVAL -> ACTIVE`.
+
+**Response (200 OK):** `ApiResponse<RegistrationRequestDto>`
+
+**Errores:**
+- `400 Bad Request`: solicitud ya revisada (estado distinto a `PENDING_APPROVAL`)
+- `404 Not Found`: `requestId` no existe
+- `401/403`: token inválido o sin permisos admin
+
+#### `PUT /api/v1/admin/registration-requests/{requestId}/reject`
+
+**Body (opcional):**
+```typescript
+interface RegistrationDecisionRequest {
+  adminNotes?: string;
+}
+```
+
+Transicion permitida: `PENDING_APPROVAL -> REJECTED`.
+
+**Response (200 OK):** `ApiResponse<RegistrationRequestDto>`
+
+**Errores:**
+- `400 Bad Request`: solicitud ya revisada (estado distinto a `PENDING_APPROVAL`)
+- `404 Not Found`: `requestId` no existe
+- `401/403`: token inválido o sin permisos admin
+
+**Autorizacion:**
+- Todos los endpoints `/api/v1/admin/registration-requests/**` requieren rol `ADMIN`.
+
+> Nota de alcance MVP: en esta fase no se envían emails (SMTP); la aprobación/rechazo solo persiste estado y metadatos de revisión.
 
 ---
 

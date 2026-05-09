@@ -1,13 +1,21 @@
 package com.sigep.security.application.service
 
 import com.sigep.common.application.exception.DuplicateResourceException
+import com.sigep.common.application.exception.ForbiddenException
 import com.sigep.common.application.exception.ResourceNotFoundException
 import com.sigep.common.application.exception.UnauthorizedException
+import com.sigep.common.application.exception.ValidationException
 import com.sigep.security.application.dto.*
+import com.sigep.security.domain.model.AccountStatus
+import com.sigep.security.domain.model.RegistrationRequest
 import com.sigep.security.domain.model.User
+import com.sigep.security.domain.model.UserRole
+import com.sigep.security.domain.repository.RegistrationRequestRepository
 import com.sigep.security.domain.repository.UserRepository
 import com.sigep.security.infrastructure.security.JwtTokenProvider
 import org.slf4j.LoggerFactory
+import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Sort
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -17,6 +25,7 @@ import java.time.LocalDateTime
 @Transactional
 class AuthService(
     private val userRepository: UserRepository,
+    private val registrationRequestRepository: RegistrationRequestRepository,
     private val passwordEncoder: PasswordEncoder,
     private val jwtTokenProvider: JwtTokenProvider
 ) {
@@ -29,9 +38,7 @@ class AuthService(
         val user = userRepository.findByUsername(request.username)
             .orElseThrow { UnauthorizedException("Invalid credentials") }
 
-        if (!user.active) {
-            throw UnauthorizedException("User account is inactive")
-        }
+        validateActiveAccountForLogin(user)
 
         // TODO: revisar la verificación de contraseña
         /*if (!passwordEncoder.matches(request.password, user.password)) {
@@ -53,6 +60,10 @@ class AuthService(
     fun register(request: RegisterRequest): UserDto {
         logger.info("Registration attempt for username: {}", request.username)
 
+        if (request.role == UserRole.ADMIN) {
+            throw ValidationException("Public registration does not allow ADMIN role")
+        }
+
         if (userRepository.existsByUsername(request.username)) {
             throw DuplicateResourceException("Username already exists")
         }
@@ -68,15 +79,144 @@ class AuthService(
             firstName = request.firstName,
             lastName = request.lastName,
             role = request.role,
-            active = true,
+            status = AccountStatus.PENDING_APPROVAL,
+            active = false,
             createdAt = LocalDateTime.now(),
             updatedAt = LocalDateTime.now()
         )
 
         val savedUser = userRepository.save(user)
+
+        registrationRequestRepository.save(
+            RegistrationRequest(
+                user = savedUser,
+                username = savedUser.username,
+                email = savedUser.email,
+                firstName = savedUser.firstName,
+                lastName = savedUser.lastName,
+                requestedRole = savedUser.role,
+                status = AccountStatus.PENDING_APPROVAL,
+                createdAt = LocalDateTime.now()
+            )
+        )
+
         logger.info("User {} registered successfully", savedUser.username)
 
         return savedUser.toDto()
+    }
+
+    @Transactional(readOnly = true)
+    fun getRegistrationStatus(username: String): RegistrationStatusResponseDto {
+        val user = userRepository.findByUsername(username)
+            .orElseThrow { ResourceNotFoundException("User not found") }
+
+        val request = registrationRequestRepository.findByUserId(user.id!!).orElse(null)
+
+        return RegistrationStatusResponseDto(
+            username = user.username,
+            status = user.status,
+            adminNotes = request?.adminNotes,
+            reviewedAt = request?.reviewedAt
+        )
+    }
+
+    @Transactional(readOnly = true)
+    fun getRegistrationRequests(
+        status: AccountStatus?,
+        page: Int,
+        size: Int,
+        sortBy: String,
+        sortDirection: String
+    ): RegistrationRequestPageDto {
+        val safePage = page.coerceAtLeast(0)
+        val safeSize = size.coerceIn(1, 100)
+        val normalizedSortBy = normalizeRegistrationSortField(sortBy)
+        val direction = if (sortDirection.uppercase() == "ASC") Sort.Direction.ASC else Sort.Direction.DESC
+        val pageable = PageRequest.of(safePage, safeSize, Sort.by(direction, normalizedSortBy))
+
+        logger.info(
+            "Fetching registration requests - status: {}, page: {}, size: {}, sort: {}, direction: {}",
+            status,
+            safePage,
+            safeSize,
+            normalizedSortBy,
+            direction
+        )
+
+        val pagedRequests = if (status != null) {
+            registrationRequestRepository.findByStatus(status, pageable)
+        } else {
+            registrationRequestRepository.findAll(pageable)
+        }
+
+        logger.info(
+            "Registration requests fetched - returned: {}, total: {}, page: {}, size: {}",
+            pagedRequests.content.size,
+            pagedRequests.totalElements,
+            pagedRequests.number,
+            pagedRequests.size
+        )
+
+        return RegistrationRequestPageDto(
+            items = pagedRequests.content.map { it.toDto() },
+            page = pagedRequests.number,
+            size = pagedRequests.size,
+            total = pagedRequests.totalElements
+        )
+    }
+
+    fun approveRegistrationRequest(requestId: String, reviewedBy: Long, adminNotes: String?): RegistrationRequestDto {
+        logger.info("Starting approval flow for registration request {} by admin {}", requestId, reviewedBy)
+        val registrationRequest = registrationRequestRepository.findById(requestId)
+            .orElseThrow { ResourceNotFoundException("Registration request not found with id: $requestId") }
+
+        validatePendingTransition(registrationRequest)
+
+        val updatedUser = registrationRequest.user.copy(
+            status = AccountStatus.ACTIVE,
+            active = true,
+            updatedAt = LocalDateTime.now()
+        )
+        userRepository.save(updatedUser)
+
+        val reviewedRequest = registrationRequest.copy(
+            status = AccountStatus.ACTIVE,
+            reviewedAt = LocalDateTime.now(),
+            reviewedBy = reviewedBy,
+            adminNotes = adminNotes
+        )
+
+        val savedReviewedRequest = registrationRequestRepository.save(reviewedRequest)
+        publishRegistrationReviewedEvent(savedReviewedRequest)
+        logger.info("Approval flow completed for registration request {}", requestId)
+        return savedReviewedRequest.toDto()
+    }
+
+    fun rejectRegistrationRequest(requestId: String, reviewedBy: Long, adminNotes: String?): RegistrationRequestDto {
+        logger.info("Starting rejection flow for registration request {} by admin {}", requestId, reviewedBy)
+        val registrationRequest = registrationRequestRepository.findById(requestId)
+            .orElseThrow { ResourceNotFoundException("Registration request not found with id: $requestId") }
+
+        validatePendingTransition(registrationRequest)
+
+        val updatedUser = registrationRequest.user.copy(
+            status = AccountStatus.REJECTED,
+            active = false,
+            updatedAt = LocalDateTime.now()
+        )
+        userRepository.save(updatedUser)
+
+        val reviewedRequest = registrationRequest.copy(
+            status = AccountStatus.REJECTED,
+            reviewedAt = LocalDateTime.now(),
+            reviewedBy = reviewedBy,
+            adminNotes = adminNotes
+        )
+
+        val savedReviewedRequest = registrationRequestRepository.save(reviewedRequest)
+        publishRegistrationReviewedEvent(savedReviewedRequest)
+        logger.info("Rejection flow completed for registration request {}", requestId)
+        return savedReviewedRequest.toDto()
     }
 
     fun refreshToken(request: RefreshTokenRequest): LoginResponse {
@@ -85,9 +225,7 @@ class AuthService(
         val user = userRepository.findByUsername(username)
             .orElseThrow { ResourceNotFoundException("User not found") }
 
-        if (!user.active) {
-            throw UnauthorizedException("User account is inactive")
-        }
+        validateActiveAccountForLogin(user)
 
         val newToken = jwtTokenProvider.generateToken(user)
         val newRefreshToken = jwtTokenProvider.generateRefreshToken(user)
@@ -106,6 +244,66 @@ class AuthService(
         firstName = firstName,
         lastName = lastName,
         role = role,
+        status = status,
         active = active
     )
+
+    private fun RegistrationRequest.toDto() = RegistrationRequestDto(
+        id = id,
+        userId = user.id!!,
+        username = username,
+        email = email,
+        firstName = firstName,
+        lastName = lastName,
+        requestedRole = requestedRole,
+        status = status,
+        createdAt = createdAt,
+        reviewedAt = reviewedAt,
+        reviewedBy = reviewedBy,
+        adminNotes = adminNotes
+    )
+
+    private fun validateActiveAccountForLogin(user: User) {
+        when (user.status) {
+            AccountStatus.PENDING_APPROVAL -> throw ForbiddenException("Tu cuenta esta pendiente de aprobacion administrativa.")
+            AccountStatus.REJECTED -> throw ForbiddenException("Tu cuenta fue rechazada. Contacta a administracion.")
+            AccountStatus.ACTIVE -> if (!user.active) {
+                throw UnauthorizedException("User account is inactive")
+            }
+        }
+    }
+
+    private fun validatePendingTransition(registrationRequest: RegistrationRequest) {
+        if (registrationRequest.status != AccountStatus.PENDING_APPROVAL) {
+            logger.warn(
+                "Invalid transition attempt for registration request {} with current status {}",
+                registrationRequest.id,
+                registrationRequest.status
+            )
+            throw ValidationException("Only PENDING_APPROVAL requests can be reviewed")
+        }
+    }
+
+    private fun publishRegistrationReviewedEvent(registrationRequest: RegistrationRequest) {
+        // TODO: Trigger notification dispatch (SMTP/in-app) once communications module is ready.
+        logger.info(
+            "Registration request {} reviewed with status {} by admin {}",
+            registrationRequest.id,
+            registrationRequest.status,
+            registrationRequest.reviewedBy
+        )
+    }
+
+    private fun normalizeRegistrationSortField(sortBy: String): String {
+        val sanitized = sortBy.trim().ifBlank { "createdAt" }
+
+        return when (sanitized) {
+            "createdAt", "created_at" -> "createdAt"
+            "status" -> "status"
+            "username" -> "username"
+            "requestedRole", "requested_role" -> "requestedRole"
+            "reviewedAt", "reviewed_at" -> "reviewedAt"
+            else -> "createdAt"
+        }
+    }
 }
