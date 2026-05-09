@@ -170,7 +170,7 @@ class AuthService(
         val registrationRequest = registrationRequestRepository.findById(requestId)
             .orElseThrow { ResourceNotFoundException("Registration request not found with id: $requestId") }
 
-        validatePendingTransition(registrationRequest)
+        validateApproveTransition(registrationRequest)
 
         val updatedUser = registrationRequest.user.copy(
             status = AccountStatus.ACTIVE,
@@ -197,7 +197,7 @@ class AuthService(
         val registrationRequest = registrationRequestRepository.findById(requestId)
             .orElseThrow { ResourceNotFoundException("Registration request not found with id: $requestId") }
 
-        validatePendingTransition(registrationRequest)
+        validateRejectTransition(registrationRequest)
 
         val updatedUser = registrationRequest.user.copy(
             status = AccountStatus.REJECTED,
@@ -273,15 +273,44 @@ class AuthService(
         }
     }
 
-    private fun validatePendingTransition(registrationRequest: RegistrationRequest) {
-        if (registrationRequest.status != AccountStatus.PENDING_APPROVAL) {
+    private fun validateApproveTransition(registrationRequest: RegistrationRequest) {
+        if (registrationRequest.status == AccountStatus.ACTIVE) {
             logger.warn(
-                "Invalid transition attempt for registration request {} with current status {}",
-                registrationRequest.id,
-                registrationRequest.status
+                "Invalid approve transition for request {} — already ACTIVE",
+                registrationRequest.id
             )
-            throw ValidationException("Only PENDING_APPROVAL requests can be reviewed")
+            throw ValidationException("La solicitud ya fue aprobada y se encuentra ACTIVE.")
         }
+        if (registrationRequest.status == AccountStatus.PENDING_APPROVAL ||
+            registrationRequest.status == AccountStatus.REJECTED) {
+            return
+        }
+        logger.warn(
+            "Unexpected status {} for approve transition on request {}",
+            registrationRequest.status,
+            registrationRequest.id
+        )
+        throw ValidationException("Transicion de aprobacion no permitida desde el estado: ${registrationRequest.status}")
+    }
+
+    private fun validateRejectTransition(registrationRequest: RegistrationRequest) {
+        if (registrationRequest.status == AccountStatus.REJECTED) {
+            logger.warn(
+                "Invalid reject transition for request {} — already REJECTED",
+                registrationRequest.id
+            )
+            throw ValidationException("La solicitud ya fue rechazada y se encuentra REJECTED.")
+        }
+        if (registrationRequest.status == AccountStatus.PENDING_APPROVAL ||
+            registrationRequest.status == AccountStatus.ACTIVE) {
+            return
+        }
+        logger.warn(
+            "Unexpected status {} for reject transition on request {}",
+            registrationRequest.status,
+            registrationRequest.id
+        )
+        throw ValidationException("Transicion de rechazo no permitida desde el estado: ${registrationRequest.status}")
     }
 
     private fun publishRegistrationReviewedEvent(registrationRequest: RegistrationRequest) {

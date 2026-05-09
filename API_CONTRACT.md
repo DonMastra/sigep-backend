@@ -326,12 +326,18 @@ interface RegistrationDecisionRequest {
 }
 ```
 
-Transicion permitida: `PENDING_APPROVAL -> ACTIVE`.
+**Transiciones permitidas:**
+- `PENDING_APPROVAL -> ACTIVE`
+- `REJECTED -> ACTIVE` ✅ _(permite revertir un rechazo)_
+
+**Transición NO permitida:**
+- `ACTIVE -> ACTIVE` → `400` con mensaje `"La solicitud ya fue aprobada y se encuentra ACTIVE."`
+- Cualquier estado hacia `PENDING_APPROVAL` → no expuesto por endpoints estándar
 
 **Response (200 OK):** `ApiResponse<RegistrationRequestDto>`
 
 **Errores:**
-- `400 Bad Request`: solicitud ya revisada (estado distinto a `PENDING_APPROVAL`)
+- `400 Bad Request`: solicitud ya aprobada (`ACTIVE -> ACTIVE`) o transición inválida
 - `404 Not Found`: `requestId` no existe
 - `401/403`: token inválido o sin permisos admin
 
@@ -344,17 +350,31 @@ interface RegistrationDecisionRequest {
 }
 ```
 
-Transicion permitida: `PENDING_APPROVAL -> REJECTED`.
+**Transiciones permitidas:**
+- `PENDING_APPROVAL -> REJECTED`
+- `ACTIVE -> REJECTED` ✅ _(permite revocar una aprobación)_
+
+**Transición NO permitida:**
+- `REJECTED -> REJECTED` → `400` con mensaje `"La solicitud ya fue rechazada y se encuentra REJECTED."`
+- Cualquier estado hacia `PENDING_APPROVAL` → no expuesto por endpoints estándar
 
 **Response (200 OK):** `ApiResponse<RegistrationRequestDto>`
 
 **Errores:**
-- `400 Bad Request`: solicitud ya revisada (estado distinto a `PENDING_APPROVAL`)
+- `400 Bad Request`: solicitud ya rechazada (`REJECTED -> REJECTED`) o transición inválida
 - `404 Not Found`: `requestId` no existe
 - `401/403`: token inválido o sin permisos admin
 
 **Autorizacion:**
 - Todos los endpoints `/api/v1/admin/registration-requests/**` requieren rol `ADMIN`.
+
+**Máquina de estados completa:**
+```
+PENDING_APPROVAL --(approve)--> ACTIVE
+PENDING_APPROVAL --(reject)---> REJECTED
+REJECTED         --(approve)--> ACTIVE       ← nuevo
+ACTIVE           --(reject)---> REJECTED     ← nuevo
+```
 
 > Nota de alcance MVP: en esta fase no se envían emails (SMTP); la aprobación/rechazo solo persiste estado y metadatos de revisión.
 
