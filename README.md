@@ -856,7 +856,7 @@ class StudentServiceTest {
     @Test
     fun `should create student successfully`() {
         // Given
-        val request = CreateStudentRequest(...)
+        val request = CreateStudentRequest(expression)
         
         // When
         val result = studentService.createStudent(request)
