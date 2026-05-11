@@ -7,6 +7,7 @@ import com.sigep.security.domain.model.UserRole
 import jakarta.validation.constraints.Email
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
+import java.time.LocalDate
 import java.time.LocalDateTime
 
 data class LoginRequest @JsonCreator constructor(
@@ -50,7 +51,22 @@ data class RegisterRequest @JsonCreator constructor(
     val lastName: String,
 
     @JsonProperty("role")
-    val role: UserRole
+    val role: UserRole,
+
+    @JsonProperty("phoneNumber")
+    val phoneNumber: String? = null,
+
+    @JsonProperty("address")
+    val address: String? = null,
+
+    @JsonProperty("dateOfBirth")
+    val dateOfBirth: LocalDate? = null,
+
+    @JsonProperty("documentNumber")
+    val documentNumber: String? = null,
+
+    @JsonProperty("emergencyContact")
+    val emergencyContact: String? = null
 )
 
 data class UserDto(
@@ -59,6 +75,22 @@ data class UserDto(
     val email: String,
     val firstName: String,
     val lastName: String,
+    val role: UserRole,
+    val status: AccountStatus,
+    val active: Boolean
+)
+
+data class UserProfileDto(
+    val id: Long,
+    val username: String,
+    val firstName: String,
+    val lastName: String,
+    val email: String,
+    val phoneNumber: String?,
+    val address: String?,
+    val dateOfBirth: LocalDate?,
+    val documentNumber: String?,
+    val emergencyContact: String?,
     val role: UserRole,
     val status: AccountStatus,
     val active: Boolean

@@ -191,8 +191,17 @@ interface RegisterRequest {
   firstName: string;
   lastName: string;
   role: 'TEACHER' | 'GUARDIAN'; // ADMIN no permitido en registro publico
+  phoneNumber?: string;
+  address?: string;
+  dateOfBirth?: string;      // YYYY-MM-DD
+  documentNumber?: string;
+  emergencyContact?: string;
 }
 ```
+
+**Reglas adicionales de contrato:**
+- Si `role = 'GUARDIAN'`, los campos de perfil extendido se persisten para reutilizarlos en flujos de inscripción.
+- Si `role = 'TEACHER'`, los campos extendidos son opcionales y el backend puede ignorarlos según política interna.
 
 **Response (201 Created):**
 ```typescript
@@ -273,7 +282,40 @@ interface RefreshTokenRequest {
 
 ---
 
-### 6. Admin Registration Requests
+### 6. My Profile (Authenticated User)
+
+**Endpoint:** `GET /api/v1/users/me`
+
+**Headers:** `Authorization: Bearer {token}`
+
+**Roles:** `ADMIN`, `TEACHER`, `GUARDIAN`
+
+**Response (200 OK):**
+```typescript
+interface UserProfileDto {
+  id: number;
+  username: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phoneNumber: string | null;
+  address: string | null;
+  dateOfBirth: string | null;      // YYYY-MM-DD
+  documentNumber: string | null;
+  emergencyContact: string | null;
+  role: 'ADMIN' | 'TEACHER' | 'GUARDIAN';
+  status: 'PENDING_APPROVAL' | 'ACTIVE' | 'REJECTED';
+  active: boolean;
+}
+```
+
+**Errores:**
+- `401 Unauthorized`: Token ausente, inválido o expirado
+- `404 Not Found`: Usuario autenticado no encontrado
+
+---
+
+### 7. Admin Registration Requests
 
 #### `GET /api/v1/admin/registration-requests`
 
@@ -509,6 +551,8 @@ interface CreateStudentRequest {
   phoneNumber: string;
   emergencyContact: string;
   guardianId?: number;
+  enrollmentDate?: string;  // YYYY-MM-DD (default: fecha actual del servidor)
+  active?: boolean;         // default: true
   medicalNotes?: string;
 }
 ```
@@ -528,7 +572,56 @@ interface CreateStudentRequest {
 
 ---
 
-### 4. Update Student
+### 4. Create Student (Self Registration by Guardian)
+
+**Endpoint:** `POST /api/v1/students/self-registration`
+
+**Roles:** `GUARDIAN`
+
+**Request:**
+```typescript
+interface GuardianStudentRegistrationRequest {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  documentNumber?: string;
+  dateOfBirth?: string;      // YYYY-MM-DD
+  address?: string;
+  phoneNumber?: string;
+  emergencyContact?: string;
+  medicalNotes?: string;
+  useGuardianProfileData?: boolean; // true: precargar desde perfil de /users/me
+}
+```
+
+**Reglas de negocio para `GUARDIAN`:**
+- `guardianId` se deriva del JWT del usuario autenticado (no se recibe en payload).
+- `enrollmentDate` se genera en backend (fecha actual del servidor).
+- Campos académicos (`status`, `currentLevel`) no son aceptados en este endpoint.
+- No se permite asociar el estudiante a otro tutor distinto del autenticado.
+
+**Caso "GUARDIAN y estudiante son la misma persona":**
+- El frontend puede enviar `useGuardianProfileData = true` para crear usando datos del perfil persistido en backend.
+- El backend puede combinar datos de perfil + overrides explícitos del request según validaciones.
+
+**Response (201 Created):**
+```typescript
+{
+  success: true;
+  data: StudentDto;
+  message: "Student self-registration created successfully";
+}
+```
+
+**Errores:**
+- `400 Bad Request`: Validación fallida o intento de enviar campos no permitidos
+- `401 Unauthorized`: Token ausente/inválido
+- `403 Forbidden`: Usuario no tiene rol `GUARDIAN`
+- `409 Conflict`: Email o documento ya existe
+
+---
+
+### 5. Update Student
 
 **Endpoint:** `PUT /api/v1/students/{id}`
 
@@ -547,7 +640,7 @@ interface CreateStudentRequest {
 
 ---
 
-### 5. Delete Student
+### 6. Delete Student
 
 **Endpoint:** `DELETE /api/v1/students/{id}`
 
@@ -564,7 +657,7 @@ interface CreateStudentRequest {
 
 ---
 
-### 6. Get Students by Guardian
+### 7. Get Students by Guardian
 
 **Endpoint:** `GET /api/v1/students/guardian/{guardianId}`
 
@@ -580,7 +673,7 @@ interface CreateStudentRequest {
 
 ---
 
-### 7. Get Student Payment Status
+### 8. Get Student Payment Status
 
 **Endpoint:** `GET /api/v1/students/{id}/payment-status`
 

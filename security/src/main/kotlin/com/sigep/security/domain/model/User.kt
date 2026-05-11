@@ -2,6 +2,7 @@ package com.sigep.security.domain.model
 
 import com.sigep.common.domain.AggregateRoot
 import jakarta.persistence.*
+import java.time.LocalDate
 import java.time.LocalDateTime
 
 @Entity
@@ -27,21 +28,36 @@ data class User(
     @Column(nullable = false)
     val lastName: String,
 
+    @Column(name = "phone_number", nullable = true)
+    val phoneNumber: String? = null,
+
+    @Column(name = "address", nullable = true)
+    val address: String? = null,
+
+    @Column(name = "date_of_birth", nullable = true)
+    val dateOfBirth: LocalDate? = null,
+
+    @Column(name = "document_number", nullable = true)
+    val documentNumber: String? = null,
+
+    @Column(name = "emergency_contact", nullable = true)
+    val emergencyContact: String? = null,
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     val role: UserRole,
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(name = "status", nullable = false)
     val status: AccountStatus = AccountStatus.ACTIVE,
 
     @Column(nullable = false)
     val active: Boolean = true,
 
-    @Column(nullable = false)
+    @Column(name = "created_at", nullable = false)
     val createdAt: LocalDateTime = LocalDateTime.now(),
 
-    @Column(nullable = false)
+    @Column(name = "updated_at", nullable = false)
     val updatedAt: LocalDateTime = LocalDateTime.now()
 ) : AggregateRoot
 
