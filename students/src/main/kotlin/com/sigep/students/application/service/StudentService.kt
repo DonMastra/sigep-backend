@@ -1,9 +1,13 @@
 package com.sigep.students.application.service
 
 import com.sigep.common.application.dto.PageResponse
+import com.sigep.common.application.exception.ForbiddenException
+import com.sigep.common.application.exception.ValidationException
 import com.sigep.common.domain.exception.ResourceNotFoundException
 import com.sigep.common.domain.exception.DuplicateResourceException
 import com.sigep.common.application.service.EnrollmentServiceProvider
+import com.sigep.security.domain.model.UserRole
+import com.sigep.security.domain.repository.UserRepository
 import com.sigep.students.application.dto.*
 import com.sigep.students.domain.model.Student
 import com.sigep.students.domain.repository.StudentRepository
@@ -22,7 +26,8 @@ import java.time.LocalDateTime
 @Transactional
 class StudentService(
     private val studentRepository: StudentRepository,
-    private val enrollmentServiceProvider: EnrollmentServiceProvider  // Inyectamos la interfaz, no el repositorio
+    private val enrollmentServiceProvider: EnrollmentServiceProvider,  // Inyectamos la interfaz, no el repositorio
+    private val userRepository: UserRepository
 ) {
 
     private val logger = LoggerFactory.getLogger(StudentService::class.java)
@@ -107,6 +112,61 @@ class StudentService(
 
         val savedStudent = studentRepository.save(student)
         logger.info("Student created successfully with id: {}", savedStudent.id)
+
+        return savedStudent.toDto()
+    }
+
+    @CacheEvict(value = ["students", "students_detail"], allEntries = true)
+    fun createStudentForGuardian(guardianUserId: Long, request: GuardianStudentRegistrationRequest): StudentDto {
+        logger.info("Guardian {} creating student via self-registration", guardianUserId)
+
+        val guardianUser = userRepository.findById(guardianUserId)
+            .orElseThrow { ResourceNotFoundException("Guardian user not found with id: $guardianUserId") }
+
+        if (guardianUser.role != UserRole.GUARDIAN) {
+            throw ForbiddenException("Only GUARDIAN users can self-register students")
+        }
+
+        val useProfileData = request.useGuardianProfileData
+
+        val firstName = resolveRequiredField("firstName", request.firstName, guardianUser.firstName, useProfileData)
+        val lastName = resolveRequiredField("lastName", request.lastName, guardianUser.lastName, useProfileData)
+        val email = resolveRequiredField("email", request.email, guardianUser.email, useProfileData)
+        val documentNumber = resolveRequiredField("documentNumber", request.documentNumber, guardianUser.documentNumber, useProfileData)
+        val address = resolveRequiredField("address", request.address, guardianUser.address, useProfileData)
+        val phoneNumber = resolveRequiredField("phoneNumber", request.phoneNumber, guardianUser.phoneNumber, useProfileData)
+        val emergencyContact = resolveRequiredField("emergencyContact", request.emergencyContact, guardianUser.emergencyContact, useProfileData)
+        val dateOfBirth: LocalDate = (request.dateOfBirth ?: if (useProfileData) guardianUser.dateOfBirth else null)
+            ?: throw ValidationException("Field dateOfBirth is required for guardian self-registration")
+
+        if (studentRepository.existsByEmail(email)) {
+            throw DuplicateResourceException("Student with email $email already exists")
+        }
+
+        if (studentRepository.existsByDocumentNumber(documentNumber)) {
+            throw DuplicateResourceException("Student with document number $documentNumber already exists")
+        }
+
+        val student = Student(
+            firstName = firstName,
+            lastName = lastName,
+            email = email,
+            phoneNumber = phoneNumber,
+            documentNumber = documentNumber,
+            dateOfBirth = dateOfBirth,
+            address = address,
+            emergencyContact = emergencyContact,
+            guardianId = guardianUserId,
+            enrollmentDate = LocalDate.now(),
+            medicalNotes = request.medicalNotes,
+            active = true,
+            currentLevel = "BEGINNER",
+            createdAt = LocalDateTime.now(),
+            updatedAt = LocalDateTime.now()
+        )
+
+        val savedStudent = studentRepository.save(student)
+        logger.info("Student self-registered successfully with id: {} for guardian: {}", savedStudent.id, guardianUserId)
 
         return savedStudent.toDto()
     }
@@ -256,6 +316,19 @@ class StudentService(
             createdAt = createdAt,
             updatedAt = updatedAt
         )
+    }
+
+    private fun resolveRequiredField(
+        fieldName: String,
+        requestValue: String?,
+        profileValue: String?,
+        useProfileData: Boolean
+    ): String {
+        val resolvedValue = requestValue ?: if (useProfileData) profileValue else null
+        if (resolvedValue.isNullOrBlank()) {
+            throw ValidationException("Field $fieldName is required for guardian self-registration")
+        }
+        return resolvedValue
     }
 }
 

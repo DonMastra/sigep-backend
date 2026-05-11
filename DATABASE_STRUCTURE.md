@@ -2,101 +2,111 @@
 
 ## Estado actual de estructura de Base de Datos (SiGEP)
 
-**Fecha de relevamiento:** 2026-05-05  
-**Última actualización:** 2026-05-05 (V6 + V7 + V8 + V9 + V10 aplicadas)  
-**Entorno auditado:** `sigep_db` en contenedor `sigep-postgres` (Docker local)
+**Fecha de relevamiento:** 2026-05-10  
+**Ultima actualizacion:** 2026-05-10 (incluye V11)  
+**Entorno auditado:** `sigep_db` (PostgreSQL), contraste con codigo Kotlin actual + snapshot de `users`.
 
 ## 1) Fuente de verdad operativa
 
 Orden de prioridad:
-1. **BD real en ejecución**.
+1. **BD real en ejecucion**.
 2. **Entidades JPA** (`**/domain/model/*.kt`).
-3. **Scripts SQL/migrations**.
-4. **`API_CONTRACT.md`**.
+3. **Migraciones SQL** (`scripts/migrations/*.sql`).
+4. **Contrato API** (`API_CONTRACT.md`).
 
-## 2) Snapshot real actual
+## 2) Snapshot estructural actual
 
 ### Tablas detectadas: 19
 `course_attendance`, `course_certificates`, `course_materials`, `course_schedules`, `course_sessions`, `courses`, `enrollments`, `exam_grade_history`, `exam_submissions`, `exams`, `non_teaching_staff`, `notifications`, `payments`, `registration_requests`, `session_exceptions`, `staff_attendance`, `students`, `teaching_staff`, `users`.
 
-### PK por módulo
-- Módulos generales (`users`, `students`, `courses`, `staff`, `payments`, etc.): **BIGINT**.
-- Módulo exams (`exams`, `exam_submissions`, `exam_grade_history`): **UUID** en PK.
+### PK por modulo
+- Modulos generales (`users`, `students`, `courses`, `staff`, `payments`, etc.): **BIGINT**.
+- Modulo exams (`exams`, `exam_submissions`, `exam_grade_history`): **UUID** en PK.
 
-### FK cross-módulo (corregidas)
+### FK cross-modulo (vigentes)
 - `exams.course_id` -> `courses.id` (BIGINT)
 - `exams.created_by` -> `users.id` (BIGINT)
 - `exam_submissions.student_id` -> `students.id` (BIGINT)
 - `exam_submissions.graded_by` -> `users.id` (BIGINT)
 - `exam_grade_history.changed_by` -> `users.id` (BIGINT)
 
-## 3) Migraciones aplicadas en este ciclo
+## 3) Cambios recientes relevantes (V10 + V11)
 
-| Versión | Archivo | Resultado |
+| Version | Archivo | Resultado |
 |---|---|---|
-| V6 | `exams/src/main/resources/db/migration/V6__fix_exams_cross_module_id_types.sql` | UUID->BIGINT en referencias cross-módulo de exams |
-| V7 | `scripts/migrations/V7__fix_schema_integrity.sql` | `students.guardian_id` nullable + NOT NULL en campos críticos + normalización de `course_sessions` |
-| V8 | `scripts/migrations/V8__cleanup_legacy_schema.sql` | limpieza de columnas legacy + eliminación de tablas huérfanas |
-| V9 | `scripts/migrations/V9__align_check_constraints_with_enums.sql` | CHECKs alineados con enums (`exams.status`, `non_teaching_staff.role`) |
-| V10 | `scripts/migrations/V10__auth_registration_approval_workflow.sql` | `users.status` + tabla `registration_requests` para workflow de aprobación |
+| V10 | `scripts/migrations/V10__auth_registration_approval_workflow.sql` | `users.status` + tabla `registration_requests` para aprobacion de registro |
+| V11 | `scripts/migrations/V11__extend_users_profile_fields.sql` | nuevos campos de perfil en `users` + indice/constraint para `document_number` |
 
-## 4) Brechas cerradas
+## 4) Tabla `users` (estado actual)
 
-### A) Columnas legacy
-Se eliminaron 23 columnas legacy (ya no mapeadas por entidades actuales), incluyendo:
-- `students.phone`, `students.status`
-- `courses.max_capacity`, `courses.schedule`, `courses.classroom`
-- `course_sessions.session_number`, `scheduled_date`, `classroom`, `created_by`, `updated_by`
-- `course_materials.uploaded_at`
-- `course_certificates.expiration_date`, `certificate_url`
-- `exam_grade_history.change_reason`, `version`
-- `staff_attendance.staff_id`, `staff_type`, `created_by`, `updated_by`
-- `teaching_staff.status`
-- `non_teaching_staff.position`, `company`, `status`
+### Columnas base (previas)
+- `id` (BIGINT, PK)
+- `username` (varchar, unique, not null)
+- `email` (varchar, unique, not null)
+- `password` (varchar, not null)
+- `first_name` (varchar, not null)
+- `last_name` (varchar, not null)
+- `role` (varchar, not null)
+- `status` (varchar, not null)
+- `active` (boolean, not null)
+- `created_at` (timestamp, not null)
+- `updated_at` (timestamp, not null)
 
-### B) Tablas huérfanas
-Se eliminaron:
-- `exam_results`
-- `course_enrollments`
+### Columnas nuevas (V11)
+- `phone_number` (varchar(20), null)
+- `address` (varchar(500), null)
+- `date_of_birth` (date, null)
+- `document_number` (varchar(50), null)
+- `emergency_contact` (varchar(255), null)
 
-### C) Contrato API
-Se actualizó `API_CONTRACT.md` en sección de Exams:
-- IDs reales (`UUID` en `exams` y `exam-submissions`)
-- Endpoints reales de `ExamController` y `ExamSubmissionController`
-- Enums reales (`ExamStatus`, `SubmissionStatus`, `ExamModality`)
+### Restricciones/indices nuevos (V11)
+- Indice: `idx_users_document_number` en `users(document_number)`.
+- Constraint: `users_document_number_unique_not_null` (UNIQUE NULLS DISTINCT con `WHERE document_number IS NOT NULL`).
 
-### D) Alineación de checks y entidades
-- `exams.status` ya **no** permite `GRADED`; queda alineado con `ExamStatus`.
-- `non_teaching_staff.role` ahora permite `IT` además de `IT_SUPPORT`; queda alineado con `NonTeachingRole`.
-- `payments.paymentDate` se alineó en código como no nullable (`LocalDate`) para coincidir con `payment_date NOT NULL`.
+### Evidencia de coherencia
+- El snapshot de `users` exportado (CSV) ya refleja estas 5 columnas nuevas.
+- En codigo, `User.kt` mapea explicitamente:
+  - `phoneNumber` -> `phone_number`
+  - `address` -> `address`
+  - `dateOfBirth` -> `date_of_birth`
+  - `documentNumber` -> `document_number`
+  - `emergencyContact` -> `emergency_contact`
 
-## 5) Brechas residuales
+## 5) Trazabilidad BD <-> Codigo <-> API
 
-1. **Sin pipeline único de migraciones automáticas para todo el monolito**:
-   - hoy se usan scripts por módulo y ejecución manual en este entorno.
+### Seguridad/Auth
+- `POST /api/v1/auth/register` ahora acepta perfil extendido y persiste en `users`.
+- `GET /api/v1/users/me` expone esos campos desde `users`.
 
-2. **Scripts legacy de datos de prueba no actualizados**:
-   - `scripts/insert-test-data.sql` referencia columnas eliminadas en V8.
-   - No afecta endpoints/productivo, pero sí bootstrap manual con ese script.
+### Students
+- `POST /api/v1/students/self-registration` usa `userId` del JWT y puede precargar datos desde perfil de `users`.
+- `guardianId` de `students` se deriva del usuario autenticado (no del payload).
 
-3. **Pendiente de hardening para producción del flujo de registro**:
-   - en dev se validó con migración manual V10; en ambientes superiores conviene mover este script a pipeline automatizado y ejecutar con ventana controlada.
+## 6) Scripts operativos de validacion y datos
 
-## 6) Archivos impactados
+- `scripts/validate-db-schema.sql` -> validacion SQL compatible con DBeaver.
+- `scripts/validate-db-schema.sh` -> validacion por consola (psql).
+- `scripts/backfill_users_profile_fields_dbeaver.sql` -> backfill de campos nuevos en `users` para datos historicos.
 
-- `scripts/migrations/V8__cleanup_legacy_schema.sql` (nuevo)
-- `scripts/migrations/V9__align_check_constraints_with_enums.sql` (nuevo)
-- `scripts/migrations/V10__auth_registration_approval_workflow.sql` (nuevo)
-- `payments/src/main/kotlin/com/sigep/payments/domain/model/Payment.kt` (nullable fix)
-- `API_CONTRACT.md` (actualizado sección Exams)
-- `DATABASE_STRUCTURE.md` (este archivo)
+## 7) Brechas residuales
 
-## 7) Comandos de auditoría rápida
+1. **Pipeline unico de migraciones**:
+   - Sigue pendiente consolidar ejecucion automatica de migraciones para todo el monolito.
+
+2. **Scripts legacy de datos**:
+   - `scripts/insert-test-data.sql` puede contener referencias desactualizadas frente a limpieza V8.
+
+3. **Datos historicos incompletos en perfil**:
+   - Usuarios preexistentes pueden quedar con campos de perfil en null hasta ejecutar backfill.
+
+## 8) Comandos de auditoria rapida
 
 ```powershell
 docker exec sigep-postgres psql -U sigep_user -d sigep_db -c "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' ORDER BY table_name;"
-docker exec sigep-postgres psql -U sigep_user -d sigep_db -c "SELECT table_name,column_name,data_type,udt_name,is_nullable,column_default FROM information_schema.columns WHERE table_schema='public' ORDER BY table_name,ordinal_position;"
-docker exec sigep-postgres psql -U sigep_user -d sigep_db -c "SELECT tc.table_name,kcu.column_name,ccu.table_name AS ref_table,ccu.column_name AS ref_column FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu ON tc.constraint_name=kcu.constraint_name AND tc.table_schema=kcu.table_schema JOIN information_schema.constraint_column_usage ccu ON ccu.constraint_name=tc.constraint_name AND ccu.table_schema=tc.table_schema WHERE tc.constraint_type='FOREIGN KEY' AND tc.table_schema='public' ORDER BY tc.table_name,kcu.column_name;"
+docker exec sigep-postgres psql -U sigep_user -d sigep_db -c "SELECT table_name,column_name,data_type,is_nullable,column_default FROM information_schema.columns WHERE table_schema='public' ORDER BY table_name,ordinal_position;"
+docker exec sigep-postgres psql -U sigep_user -d sigep_db -f /docker-entrypoint-initdb.d/validate-db-schema.sql
 ```
+
+
 
 

@@ -86,6 +86,32 @@ data class CreateStudentRequest(
     val medicalNotes: String?
 )
 
+data class GuardianStudentRegistrationRequest(
+    @field:Size(min = 1, max = 100)
+    val firstName: String? = null,
+
+    @field:Size(min = 1, max = 100)
+    val lastName: String? = null,
+
+    @field:Email(message = "Invalid email format")
+    val email: String? = null,
+
+    val documentNumber: String? = null,
+
+    @field:Past(message = "Date of birth must be in the past")
+    val dateOfBirth: LocalDate? = null,
+
+    val address: String? = null,
+
+    val phoneNumber: String? = null,
+
+    val emergencyContact: String? = null,
+
+    val medicalNotes: String? = null,
+
+    val useGuardianProfileData: Boolean = false
+)
+
 data class UpdateStudentRequest(
     @field:Size(min = 1, max = 100)
     val firstName: String?,

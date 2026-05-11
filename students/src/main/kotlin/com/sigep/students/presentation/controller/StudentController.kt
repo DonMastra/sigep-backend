@@ -2,17 +2,21 @@ package com.sigep.students.presentation.controller
 
 import com.sigep.common.application.dto.ApiResponse
 import com.sigep.common.application.dto.PageResponse
+import com.sigep.common.application.exception.UnauthorizedException
 import com.sigep.students.application.dto.CreateStudentRequest
+import com.sigep.students.application.dto.GuardianStudentRegistrationRequest
 import com.sigep.students.application.dto.StudentDto
 import com.sigep.students.application.dto.UpdateStudentRequest
 import com.sigep.students.application.service.StudentService
 import com.sigep.security.application.annotation.RequireAdmin
 import com.sigep.security.application.annotation.RequireAdminOrTeacher
+import com.sigep.security.application.annotation.RequireGuardian
 import com.sigep.security.application.annotation.RequireStaffOrGuardian
 import com.sigep.students.application.dto.StudentDetailDto
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
+import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -79,6 +83,22 @@ class StudentController(
         return ResponseEntity
             .status(HttpStatus.CREATED)
             .body(ApiResponse.success(student, "Student created successfully"))
+    }
+
+    @PostMapping("/self-registration")
+    @RequireGuardian
+    @Operation(summary = "Create student as guardian", description = "Create a student linked to the authenticated guardian")
+    fun createStudentAsGuardian(
+        @Valid @RequestBody request: GuardianStudentRegistrationRequest,
+        httpRequest: HttpServletRequest
+    ): ResponseEntity<ApiResponse<StudentDto>> {
+        val guardianId = httpRequest.getAttribute("userId") as? Long
+            ?: throw UnauthorizedException("Token inválido o sin userId")
+
+        val student = studentService.createStudentForGuardian(guardianId, request)
+        return ResponseEntity
+            .status(HttpStatus.CREATED)
+            .body(ApiResponse.success(student, "Student self-registration created successfully"))
     }
 
     @PutMapping("/{id}")

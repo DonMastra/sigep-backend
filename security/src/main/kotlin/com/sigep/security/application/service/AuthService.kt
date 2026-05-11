@@ -78,6 +78,11 @@ class AuthService(
             password = passwordEncoder.encode(request.password),
             firstName = request.firstName,
             lastName = request.lastName,
+            phoneNumber = request.phoneNumber,
+            address = request.address,
+            dateOfBirth = request.dateOfBirth,
+            documentNumber = request.documentNumber,
+            emergencyContact = request.emergencyContact,
             role = request.role,
             status = AccountStatus.PENDING_APPROVAL,
             active = false,
@@ -103,6 +108,14 @@ class AuthService(
         logger.info("User {} registered successfully", savedUser.username)
 
         return savedUser.toDto()
+    }
+
+    @Transactional(readOnly = true)
+    fun getMyProfile(userId: Long): UserProfileDto {
+        val user = userRepository.findById(userId)
+            .orElseThrow { ResourceNotFoundException("User not found") }
+
+        return user.toProfileDto()
     }
 
     @Transactional(readOnly = true)
@@ -243,6 +256,22 @@ class AuthService(
         email = email,
         firstName = firstName,
         lastName = lastName,
+        role = role,
+        status = status,
+        active = active
+    )
+
+    private fun User.toProfileDto() = UserProfileDto(
+        id = id!!,
+        username = username,
+        firstName = firstName,
+        lastName = lastName,
+        email = email,
+        phoneNumber = phoneNumber,
+        address = address,
+        dateOfBirth = dateOfBirth,
+        documentNumber = documentNumber,
+        emergencyContact = emergencyContact,
         role = role,
         status = status,
         active = active
