@@ -16,6 +16,7 @@ import com.sigep.security.infrastructure.security.JwtTokenProvider
 import org.slf4j.LoggerFactory
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
+import org.springframework.data.jpa.domain.Specification
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -175,6 +176,77 @@ class AuthService(
             page = pagedRequests.number,
             size = pagedRequests.size,
             total = pagedRequests.totalElements
+        )
+    }
+
+    @Transactional(readOnly = true)
+    fun getUsersForAdmin(
+        role: UserRole?,
+        status: AccountStatus?,
+        active: Boolean?,
+        page: Int,
+        size: Int,
+        sortBy: String,
+        sortDirection: String
+    ): AdminUserPageDto {
+        val safePage = page.coerceAtLeast(0)
+        val safeSize = size.coerceIn(1, 100)
+        val normalizedSortBy = normalizeUserSortField(sortBy)
+        val direction = if (sortDirection.uppercase() == "ASC") Sort.Direction.ASC else Sort.Direction.DESC
+        val pageable = PageRequest.of(safePage, safeSize, Sort.by(direction, normalizedSortBy))
+
+        val filters = mutableListOf<Specification<User>>()
+
+        if (role != null) {
+            filters += Specification { root, _, criteriaBuilder ->
+                criteriaBuilder.equal(root.get<UserRole>("role"), role)
+            }
+        }
+
+        if (status != null) {
+            filters += Specification { root, _, criteriaBuilder ->
+                criteriaBuilder.equal(root.get<AccountStatus>("status"), status)
+            }
+        }
+
+        if (active != null) {
+            filters += Specification { root, _, criteriaBuilder ->
+                criteriaBuilder.equal(root.get<Boolean>("active"), active)
+            }
+        }
+
+        val specification = filters.reduceOrNull { left, right -> left.and(right) }
+
+        logger.info(
+            "Fetching admin users - role: {}, status: {}, active: {}, page: {}, size: {}, sort: {}, direction: {}",
+            role,
+            status,
+            active,
+            safePage,
+            safeSize,
+            normalizedSortBy,
+            direction
+        )
+
+        val pagedUsers = if (specification != null) {
+            userRepository.findAll(specification, pageable)
+        } else {
+            userRepository.findAll(pageable)
+        }
+
+        logger.info(
+            "Admin users fetched - returned: {}, total: {}, page: {}, size: {}",
+            pagedUsers.content.size,
+            pagedUsers.totalElements,
+            pagedUsers.number,
+            pagedUsers.size
+        )
+
+        return AdminUserPageDto(
+            items = pagedUsers.content.map { it.toDto() },
+            page = pagedUsers.number,
+            size = pagedUsers.size,
+            total = pagedUsers.totalElements
         )
     }
 
@@ -362,6 +434,24 @@ class AuthService(
             "requestedRole", "requested_role" -> "requestedRole"
             "reviewedAt", "reviewed_at" -> "reviewedAt"
             else -> "createdAt"
+        }
+    }
+
+    private fun normalizeUserSortField(sortBy: String): String {
+        val sanitized = sortBy.trim().ifBlank { "username" }
+
+        return when (sanitized) {
+            "id" -> "id"
+            "username" -> "username"
+            "email" -> "email"
+            "firstName", "first_name" -> "firstName"
+            "lastName", "last_name" -> "lastName"
+            "role" -> "role"
+            "status" -> "status"
+            "active" -> "active"
+            "createdAt", "created_at" -> "createdAt"
+            "updatedAt", "updated_at" -> "updatedAt"
+            else -> "username"
         }
     }
 }

@@ -80,6 +80,13 @@ data class UserDto(
     val active: Boolean
 )
 
+data class AdminUserPageDto(
+    val items: List<UserDto>,
+    val page: Int,
+    val size: Int,
+    val total: Long
+)
+
 data class UserProfileDto(
     val id: Long,
     val username: String,

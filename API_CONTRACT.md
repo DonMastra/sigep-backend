@@ -422,6 +422,67 @@ ACTIVE           --(reject)---> REJECTED     ← nuevo
 
 ---
 
+### 8. Admin Users Catalog
+
+#### `GET /api/v1/admin/users`
+
+Lista usuarios desde la tabla `users` (source of truth) con filtros opcionales.
+
+**Query Params:**
+- `role`: `ADMIN | TEACHER | GUARDIAN` (opcional)
+- `status`: `PENDING_APPROVAL | ACTIVE | REJECTED` (opcional)
+- `active`: `true | false` (opcional)
+- `page` (default `0`)
+- `size` (default `20`, max `100`)
+- `sort` (default `username`)
+- `order`: `ASC | DESC` (default `ASC`)
+
+**Valores recomendados para `sort`:**
+- `id`
+- `username`
+- `firstName`
+- `lastName`
+- `email`
+- `role`
+- `status`
+- `active`
+- `createdAt`
+- `updatedAt`
+
+> Compatibilidad: también acepta `first_name`, `last_name`, `created_at` y `updated_at`.
+
+**Response (200 OK):**
+```typescript
+interface AdminUserDto {
+  id: number;
+  username: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: 'ADMIN' | 'TEACHER' | 'GUARDIAN';
+  status: 'PENDING_APPROVAL' | 'ACTIVE' | 'REJECTED';
+  active: boolean;
+}
+
+interface AdminUserPageDto {
+  items: AdminUserDto[];
+  page: number;
+  size: number;
+  total: number;
+}
+```
+
+**Caso de uso recomendado (dropdown tutores):**
+- `GET /api/v1/admin/users?role=GUARDIAN&status=ACTIVE&page=0&size=20&sort=username&order=ASC`
+
+**Autorización:** `ADMIN`
+
+**Errores:**
+- `400 Bad Request`: valor inválido en `role` o `status`
+- `401/403`: token inválido o sin permisos admin
+
+---
+
 ## 👥 Students Endpoints
 
 ### 1. List Students (Paginated)
