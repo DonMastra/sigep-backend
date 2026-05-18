@@ -23,11 +23,13 @@ class CourseController(
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER', 'GUARDIAN')")
     fun getAllCourses(
         @RequestParam(defaultValue = "0") page: Int,
-        @RequestParam(defaultValue = "10") limit: Int,
+        @RequestParam(required = false) limit: Int?,
+        @RequestParam(required = false) size: Int?,
         @RequestParam(defaultValue = "id") sort: String,
         @RequestParam(defaultValue = "ASC") order: String
     ): ResponseEntity<ApiResponse<PageResponse<CourseDto>>> {
-        val courses = courseService.getAllCourses(page, limit, sort, order)
+        val pageSize = limit ?: size ?: 10
+        val courses = courseService.getAllCourses(page, pageSize, sort, order)
         return ResponseEntity.ok(ApiResponse.success(courses))
     }
 
@@ -43,9 +45,11 @@ class CourseController(
     fun searchCourses(
         @RequestParam query: String,
         @RequestParam(defaultValue = "0") page: Int,
-        @RequestParam(defaultValue = "10") limit: Int
+        @RequestParam(required = false) limit: Int?,
+        @RequestParam(required = false) size: Int?
     ): ResponseEntity<ApiResponse<PageResponse<CourseDto>>> {
-        val courses = courseService.searchCourses(query, page, limit)
+        val pageSize = limit ?: size ?: 10
+        val courses = courseService.searchCourses(query, page, pageSize)
         return ResponseEntity.ok(ApiResponse.success(courses))
     }
 
@@ -54,9 +58,11 @@ class CourseController(
     fun getCoursesByTeacher(
         @PathVariable teacherId: Long,
         @RequestParam(defaultValue = "0") page: Int,
-        @RequestParam(defaultValue = "10") limit: Int
+        @RequestParam(required = false) limit: Int?,
+        @RequestParam(required = false) size: Int?
     ): ResponseEntity<ApiResponse<PageResponse<CourseDto>>> {
-        val courses = courseService.getCoursesByTeacher(teacherId, page, limit)
+        val pageSize = limit ?: size ?: 10
+        val courses = courseService.getCoursesByTeacher(teacherId, page, pageSize)
         return ResponseEntity.ok(ApiResponse.success(courses))
     }
 
@@ -107,18 +113,22 @@ class CourseController(
     fun filterCourses(
         @RequestBody filter: CourseFilterRequest,
         @RequestParam(defaultValue = "0") page: Int,
-        @RequestParam(defaultValue = "10") limit: Int
+        @RequestParam(required = false) limit: Int?,
+        @RequestParam(required = false) size: Int?
     ): ResponseEntity<ApiResponse<PageResponse<CourseDto>>> {
-        val courses = courseService.filterCourses(filter, page, limit)
+        val pageSize = limit ?: size ?: 10
+        val courses = courseService.filterCourses(filter, page, pageSize)
         return ResponseEntity.ok(ApiResponse.success(courses))
     }
 
     @GetMapping("/published")
     fun getPublishedCourses(
         @RequestParam(defaultValue = "0") page: Int,
-        @RequestParam(defaultValue = "10") limit: Int
+        @RequestParam(required = false) limit: Int?,
+        @RequestParam(required = false) size: Int?
     ): ResponseEntity<ApiResponse<PageResponse<CourseSimpleDto>>> {
-        val courses = courseService.getPublishedCourses(page, limit)
+        val pageSize = limit ?: size ?: 10
+        val courses = courseService.getPublishedCourses(page, pageSize)
         return ResponseEntity.ok(ApiResponse.success(courses))
     }
 

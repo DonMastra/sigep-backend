@@ -826,11 +826,16 @@ interface StudentPaymentStatusDto {
 ```typescript
 interface CourseListParams {
   page?: number;        // Default: 0
-  limit?: number;       // Default: 10
+  limit?: number;       // Default: 10 (alias soportado)
+  size?: number;        // Default: 10 (alias soportado)
   sort?: string;        // Default: 'id'
   order?: 'ASC' | 'DESC'; // Default: 'ASC'
 }
 ```
+
+**Comportamiento confirmado (`GET /courses`):**
+- Para `ADMIN`, el backend devuelve cursos publicados y no publicados (no aplica filtro implícito por `isPublished`).
+- Para `TEACHER` y `GUARDIAN`, este endpoint mantiene el mismo comportamiento de listado general.
 
 **Roles:** `ADMIN`, `TEACHER`, `GUARDIAN`
 
@@ -860,7 +865,7 @@ interface CourseDto {
   maxStudents: number;               // Capacidad máxima
   minStudents: number;               // Mínimo de estudiantes para abrir
   teacherId: number;
-  teacherName: string | null;        // Nombre del profesor asignado
+  teacherName: string | null;        // Nombre del profesor asignado (backend lo puebla cuando existe teacherId válido)
   price: number;                     // Decimal - Precio del curso
   startDate: string | null;          // ISO date (YYYY-MM-DD)
   endDate: string | null;            // ISO date (YYYY-MM-DD)
@@ -915,6 +920,7 @@ interface SearchParams {
   query: string;         // Búsqueda por nombre, código o descripción
   page?: number;
   limit?: number;
+  size?: number;
 }
 ```
 
@@ -944,6 +950,7 @@ interface SearchParams {
 {
   page?: number;
   limit?: number;
+  size?: number;
 }
 ```
 
@@ -1136,6 +1143,7 @@ interface CourseFilterRequest {
 {
   page?: number;
   limit?: number;
+  size?: number;
 }
 ```
 
@@ -1165,6 +1173,7 @@ interface CourseFilterRequest {
 {
   page?: number;
   limit?: number;
+  size?: number;
 }
 ```
 

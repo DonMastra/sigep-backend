@@ -10,6 +10,7 @@ import com.sigep.courses.domain.event.CoursePublishedEvent
 import com.sigep.courses.domain.model.*
 import com.sigep.courses.domain.repository.CourseRepository
 import com.sigep.courses.domain.repository.EnrollmentRepository
+import com.sigep.security.domain.repository.UserRepository
 import org.slf4j.LoggerFactory
 import org.springframework.cache.annotation.CacheEvict
 import org.springframework.cache.annotation.Cacheable
@@ -24,7 +25,8 @@ import java.time.LocalDateTime
 class CourseService(
     private val courseRepository: CourseRepository,
     private val enrollmentRepository: EnrollmentRepository,
-    private val eventPublisher: CourseEventPublisher
+    private val eventPublisher: CourseEventPublisher,
+    private val userRepository: UserRepository
 ) {
 
     private val logger = LoggerFactory.getLogger(CourseService::class.java)
@@ -45,8 +47,10 @@ class CourseService(
 
         val coursesPage = courseRepository.findAll(pageable)
 
+        val teacherNameCache = mutableMapOf<Long, String?>()
+
         return PageResponse(
-            content = coursesPage.content.map { it.toDto() },
+            content = coursesPage.content.map { it.toDto(teacherNameCache) },
             page = coursesPage.number,
             size = coursesPage.size,
             totalElements = coursesPage.totalElements,
@@ -60,8 +64,10 @@ class CourseService(
         val pageable = PageRequest.of(page, size)
         val coursesPage = courseRepository.searchCourses(search, pageable)
 
+        val teacherNameCache = mutableMapOf<Long, String?>()
+
         return PageResponse(
-            content = coursesPage.content.map { it.toDto() },
+            content = coursesPage.content.map { it.toDto(teacherNameCache) },
             page = coursesPage.number,
             size = coursesPage.size,
             totalElements = coursesPage.totalElements,
@@ -75,8 +81,10 @@ class CourseService(
         val pageable = PageRequest.of(page, size)
         val coursesPage = courseRepository.findByTeacherId(teacherId, pageable)
 
+        val teacherNameCache = mutableMapOf<Long, String?>()
+
         return PageResponse(
-            content = coursesPage.content.map { it.toDto() },
+            content = coursesPage.content.map { it.toDto(teacherNameCache) },
             page = coursesPage.number,
             size = coursesPage.size,
             totalElements = coursesPage.totalElements,
@@ -262,8 +270,10 @@ class CourseService(
             }
         }
 
+        val teacherNameCache = mutableMapOf<Long, String?>()
+
         return PageResponse(
-            content = courses.map { it.toDto() },
+            content = courses.map { it.toDto(teacherNameCache) },
             page = coursesPage.number,
             size = coursesPage.size,
             totalElements = coursesPage.totalElements,
@@ -414,8 +424,13 @@ class CourseService(
         return savedCourse.toDto()
     }
 
-    private fun Course.toDto(): CourseDto {
+    private fun Course.toDto(teacherNameCache: MutableMap<Long, String?> = mutableMapOf()): CourseDto {
         val enrolledCount = enrollmentRepository.countActiveEnrollmentsByCourse(id!!).toInt()
+        val resolvedTeacherName = teacherNameCache.getOrPut(teacherId) {
+            userRepository.findById(teacherId)
+                .map { user -> "${user.firstName} ${user.lastName}".trim() }
+                .orElse(null)
+        }
         val availableSeats = maxStudents - enrolledCount
         val isEnrollmentOpen = isPublished &&
                                 status == CourseStatus.ACTIVE &&
@@ -432,7 +447,7 @@ class CourseService(
             maxStudents = maxStudents!!,
             minStudents = minStudents,
             teacherId = teacherId,
-            teacherName = null,
+            teacherName = resolvedTeacherName,
             price = price,
             startDate = startDate,
             endDate = endDate,
