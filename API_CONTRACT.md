@@ -2,9 +2,11 @@
 
 **Contrato de API para Integración Frontend (Angular)**
 
+**Última actualización**: Mayo 17, 2026
+
 ---
 
-## 📋 Información General
+##  Información General
 
 ### Base URL
 - **Desarrollo**: `http://localhost:8080`
@@ -21,7 +23,7 @@ Todos los endpoints están bajo el prefijo: `/api/v1`
 
 ---
 
-## 🔐 Autenticación
+##  Autenticación
 
 ### Sistema de Autenticación
 La API utiliza **JWT (JSON Web Tokens)** para autenticación stateless.
@@ -45,7 +47,7 @@ Authorization: Bearer {access_token}
 
 ---
 
-## 📦 Estructura de Respuestas
+##  Estructura de Respuestas
 
 ### Respuesta Exitosa
 
@@ -137,7 +139,7 @@ interface ErrorResponse {
 
 ---
 
-## 🔑 Authentication Endpoints
+##  Authentication Endpoints
 
 ### 1. Login
 
@@ -483,7 +485,7 @@ interface AdminUserPageDto {
 
 ---
 
-## 👥 Students Endpoints
+##  Students Endpoints
 
 ### 1. List Students (Paginated)
 
@@ -530,12 +532,17 @@ interface StudentDto {
   currentCourseId: number | null;
   currentCourseName: string | null;
   active: boolean;
+  photoUrl: string | null;
   phoneNumber: string;
   address: string;
   createdAt: string;        // ISO datetime
   updatedAt: string;        // ISO datetime
 }
 ```
+
+**Errores:**
+- `409 Conflict`: No tiene horarios configurados
+- `422 Unprocessable Entity`: Inscripciones activas por debajo de `minStudents`
 
 ---
 
@@ -570,6 +577,7 @@ interface StudentDetailDto {
   currentCourseId: number | null;
   currentCourseName: string | null;
   active: boolean;
+  photoUrl: string | null;
   courseHistory: EnrollmentSummaryDto[];  // Historial de inscripciones
   createdAt: string;           // ISO datetime
   updatedAt: string;           // ISO datetime
@@ -690,6 +698,8 @@ interface GuardianStudentRegistrationRequest {
 
 **Request:** Same as `CreateStudentRequest`
 
+**Nota técnica:** todos los campos del `UpdateStudentRequest` son opcionales y el backend acepta payloads parciales sin requerir constructor vacío explícito.
+
 **Response (200 OK):**
 ```typescript
 {
@@ -766,7 +776,47 @@ interface StudentPaymentStatusDto {
 
 ---
 
-## 📚 Courses Endpoints
+### 9. Upload Student Photo
+
+**Endpoint:** `POST /api/v1/students/{id}/photo`
+
+**Roles:** `ADMIN`
+
+**Content-Type:** `multipart/form-data`
+
+**Request Form Data:**
+- `file`: imagen (`jpg`, `jpeg`, `png`, `webp`), máximo 5MB
+
+**Response (200 OK):**
+```typescript
+{
+  success: true;
+  data: StudentDto;              // incluye photoUrl actualizado
+  message: "Student photo uploaded successfully";
+  timestamp: string;
+}
+```
+
+**Errores:**
+- `400 Bad Request`: Archivo vacío, formato inválido o tamaño excedido
+- `404 Not Found`: Estudiante no existe
+
+---
+
+### 10. Get Student Photo
+
+**Endpoint:** `GET /api/v1/students/{id}/photo`
+
+**Roles:** `ADMIN`, `TEACHER`, `GUARDIAN`
+
+**Response (200 OK):** binario con `image/jpeg`, `image/png` o `image/webp`
+
+**Errores:**
+- `404 Not Found`: Estudiante o foto no existe
+
+---
+
+##  Courses Endpoints
 
 ### 1. List Courses (Paginated)
 
@@ -776,7 +826,7 @@ interface StudentPaymentStatusDto {
 ```typescript
 interface CourseListParams {
   page?: number;        // Default: 0
-  size?: number;        // Default: 10
+  limit?: number;       // Default: 10
   sort?: string;        // Default: 'id'
   order?: 'ASC' | 'DESC'; // Default: 'ASC'
 }
@@ -805,7 +855,7 @@ interface CourseDto {
   code: string;                      // Código único del curso (ej: ENG-BEG-01)
   name: string;
   description: string;
-  level: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED';
+  level: 'BEGINNER' | 'ELEMENTARY' | 'PRE_INTERMEDIATE' | 'INTERMEDIATE' | 'UPPER_INTERMEDIATE' | 'ADVANCED' | 'PROFICIENCY';
   duration: number;                  // Duración en horas
   maxStudents: number;               // Capacidad máxima
   minStudents: number;               // Mínimo de estudiantes para abrir
@@ -864,7 +914,7 @@ interface CourseScheduleDto {
 interface SearchParams {
   query: string;         // Búsqueda por nombre, código o descripción
   page?: number;
-  size?: number;
+  limit?: number;
 }
 ```
 
@@ -893,7 +943,7 @@ interface SearchParams {
 ```typescript
 {
   page?: number;
-  size?: number;
+  limit?: number;
 }
 ```
 
@@ -926,7 +976,7 @@ interface CreateCourseRequest {
   code: string;                      // min: 3, max: 50, pattern: ^[A-Z0-9-]+$
   name: string;                      // min: 3, max: 200
   description: string;               // min: 10, max: 1000
-  level: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED';
+  level: 'BEGINNER' | 'ELEMENTARY' | 'PRE_INTERMEDIATE' | 'INTERMEDIATE' | 'UPPER_INTERMEDIATE' | 'ADVANCED' | 'PROFICIENCY';
   duration: number;                  // min: 1, max: 1000 hours
   maxStudents: number;               // min: 1, max: 100
   minStudents?: number;              // Default: 1
@@ -973,7 +1023,7 @@ interface UpdateCourseRequest {
   code?: string;
   name?: string;
   description?: string;
-  level?: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED';
+  level?: 'BEGINNER' | 'ELEMENTARY' | 'PRE_INTERMEDIATE' | 'INTERMEDIATE' | 'UPPER_INTERMEDIATE' | 'ADVANCED' | 'PROFICIENCY';
   duration?: number;
   maxStudents?: number;
   minStudents?: number;
@@ -1042,6 +1092,7 @@ interface EnrollStudentRequest {
 interface EnrollmentDto {
   id: number;
   studentId: number;
+  studentName?: string;
   courseId: number;
   courseName: string;
   enrollmentDate: string;          // ISO date (YYYY-MM-DD)
@@ -1057,6 +1108,7 @@ interface EnrollmentDto {
 **Errores:**
 - `409 Conflict`: Estudiante ya inscrito o curso lleno
 - `404 Not Found`: Curso o estudiante no existe
+- `403 Forbidden`: `TEACHER` intentando inscribir en curso no asignado
 
 ---
 
@@ -1069,7 +1121,7 @@ interface EnrollmentDto {
 **Request:**
 ```typescript
 interface CourseFilterRequest {
-  level?: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED';
+  level?: 'BEGINNER' | 'ELEMENTARY' | 'PRE_INTERMEDIATE' | 'INTERMEDIATE' | 'UPPER_INTERMEDIATE' | 'ADVANCED' | 'PROFICIENCY';
   status?: 'ACTIVE' | 'INACTIVE' | 'COMPLETED' | 'CANCELLED';
   teacherId?: number;
   isPublished?: boolean;
@@ -1083,7 +1135,7 @@ interface CourseFilterRequest {
 ```typescript
 {
   page?: number;
-  size?: number;
+  limit?: number;
 }
 ```
 
@@ -1112,7 +1164,7 @@ interface CourseFilterRequest {
 ```typescript
 {
   page?: number;
-  size?: number;
+  limit?: number;
 }
 ```
 
@@ -1132,7 +1184,7 @@ interface CourseSimpleDto {
   id: number;
   code: string;
   name: string;
-  level: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED';
+  level: 'BEGINNER' | 'ELEMENTARY' | 'PRE_INTERMEDIATE' | 'INTERMEDIATE' | 'UPPER_INTERMEDIATE' | 'ADVANCED' | 'PROFICIENCY';
   price: number;
   availableSeats: number;
   isEnrollmentOpen: boolean;
@@ -1162,11 +1214,7 @@ interface CourseStatisticsDto {
   publishedCourses: number;
   totalEnrollments: number;
   averageEnrollmentRate: number;   // Percentage
-  coursesByLevel: {
-    BEGINNER: number;
-    INTERMEDIATE: number;
-    ADVANCED: number;
-  };
+  coursesByLevel: Record<'BEGINNER' | 'ELEMENTARY' | 'PRE_INTERMEDIATE' | 'INTERMEDIATE' | 'UPPER_INTERMEDIATE' | 'ADVANCED' | 'PROFICIENCY', number>;
   coursesByStatus: {
     ACTIVE: number;
     INACTIVE: number;
@@ -1180,7 +1228,7 @@ interface CourseStatisticsDto {
 
 ### 12. Publish Course
 
-**Endpoint:** `PUT /api/v1/courses/{id}/publish`
+**Endpoint:** `PATCH /api/v1/courses/{id}/publish`
 
 **Roles:** `ADMIN`
 
@@ -1198,7 +1246,7 @@ interface CourseStatisticsDto {
 
 ### 13. Unpublish Course
 
-**Endpoint:** `PUT /api/v1/courses/{id}/unpublish`
+**Endpoint:** `PATCH /api/v1/courses/{id}/unpublish`
 
 **Roles:** `ADMIN`
 
@@ -1216,7 +1264,7 @@ interface CourseStatisticsDto {
 
 ### 14. Activate Course
 
-**Endpoint:** `PUT /api/v1/courses/{id}/activate`
+**Endpoint:** `PATCH /api/v1/courses/{id}/activate`
 
 **Roles:** `ADMIN`
 
@@ -1234,7 +1282,7 @@ interface CourseStatisticsDto {
 
 ### 15. Deactivate Course
 
-**Endpoint:** `PUT /api/v1/courses/{id}/deactivate`
+**Endpoint:** `PATCH /api/v1/courses/{id}/deactivate`
 
 **Roles:** `ADMIN`
 
@@ -1250,7 +1298,7 @@ interface CourseStatisticsDto {
 
 ---
 
-## 📝 Enrollments Endpoints
+##  Enrollments Endpoints
 
 ### 1. Get Enrollment by ID
 
@@ -1283,7 +1331,7 @@ interface CourseStatisticsDto {
 ```typescript
 {
   page?: number;
-  size?: number;
+  limit?: number;
 }
 ```
 
@@ -1342,7 +1390,7 @@ interface StudentEnrollmentHistoryDto {
 ```typescript
 {
   page?: number;
-  size?: number;
+  limit?: number;
 }
 ```
 
@@ -1386,6 +1434,9 @@ interface UpdateEnrollmentRequest {
 }
 ```
 
+**Errores:**
+- `403 Forbidden`: `TEACHER` intentando actualizar inscripción de curso no asignado
+
 ---
 
 ### 6. Delete Enrollment
@@ -1406,7 +1457,529 @@ interface UpdateEnrollmentRequest {
 
 ---
 
-## 📝 Exams Endpoints
+### 7. Bulk Create Enrollments
+
+**Endpoint:** `POST /api/v1/enrollments/bulk`
+
+**Roles:** `ADMIN`, `TEACHER`
+
+**Request:**
+```typescript
+interface BulkEnrollmentRequest {
+  courseId: number;              // Curso donde se inscribirán los estudiantes
+  studentIds: number[];          // Lista de IDs de estudiantes a inscribir
+}
+```
+
+**Response (201 Created):**
+```typescript
+{
+  success: true;
+  data: EnrollmentDto[];
+  message: "Bulk enrollments created successfully";
+  timestamp: string;
+}
+```
+
+**Errores:**
+- `400 Bad Request`: Request inválido (courseId faltante o studentIds vacío)
+- `404 Not Found`: Curso no existe
+- `403 Forbidden`: `TEACHER` intentando inscribir en curso no asignado
+- `409 Conflict`: Curso lleno
+
+**Notas de comportamiento:**
+- IDs de estudiantes duplicados en el payload se deduplican automáticamente.
+- Si un estudiante ya estaba `ACTIVE` en el curso, se omite de la creación masiva.
+
+---
+
+##  Attendance Endpoints
+
+### 1. Get Attendance by ID
+
+**Endpoint:** `GET /api/v1/attendance/{id}`
+
+**Roles:** `ADMIN`, `TEACHER`
+
+**Response (200 OK):**
+```typescript
+{
+  success: true;
+  data: AttendanceDto;
+  message: string;
+  timestamp: string;
+}
+
+interface AttendanceDto {
+  id: number;
+  enrollmentId: number;
+  studentId: number;
+  studentName?: string;          // Nombre del estudiante (opcional)
+  courseId: number;
+  courseName: string;
+  attendanceDate: string;        // ISO date (YYYY-MM-DD)
+  status: 'PRESENT' | 'ABSENT' | 'LATE' | 'EXCUSED_ABSENCE' | 'SICK_LEAVE';
+  notes?: string;
+  recordedBy: number;            // ID del profesor que registró
+  recordedByName?: string;       // Nombre del profesor (opcional)
+  createdAt: string;             // ISO datetime
+  updatedAt: string;             // ISO datetime
+}
+```
+
+**Errores:**
+- `404 Not Found`: Attendance record no existe
+
+---
+
+### 2. Get Attendance by Course
+
+**Endpoint:** `GET /api/v1/attendance/course/{courseId}`
+
+**Roles:** `ADMIN`, `TEACHER`
+
+**Query Params:**
+```typescript
+{
+  page?: number;        // Default: 0
+  limit?: number;       // Default: 10
+}
+```
+
+**Response (200 OK):**
+```typescript
+{
+  success: true;
+  data: {
+    content: AttendanceDto[];
+    page: number;
+    size: number;
+    totalElements: number;
+    totalPages: number;
+    last: boolean;
+  };
+  message: string;
+  timestamp: string;
+}
+```
+
+---
+
+### 3. Get Attendance by Student
+
+**Endpoint:** `GET /api/v1/attendance/student/{studentId}`
+
+**Roles:** `ADMIN`, `TEACHER`, `GUARDIAN` (solo estudiantes propios)
+
+**Query Params:**
+```typescript
+{
+  page?: number;        // Default: 0
+  limit?: number;       // Default: 10
+}
+```
+
+**Response (200 OK):**
+```typescript
+{
+  success: true;
+  data: {
+    content: AttendanceDto[];
+    page: number;
+    size: number;
+    totalElements: number;
+    totalPages: number;
+    last: boolean;
+  };
+  message: string;
+  timestamp: string;
+}
+```
+
+**Errores:**
+- `403 Forbidden`: Guardian intentando ver estudiante de otro tutor
+
+---
+
+### 4. Record Attendance
+
+**Endpoint:** `POST /api/v1/attendance`
+
+**Roles:** `ADMIN`, `TEACHER`
+
+**Request:**
+```typescript
+interface CreateAttendanceRequest {
+  enrollmentId: number;
+  attendanceDate: string;        // ISO date (YYYY-MM-DD)
+  status: 'PRESENT' | 'ABSENT' | 'LATE' | 'EXCUSED_ABSENCE' | 'SICK_LEAVE';
+  notes?: string;
+}
+```
+
+**Response (201 Created):**
+```typescript
+{
+  success: true;
+  data: AttendanceDto;
+  message: "Attendance recorded successfully";
+  timestamp: string;
+}
+```
+
+**Errores:**
+- `400 Bad Request`: Validación fallida
+- `409 Conflict`: Asistencia ya registrada para ese día
+
+---
+
+### 5. Bulk Record Attendance
+
+**Endpoint:** `POST /api/v1/attendance/bulk`
+
+**Roles:** `ADMIN`, `TEACHER`
+
+**Request:**
+```typescript
+interface BulkAttendanceRequest {
+  courseSessionId?: number;      // Alias histórico; para compatibilidad también se acepta courseId
+  courseId?: number;
+  date: string;                  // ISO date (YYYY-MM-DD) - alias soportado: attendanceDate
+  records: StudentAttendanceRecord[]; // alias soportado: attendances
+}
+
+interface StudentAttendanceRecord {
+  enrollmentId: number;
+  status: 'PRESENT' | 'ABSENT' | 'LATE' | 'EXCUSED_ABSENCE' | 'SICK_LEAVE';
+  notes?: string;
+}
+```
+
+**Reglas de negocio:**
+- Si viene `courseId`, todos los `records[].enrollmentId` deben pertenecer a ese curso.
+- Si no viene `courseId`, el backend infiere el curso desde los enrollments y exige que todos sean del mismo curso.
+- Si un registro ya existe en la misma fecha, se actualiza (upsert).
+
+**Response (201 Created):**
+```typescript
+{
+  success: true;
+  data: AttendanceDto[];
+  message: "Bulk attendance recorded successfully";
+  timestamp: string;
+}
+```
+
+---
+
+### 6. Update Attendance
+
+**Endpoint:** `PUT /api/v1/attendance/{id}`
+
+**Roles:** `ADMIN`, `TEACHER`
+
+**Request:**
+```typescript
+interface UpdateAttendanceRequest {
+  status?: 'PRESENT' | 'ABSENT' | 'LATE' | 'EXCUSED_ABSENCE' | 'SICK_LEAVE';
+  notes?: string;
+}
+```
+
+**Response (200 OK):**
+```typescript
+{
+  success: true;
+  data: AttendanceDto;
+  message: "Attendance updated successfully";
+  timestamp: string;
+}
+```
+
+---
+
+### 7. Delete Attendance
+
+**Endpoint:** `DELETE /api/v1/attendance/{id}`
+
+**Roles:** `ADMIN`
+
+**Response (200 OK):**
+```typescript
+{
+  success: true;
+  data: null;
+  message: "Attendance deleted successfully";
+  timestamp: string;
+}
+```
+
+---
+
+### 8. Get Attendance Statistics
+
+**Endpoint:** `GET /api/v1/attendance/enrollment/{enrollmentId}/statistics`
+
+**Roles:** `ADMIN`, `TEACHER`, `GUARDIAN`
+
+**Response (200 OK):**
+```typescript
+{
+  success: true;
+  data: AttendanceStatisticsDto;
+  message: string;
+  timestamp: string;
+}
+
+interface AttendanceStatisticsDto {
+  enrollmentId: number;
+  studentId: number;
+  studentName?: string;
+  totalClasses: number;
+  present: number;
+  absent: number;
+  late: number;
+  excusedAbsence: number;
+  sickLeave: number;
+  attendanceRate: number;        // Porcentaje (0-100)
+}
+```
+
+---
+
+### 9. Get Course Attendance Report
+
+**Endpoint:** `GET /api/v1/attendance/course/{courseId}/report/{date}`
+
+**Roles:** `ADMIN`, `TEACHER`
+
+**Path Params:**
+```typescript
+{
+  courseId: number;
+  date: string;                  // ISO date (YYYY-MM-DD)
+}
+```
+
+**Response (200 OK):**
+```typescript
+{
+  success: true;
+  data: CourseAttendanceReportDto;
+  message: string;
+  timestamp: string;
+}
+
+interface CourseAttendanceReportDto {
+  courseId: number;
+  courseName: string;
+  date: string;                  // ISO date (YYYY-MM-DD)
+  totalEnrolled: number;
+  totalPresent: number;
+  totalAbsent: number;
+  attendanceRate: number;        // Porcentaje
+  attendances: AttendanceDto[];
+}
+```
+
+---
+
+##  Course Materials Endpoints
+
+> **Estado actual**: implementado y protegido para `ADMIN` y `TEACHER`.
+> Para `TEACHER` aplica ownership: solo puede gestionar materiales de sus cursos asignados.
+> Validado con corrida E2E (Postman/Newman) el 17/05/2026: `200/201` en flujo feliz, `404` en material inexistente, `403` en curso no asignado.
+
+### Tipos relevantes
+
+```typescript
+type MaterialType =
+  | 'PDF'
+  | 'VIDEO'
+  | 'AUDIO'
+  | 'IMAGE'
+  | 'DOCUMENT'
+  | 'PRESENTATION'
+  | 'LINK'
+  | 'ZIP'
+  | 'OTHER';
+
+interface CourseMaterialDto {
+  id: number;
+  courseId: number;
+  courseName: string;
+  title: string;
+  description: string | null;
+  type: MaterialType;
+  fileUrl: string;
+  fileName: string | null;
+  fileSize: number | null;
+  mimeType: string | null;
+  uploadedBy: number;
+  uploadedByName?: string | null;
+  isVisible: boolean;
+  orderIndex: number;
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+### 1. Get Material by ID
+
+**Endpoint:** `GET /api/v1/materials/{id}`
+
+**Roles:** `ADMIN`, `TEACHER`
+
+**Errores:**
+- `404 Not Found`: material no existe
+- `403 Forbidden`: `TEACHER` intentando acceder a material de curso no asignado
+
+---
+
+### 2. Get Materials by Course
+
+**Endpoint:** `GET /api/v1/materials/course/{courseId}`
+
+**Roles:** `ADMIN`, `TEACHER`
+
+**Query Params:**
+```typescript
+{
+  page?: number;        // Default: 0
+  limit?: number;       // Default: 10
+  visibleOnly?: boolean; // Default: false
+}
+```
+
+**Errores:**
+- `404 Not Found`: curso no existe
+- `403 Forbidden`: `TEACHER` intentando consultar curso no asignado
+
+---
+
+### 3. Get Materials by Course and Type
+
+**Endpoint:** `GET /api/v1/materials/course/{courseId}/type/{type}`
+
+**Roles:** `ADMIN`, `TEACHER`
+
+**Path Params:**
+```typescript
+{
+  courseId: number;
+  type: MaterialType;
+}
+```
+
+---
+
+### 4. Create Material
+
+**Endpoint:** `POST /api/v1/materials`
+
+**Roles:** `ADMIN`, `TEACHER`
+
+**Request:**
+```typescript
+interface CreateCourseMaterialRequest {
+  courseId: number;
+  title: string;
+  description?: string;
+  type: MaterialType;
+  fileUrl: string;
+  fileName?: string;
+  fileSize?: number;
+  mimeType?: string;
+  isVisible?: boolean;  // default true
+  orderIndex?: number;  // default 0
+}
+```
+
+**Reglas de negocio:**
+- `uploadedBy` se toma del JWT (no del body).
+- `TEACHER` solo puede crear en cursos propios.
+
+---
+
+### 5. Update Material
+
+**Endpoint:** `PUT /api/v1/materials/{id}`
+
+**Roles:** `ADMIN`, `TEACHER`
+
+**Request:**
+```typescript
+interface UpdateCourseMaterialRequest {
+  title?: string;
+  description?: string;
+  type?: MaterialType;
+  fileUrl?: string;
+  fileName?: string;
+  fileSize?: number;
+  mimeType?: string;
+  isVisible?: boolean;
+  orderIndex?: number;
+}
+```
+
+---
+
+### 6. Delete Material
+
+**Endpoint:** `DELETE /api/v1/materials/{id}`
+
+**Roles:** `ADMIN`, `TEACHER`
+
+---
+
+### 7. Reorder Materials
+
+**Endpoint:** `PUT /api/v1/materials/course/{courseId}/reorder`
+
+**Roles:** `ADMIN`, `TEACHER`
+
+**Request:**
+```typescript
+interface ReorderMaterialsRequest {
+  materialOrders: {
+    materialId: number;
+    orderIndex: number;
+  }[];
+}
+```
+
+---
+
+### 8. Toggle Visibility
+
+**Endpoint:** `PUT /api/v1/materials/{id}/toggle-visibility`
+
+**Roles:** `ADMIN`, `TEACHER`
+
+---
+
+### 9. Get Materials Statistics
+
+**Endpoint:** `GET /api/v1/materials/course/{courseId}/statistics`
+
+**Roles:** `ADMIN`, `TEACHER`
+
+**Response data:** `CourseMaterialsStatisticsDto`
+
+```typescript
+interface CourseMaterialsStatisticsDto {
+  courseId: number;
+  courseName: string;
+  totalMaterials: number;
+  visibleMaterials: number;
+  materialsByType: Record<MaterialType, number>;
+  totalFileSize: number;
+}
+```
+
+---
+
+##  Exams Endpoints
 
 > **Actualizado**: Mayo 2026 — alineado con backend real (`ExamController` + `ExamSubmissionController`).
 
@@ -1693,7 +2266,7 @@ interface CompareTeachersRequest {
 
 ---
 
-## 👔 Staff Endpoints
+##  Staff Endpoints
 
 > **Actualizado**: Marzo 2026 — Integración completa con frontend (Angular).
 
@@ -2263,19 +2836,19 @@ type AttendanceStatus =
 
 
 
-## 💳 Payments Endpoints
+##  Payments Endpoints
 
 > **Nota**: Este módulo está en desarrollo. Los endpoints serán documentados próximamente.
 
 ---
 
-## 📊 Reports Endpoints
+##  Reports Endpoints
 
 > **Nota**: Este módulo está en desarrollo. Los endpoints serán documentados próximamente.
 
 ---
 
-## 🔔 Communications/Notifications Endpoints
+##  Communications/Notifications Endpoints
 
 > **Nota**: Este módulo está en desarrollo. Los endpoints serán documentados próximamente.
 
@@ -2296,7 +2869,7 @@ type AttendanceStatus =
 
 ---
 
-## 📝 Notas para Integración Frontend
+##  Notas para Integración Frontend
 
 ### 1. Manejo de Tokens
 
@@ -2394,7 +2967,7 @@ export class ErrorHandlerService {
 
 ---
 
-## 🔄 Versionado de API
+##  Versionado de API
 
 - **Versión actual**: `v1`
 - Los cambios breaking se comunicarán con anticipación
@@ -2403,7 +2976,7 @@ export class ErrorHandlerService {
 
 ---
 
-## 📞 Soporte
+##  Soporte
 
 Para dudas o reportes de errores en la API:
 - **Email**: dev@sigep.edu.mx
@@ -2411,6 +2984,14 @@ Para dudas o reportes de errores en la API:
 
 ---
 
-**Última actualización**: Noviembre 2025  
-**Versión del contrato**: 1.0.0
+**Última actualización**: Mayo 17, 2026  
+**Versión del contrato**: 1.1.0
+
+**Cambios en v1.1.0:**
+- ✅ Cambio de PUT a PATCH para endpoints `/courses/{id}/publish`, `/unpublish`, `/activate`, `/deactivate`
+- ✅ Nuevo endpoint `POST /enrollments/bulk` para inscribir múltiples estudiantes
+- ✅ Nuevos endpoints de Attendance:
+  - `GET /attendance/course/{courseId}` - Listar asistencias por curso
+  - `GET /attendance/student/{studentId}` - Listar asistencias por estudiante
+  - Documentación completa de todos los endpoints de asistencia
 

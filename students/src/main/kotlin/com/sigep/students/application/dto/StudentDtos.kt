@@ -17,6 +17,7 @@ data class StudentDto(
     val currentCourseId: Long?,
     val currentCourseName: String?,
     val active: Boolean,
+    val photoUrl: String?,
     val phoneNumber: String,
     val address: String,
     val createdAt: LocalDateTime,
@@ -42,6 +43,7 @@ data class StudentDetailDto(
     val currentCourseId: Long?,
     val currentCourseName: String?,
     val active: Boolean,
+    val photoUrl: String?,
     val courseHistory: List<EnrollmentSummaryDto>,  // Usar DTO de common
     val createdAt: LocalDateTime,
     val updatedAt: LocalDateTime
@@ -114,31 +116,31 @@ data class GuardianStudentRegistrationRequest(
 
 data class UpdateStudentRequest(
     @field:Size(min = 1, max = 100)
-    val firstName: String?,
+    val firstName: String? = null,
 
     @field:Size(min = 1, max = 100)
-    val lastName: String?,
+    val lastName: String? = null,
 
     @field:Email(message = "Invalid email format")
-    val email: String?,
+    val email: String? = null,
 
-    val documentNumber: String?,
+    val documentNumber: String? = null,
 
     @field:Past(message = "Date of birth must be in the past")
-    val dateOfBirth: LocalDate?,
+    val dateOfBirth: LocalDate? = null,
 
-    val enrollmentDate: LocalDate?,
+    val enrollmentDate: LocalDate? = null,
 
-    val address: String?,
+    val address: String? = null,
 
-    val phoneNumber: String?,
+    val phoneNumber: String? = null,
 
-    val emergencyContact: String?,
+    val emergencyContact: String? = null,
 
-    val guardianId: Long?,
+    val guardianId: Long? = null,
 
-    val medicalNotes: String?,
+    val medicalNotes: String? = null,
 
-    val active: Boolean?
+    val active: Boolean? = null
 )
 

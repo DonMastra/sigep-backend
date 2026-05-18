@@ -53,6 +53,36 @@ class AttendanceService(
         return attendances.map { it.toDto() }
     }
 
+    fun getAttendanceByCourse(courseId: Long, page: Int, size: Int): PageResponse<AttendanceDto> {
+        logger.info("Fetching attendance for course: {}", courseId)
+
+        val pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "attendanceDate"))
+        val attendancePage = attendanceRepository.findByCourseId(courseId, pageable)
+
+        return PageResponse(
+            content = attendancePage.content.map { it.toDto() },
+            page = attendancePage.number,
+            size = attendancePage.size,
+            totalElements = attendancePage.totalElements,
+            totalPages = attendancePage.totalPages
+        )
+    }
+
+    fun getAttendanceByStudent(studentId: Long, page: Int, size: Int): PageResponse<AttendanceDto> {
+        logger.info("Fetching attendance for student: {}", studentId)
+
+        val pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "attendanceDate"))
+        val attendancePage = attendanceRepository.findByStudentId(studentId, pageable)
+
+        return PageResponse(
+            content = attendancePage.content.map { it.toDto() },
+            page = attendancePage.number,
+            size = attendancePage.size,
+            totalElements = attendancePage.totalElements,
+            totalPages = attendancePage.totalPages
+        )
+    }
+
     fun recordAttendance(request: CreateAttendanceRequest, recordedBy: Long): AttendanceDto {
         logger.info("Recording attendance for enrollment: {}", request.enrollmentId)
 
@@ -86,21 +116,22 @@ class AttendanceService(
     }
 
     fun recordBulkAttendance(request: BulkAttendanceRequest, recordedBy: Long): List<AttendanceDto> {
-        logger.info("Recording bulk attendance for course {} on {}", request.courseId, request.attendanceDate)
+        val resolvedCourseId = resolveBulkCourseId(request)
+        logger.info("Recording bulk attendance for course {} on {}", resolvedCourseId, request.date)
 
-        val attendances = request.attendances.map { record ->
+        val savedAttendances = request.records.map { record ->
             val enrollment = enrollmentRepository.findById(record.enrollmentId)
                 .orElseThrow { ResourceNotFoundException("Enrollment not found with id: ${record.enrollmentId}") }
 
             // Verificar que el enrollment pertenezca al curso
-            if (enrollment.course.id != request.courseId) {
-                throw BusinessException("Enrollment ${record.enrollmentId} does not belong to course ${request.courseId}")
+            if (enrollment.course.id != resolvedCourseId) {
+                throw BusinessException("Enrollment ${record.enrollmentId} does not belong to course $resolvedCourseId")
             }
 
             // Verificar si ya existe, si existe actualizar, si no crear
             val existingAttendance = attendanceRepository.findByEnrollmentIdAndAttendanceDate(
                 record.enrollmentId,
-                request.attendanceDate
+                request.date
             )
 
             if (existingAttendance.isPresent) {
@@ -114,7 +145,7 @@ class AttendanceService(
             } else {
                 val newAttendance = Attendance(
                     enrollment = enrollment,
-                    attendanceDate = request.attendanceDate,
+                    attendanceDate = request.date,
                     status = record.status,
                     notes = record.notes,
                     recordedBy = recordedBy,
@@ -125,8 +156,30 @@ class AttendanceService(
             }
         }
 
-        logger.info("Bulk attendance recorded successfully for {} students", attendances.size)
-        return getAttendanceByCourseAndDate(request.courseId, request.attendanceDate)
+        logger.info("Bulk attendance recorded successfully for {} students", savedAttendances.size)
+        return savedAttendances.map { it.toDto() }
+    }
+
+    private fun resolveBulkCourseId(request: BulkAttendanceRequest): Long {
+        if (request.courseId != null) {
+            return request.courseId
+        }
+
+        if (request.records.isEmpty()) {
+            throw BusinessException("Attendance records cannot be empty")
+        }
+
+        val enrollments = request.records.map { record ->
+            enrollmentRepository.findById(record.enrollmentId)
+                .orElseThrow { ResourceNotFoundException("Enrollment not found with id: ${record.enrollmentId}") }
+        }
+
+        val courseIds = enrollments.mapNotNull { it.course.id }.distinct()
+        if (courseIds.size != 1) {
+            throw BusinessException("All attendance records must belong to the same course")
+        }
+
+        return courseIds.first()
     }
 
     fun updateAttendance(id: Long, request: UpdateAttendanceRequest, recordedBy: Long): AttendanceDto {

@@ -1,5 +1,6 @@
 package com.sigep.courses.application.service
 
+import com.sigep.common.application.exception.ForbiddenException
 import com.sigep.common.application.dto.PageResponse
 import com.sigep.common.domain.exception.ResourceNotFoundException
 import com.sigep.common.domain.exception.BusinessException
@@ -200,11 +201,15 @@ class CourseService(
     }
 
     @CacheEvict(value = ["courses"], key = "#courseId")
-    fun enrollStudent(courseId: Long, request: EnrollStudentRequest): EnrollmentDto {
+    fun enrollStudent(courseId: Long, request: EnrollStudentRequest, actorUserId: Long?, actorRole: String?): EnrollmentDto {
         logger.info("Enrolling student {} in course {}", request.studentId, courseId)
 
         val course = courseRepository.findById(courseId)
             .orElseThrow { ResourceNotFoundException("Course not found with id: $courseId") }
+
+        if (actorRole == "TEACHER" && actorUserId != course.teacherId) {
+            throw ForbiddenException("Teachers can only enroll students in their assigned courses")
+        }
 
         // Verificar si el estudiante ya está inscrito
         val existingEnrollment = enrollmentRepository.findByStudentIdAndCourseId(request.studentId, courseId)
@@ -326,6 +331,11 @@ class CourseService(
 
         if (course.schedules.isEmpty()) {
             throw BusinessException("Cannot publish a course without schedules")
+        }
+
+        val activeEnrollments = enrollmentRepository.countActiveEnrollmentsByCourse(id).toInt()
+        if (activeEnrollments < course.minStudents) {
+            throw BusinessException("Cannot publish course with fewer than minimum required students")
         }
 
         val updatedCourse = course.copy(
@@ -466,6 +476,7 @@ class CourseService(
     private fun Enrollment.toDto() = EnrollmentDto(
         id = id!!,
         studentId = studentId,
+        studentName = null,
         courseId = course.id!!,
         courseName = course.name,
         enrollmentDate = enrollmentDate,

@@ -18,8 +18,11 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
+import org.springframework.core.io.InputStreamResource
+import org.springframework.http.MediaType
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
+import org.springframework.web.multipart.MultipartFile
 import org.springframework.web.bind.annotation.*
 
 @RestController
@@ -110,6 +113,33 @@ class StudentController(
     ): ResponseEntity<ApiResponse<StudentDto>> {
         val student = studentService.updateStudent(id, request)
         return ResponseEntity.ok(ApiResponse.success(student, "Student updated successfully"))
+    }
+
+    @PostMapping("/{id}/photo", consumes = [MediaType.MULTIPART_FORM_DATA_VALUE])
+    @RequireAdmin
+    @Operation(summary = "Upload student profile photo", description = "Upload and persist student photo URL")
+    fun uploadStudentPhoto(
+        @PathVariable id: Long,
+        @RequestPart("file") file: MultipartFile
+    ): ResponseEntity<ApiResponse<StudentDto>> {
+        val student = studentService.uploadStudentPhoto(id, file)
+        return ResponseEntity.ok(ApiResponse.success(student, "Student photo uploaded successfully"))
+    }
+
+    @GetMapping("/{id}/photo")
+    @RequireStaffOrGuardian
+    @Operation(summary = "Get student profile photo", description = "Download student photo if available")
+    fun getStudentPhoto(@PathVariable id: Long): ResponseEntity<InputStreamResource> {
+        val photoFile = studentService.getStudentPhotoFile(id)
+        val contentType = when (photoFile.extension.lowercase()) {
+            "png" -> MediaType.IMAGE_PNG
+            "webp" -> MediaType.parseMediaType("image/webp")
+            else -> MediaType.IMAGE_JPEG
+        }
+
+        return ResponseEntity.ok()
+            .contentType(contentType)
+            .body(InputStreamResource(photoFile.inputStream()))
     }
 
     @DeleteMapping("/{id}")

@@ -5,6 +5,7 @@ import com.sigep.common.application.dto.PageResponse
 import com.sigep.courses.application.dto.EnrollmentDto
 import com.sigep.courses.application.dto.StudentEnrollmentHistoryDto
 import com.sigep.courses.application.dto.UpdateEnrollmentRequest
+import com.sigep.courses.application.dto.BulkEnrollmentRequest
 import com.sigep.courses.application.service.EnrollmentService
 import com.sigep.security.application.annotation.RequireAdminOrTeacher
 import com.sigep.security.application.annotation.RequireStaffOrGuardian
@@ -12,6 +13,7 @@ import com.sigep.security.application.annotation.RequireAdmin
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
+import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
@@ -71,9 +73,13 @@ class EnrollmentController(
     @Operation(summary = "Update enrollment", description = "Update enrollment details including status and grades")
     fun updateEnrollment(
         @PathVariable id: Long,
-        @Valid @RequestBody request: UpdateEnrollmentRequest
+        @Valid @RequestBody request: UpdateEnrollmentRequest,
+        httpRequest: HttpServletRequest
     ): ResponseEntity<ApiResponse<EnrollmentDto>> {
-        val enrollment = enrollmentService.updateEnrollment(id, request)
+        val userId = httpRequest.getAttribute("userId") as? Long
+        val userRole = httpRequest.getAttribute("userRole") as? String
+
+        val enrollment = enrollmentService.updateEnrollment(id, request, userId, userRole)
         return ResponseEntity.ok(ApiResponse.success(enrollment, "Enrollment updated successfully"))
     }
 
@@ -83,6 +89,21 @@ class EnrollmentController(
     fun deleteEnrollment(@PathVariable id: Long): ResponseEntity<ApiResponse<Unit>> {
         enrollmentService.deleteEnrollment(id)
         return ResponseEntity.ok(ApiResponse.successNoContent("Enrollment deleted successfully"))
+    }
+
+    @PostMapping("/bulk")
+    @RequireAdminOrTeacher
+    @Operation(summary = "Bulk create enrollments", description = "Enroll multiple students in a course")
+    fun createBulkEnrollments(
+        @Valid @RequestBody request: BulkEnrollmentRequest,
+        httpRequest: HttpServletRequest
+    ): ResponseEntity<ApiResponse<List<EnrollmentDto>>> {
+        val userId = httpRequest.getAttribute("userId") as? Long
+        val userRole = httpRequest.getAttribute("userRole") as? String
+        val enrollments = enrollmentService.createBulkEnrollments(request, userId, userRole)
+        return ResponseEntity
+            .status(org.springframework.http.HttpStatus.CREATED)
+            .body(ApiResponse.success(enrollments, "Bulk enrollments created successfully"))
     }
 }
 

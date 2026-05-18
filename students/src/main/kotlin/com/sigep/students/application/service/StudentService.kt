@@ -5,6 +5,7 @@ import com.sigep.common.application.exception.ForbiddenException
 import com.sigep.common.application.exception.ValidationException
 import com.sigep.common.domain.exception.ResourceNotFoundException
 import com.sigep.common.domain.exception.DuplicateResourceException
+import com.sigep.common.domain.exception.BusinessException
 import com.sigep.common.application.service.EnrollmentServiceProvider
 import com.sigep.security.domain.model.UserRole
 import com.sigep.security.domain.repository.UserRepository
@@ -18,9 +19,12 @@ import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.web.multipart.MultipartFile
 import java.math.BigDecimal
+import java.io.File
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.util.Locale
 
 @Service
 @Transactional
@@ -31,6 +35,9 @@ class StudentService(
 ) {
 
     private val logger = LoggerFactory.getLogger(StudentService::class.java)
+    private val maxPhotoSizeBytes = 5L * 1024L * 1024L
+    private val allowedPhotoExtensions = setOf("jpg", "jpeg", "png", "webp")
+    private val photoBaseDirectory = File(System.getProperty("java.io.tmpdir"), "sigep/student-photos")
 
     @Cacheable(value = ["students"], key = "#id")
     fun getStudentById(id: Long): StudentDto {
@@ -204,6 +211,7 @@ class StudentService(
             emergencyContact = request.emergencyContact ?: student.emergencyContact,
             guardianId = request.guardianId ?: student.guardianId,
             medicalNotes = request.medicalNotes ?: student.medicalNotes,
+            photoUrl = student.photoUrl,
             active = request.active ?: student.active,
             updatedAt = LocalDateTime.now()
         )
@@ -212,6 +220,57 @@ class StudentService(
         logger.info("Student updated successfully with id: {}", savedStudent.id)
 
         return savedStudent.toDto()
+    }
+
+    @CacheEvict(value = ["students", "students_detail"], key = "#id")
+    fun uploadStudentPhoto(id: Long, photo: MultipartFile): StudentDto {
+        logger.info("Uploading profile photo for student: {}", id)
+
+        if (photo.isEmpty) {
+            throw ValidationException("Photo file is empty")
+        }
+
+        if (photo.size > maxPhotoSizeBytes) {
+            throw ValidationException("Photo size exceeds 5MB limit")
+        }
+
+        val extension = extractAllowedExtension(photo.originalFilename)
+        val student = studentRepository.findById(id)
+            .orElseThrow { ResourceNotFoundException("Student not found with id: $id") }
+
+        if (!photoBaseDirectory.exists() && !photoBaseDirectory.mkdirs()) {
+            throw BusinessException("Unable to create directory for student photos")
+        }
+
+        val photoFile = File(photoBaseDirectory, "student-$id.$extension")
+        photo.transferTo(photoFile)
+
+        val photoUrl = "/api/v1/students/$id/photo"
+        val savedStudent = studentRepository.save(
+            student.copy(
+                photoUrl = photoUrl,
+                updatedAt = LocalDateTime.now()
+            )
+        )
+
+        logger.info("Profile photo uploaded successfully for student: {}", id)
+        return savedStudent.toDto()
+    }
+
+    fun getStudentPhotoFile(id: Long): File {
+        val student = studentRepository.findById(id)
+            .orElseThrow { ResourceNotFoundException("Student not found with id: $id") }
+
+        if (student.photoUrl.isNullOrBlank()) {
+            throw ResourceNotFoundException("Student photo not found for student id: $id")
+        }
+
+        val photoFile = allowedPhotoExtensions
+            .map { File(photoBaseDirectory, "student-$id.$it") }
+            .firstOrNull { it.exists() }
+            ?: throw ResourceNotFoundException("Student photo file not found for student id: $id")
+
+        return photoFile
     }
 
     @CacheEvict(value = ["students", "students_detail"], key = "#id")
@@ -282,6 +341,7 @@ class StudentService(
             currentCourseId = currentEnrollment?.courseId,
             currentCourseName = currentEnrollment?.courseName,
             active = active,
+            photoUrl = photoUrl,
             phoneNumber = phoneNumber,
             address = address,
             createdAt = createdAt,
@@ -312,6 +372,7 @@ class StudentService(
             currentCourseId = currentEnrollment?.courseId,
             currentCourseName = currentEnrollment?.courseName,
             active = active,
+            photoUrl = photoUrl,
             courseHistory = allEnrollments,  // Ya son EnrollmentSummaryDto
             createdAt = createdAt,
             updatedAt = updatedAt
@@ -329,6 +390,19 @@ class StudentService(
             throw ValidationException("Field $fieldName is required for guardian self-registration")
         }
         return resolvedValue
+    }
+
+    private fun extractAllowedExtension(originalFilename: String?): String {
+        val extension = originalFilename
+            ?.substringAfterLast('.', "")
+            ?.lowercase(Locale.getDefault())
+            ?.trim()
+
+        if (extension.isNullOrBlank() || extension !in allowedPhotoExtensions) {
+            throw ValidationException("Unsupported photo format. Allowed: ${allowedPhotoExtensions.joinToString(", ")}")
+        }
+
+        return extension
     }
 }
 

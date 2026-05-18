@@ -1,8 +1,9 @@
 package com.sigep.courses.application.service
 
 import com.sigep.common.application.dto.PageResponse
-import com.sigep.common.domain.exception.BusinessException
-import com.sigep.common.domain.exception.ResourceNotFoundException
+import com.sigep.common.application.exception.BusinessException
+import com.sigep.common.application.exception.ForbiddenException
+import com.sigep.common.application.exception.ResourceNotFoundException
 import com.sigep.courses.application.dto.*
 import com.sigep.courses.application.event.CourseEventPublisher
 import com.sigep.courses.domain.event.CourseMaterialUploadedEvent
@@ -27,15 +28,27 @@ class CourseMaterialService(
 
     private val logger = LoggerFactory.getLogger(CourseMaterialService::class.java)
 
-    fun getMaterialById(id: Long): CourseMaterialDto {
+    fun getMaterialById(id: Long, actorUserId: Long?, actorRole: String?): CourseMaterialDto {
         logger.info("Fetching course material with id: {}", id)
         val material = courseMaterialRepository.findById(id)
             .orElseThrow { ResourceNotFoundException("Course material not found with id: $id") }
+        validateTeacherAccess(actorUserId, actorRole, material.course.teacherId)
         return material.toDto()
     }
 
-    fun getMaterialsByCourse(courseId: Long, page: Int, size: Int, visibleOnly: Boolean = false): PageResponse<CourseMaterialDto> {
+    fun getMaterialsByCourse(
+        courseId: Long,
+        page: Int,
+        size: Int,
+        visibleOnly: Boolean = false,
+        actorUserId: Long?,
+        actorRole: String?
+    ): PageResponse<CourseMaterialDto> {
         logger.info("Fetching materials for course: {}, visibleOnly: {}", courseId, visibleOnly)
+
+        val course = courseRepository.findById(courseId)
+            .orElseThrow { ResourceNotFoundException("Course not found with id: $courseId") }
+        validateTeacherAccess(actorUserId, actorRole, course.teacherId)
 
         val pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "orderIndex"))
         val materialsPage = if (visibleOnly) {
@@ -53,8 +66,19 @@ class CourseMaterialService(
         )
     }
 
-    fun getMaterialsByCourseAndType(courseId: Long, type: MaterialType, page: Int, size: Int): PageResponse<CourseMaterialDto> {
+    fun getMaterialsByCourseAndType(
+        courseId: Long,
+        type: MaterialType,
+        page: Int,
+        size: Int,
+        actorUserId: Long?,
+        actorRole: String?
+    ): PageResponse<CourseMaterialDto> {
         logger.info("Fetching materials of type {} for course: {}", type, courseId)
+
+        val course = courseRepository.findById(courseId)
+            .orElseThrow { ResourceNotFoundException("Course not found with id: $courseId") }
+        validateTeacherAccess(actorUserId, actorRole, course.teacherId)
 
         val pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "orderIndex"))
         val materialsPage = courseMaterialRepository.findByCourseIdAndType(courseId, type, pageable)
@@ -68,11 +92,12 @@ class CourseMaterialService(
         )
     }
 
-    fun createMaterial(request: CreateCourseMaterialRequest, uploadedBy: Long): CourseMaterialDto {
+    fun createMaterial(request: CreateCourseMaterialRequest, uploadedBy: Long, actorRole: String?): CourseMaterialDto {
         logger.info("Creating course material for course: {}", request.courseId)
 
         val course = courseRepository.findById(request.courseId)
             .orElseThrow { ResourceNotFoundException("Course not found with id: ${request.courseId}") }
+        validateTeacherAccess(uploadedBy, actorRole, course.teacherId)
 
         val material = CourseMaterial(
             course = course,
@@ -108,11 +133,12 @@ class CourseMaterialService(
         return savedMaterial.toDto()
     }
 
-    fun updateMaterial(id: Long, request: UpdateCourseMaterialRequest): CourseMaterialDto {
+    fun updateMaterial(id: Long, request: UpdateCourseMaterialRequest, actorUserId: Long?, actorRole: String?): CourseMaterialDto {
         logger.info("Updating course material with id: {}", id)
 
         val material = courseMaterialRepository.findById(id)
             .orElseThrow { ResourceNotFoundException("Course material not found with id: $id") }
+        validateTeacherAccess(actorUserId, actorRole, material.course.teacherId)
 
         val updatedMaterial = material.copy(
             title = request.title ?: material.title,
@@ -133,19 +159,23 @@ class CourseMaterialService(
         return savedMaterial.toDto()
     }
 
-    fun deleteMaterial(id: Long) {
+    fun deleteMaterial(id: Long, actorUserId: Long?, actorRole: String?) {
         logger.info("Deleting course material with id: {}", id)
 
-        if (!courseMaterialRepository.existsById(id)) {
-            throw ResourceNotFoundException("Course material not found with id: $id")
-        }
+        val material = courseMaterialRepository.findById(id)
+            .orElseThrow { ResourceNotFoundException("Course material not found with id: $id") }
+        validateTeacherAccess(actorUserId, actorRole, material.course.teacherId)
 
-        courseMaterialRepository.deleteById(id)
+        courseMaterialRepository.delete(material)
         logger.info("Course material deleted successfully with id: {}", id)
     }
 
-    fun reorderMaterials(courseId: Long, request: ReorderMaterialsRequest): List<CourseMaterialDto> {
+    fun reorderMaterials(courseId: Long, request: ReorderMaterialsRequest, actorUserId: Long?, actorRole: String?): List<CourseMaterialDto> {
         logger.info("Reordering materials for course: {}", courseId)
+
+        val course = courseRepository.findById(courseId)
+            .orElseThrow { ResourceNotFoundException("Course not found with id: $courseId") }
+        validateTeacherAccess(actorUserId, actorRole, course.teacherId)
 
         request.materialOrders.forEach { order ->
             val material = courseMaterialRepository.findById(order.materialId)
@@ -166,11 +196,12 @@ class CourseMaterialService(
         return courseMaterialRepository.findByCourseIdOrderByOrderIndexAsc(courseId).map { it.toDto() }
     }
 
-    fun toggleVisibility(id: Long): CourseMaterialDto {
+    fun toggleVisibility(id: Long, actorUserId: Long?, actorRole: String?): CourseMaterialDto {
         logger.info("Toggling visibility for material: {}", id)
 
         val material = courseMaterialRepository.findById(id)
             .orElseThrow { ResourceNotFoundException("Course material not found with id: $id") }
+        validateTeacherAccess(actorUserId, actorRole, material.course.teacherId)
 
         val updatedMaterial = material.copy(
             isVisible = !material.isVisible,
@@ -183,11 +214,12 @@ class CourseMaterialService(
         return savedMaterial.toDto()
     }
 
-    fun getMaterialsStatistics(courseId: Long): CourseMaterialsStatisticsDto {
+    fun getMaterialsStatistics(courseId: Long, actorUserId: Long?, actorRole: String?): CourseMaterialsStatisticsDto {
         logger.info("Calculating materials statistics for course: {}", courseId)
 
         val course = courseRepository.findById(courseId)
             .orElseThrow { ResourceNotFoundException("Course not found with id: $courseId") }
+        validateTeacherAccess(actorUserId, actorRole, course.teacherId)
 
         val allMaterials = courseMaterialRepository.findByCourseIdOrderByOrderIndexAsc(courseId)
         val totalMaterials = allMaterials.size.toLong()
@@ -227,5 +259,11 @@ class CourseMaterialService(
         createdAt = createdAt,
         updatedAt = updatedAt
     )
+
+    private fun validateTeacherAccess(actorUserId: Long?, actorRole: String?, courseTeacherId: Long) {
+        if (actorRole == "TEACHER" && actorUserId != courseTeacherId) {
+            throw ForbiddenException("Teachers can only manage materials for their assigned courses")
+        }
+    }
 }
 

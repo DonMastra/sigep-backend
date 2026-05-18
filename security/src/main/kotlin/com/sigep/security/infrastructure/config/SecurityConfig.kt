@@ -51,7 +51,8 @@ class SecurityConfig(
                         "/api/v1/auth/register",
                         "/api/v1/auth/refresh",
                         "/api/v1/auth/refresh-token",
-                        "/api/v1/auth/registration-status"
+                        "/api/v1/auth/registration-status",
+                        "/api/v1/courses/published"
                     ).permitAll()
 
                     // Public endpoints - Documentation (only in development)
