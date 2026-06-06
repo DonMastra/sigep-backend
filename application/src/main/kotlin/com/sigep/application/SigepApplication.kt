@@ -19,7 +19,8 @@ import org.springframework.scheduling.annotation.EnableScheduling
     "com.sigep.students.domain.model",
     "com.sigep.courses.domain.model",
     "com.sigep.staff.domain.model",
-    "com.sigep.security.domain.model"
+    "com.sigep.security.domain.model",
+    "com.sigep.scheduling.domain.model"
 ])
 @EnableCaching
 @EnableScheduling
@@ -28,4 +29,3 @@ class SigepApplication
 fun main(args: Array<String>) {
 	runApplication<SigepApplication>(*args)
 }
-

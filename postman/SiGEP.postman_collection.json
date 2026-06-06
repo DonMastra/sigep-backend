@@ -22,6 +22,9 @@
     { "key": "studentId", "value": "1" },
     { "key": "guardianId", "value": "6" },
     { "key": "courseId", "value": "1" },
+    { "key": "classroomId", "value": "1" },
+    { "key": "slotId", "value": "1" },
+    { "key": "reservationId", "value": "1" },
     { "key": "enrollmentId", "value": "1" },
     { "key": "sessionId", "value": "1" },
     { "key": "materialId", "value": "1" },
@@ -508,6 +511,223 @@
             "method": "DELETE",
             "url": "{{baseUrl}}/api/v1/enrollments/{{enrollmentId}}"
           }
+        }
+      ]
+    },
+    {
+      "name": "Scheduling",
+      "item": [
+        {
+          "name": "Classrooms",
+          "item": [
+            {
+              "name": "Get All Classrooms",
+              "request": {
+                "method": "GET",
+                "url": "{{baseUrl}}/api/v1/classrooms?page=0&limit=20"
+              }
+            },
+            {
+              "name": "Get Active Classrooms",
+              "request": {
+                "method": "GET",
+                "url": "{{baseUrl}}/api/v1/classrooms?activeOnly=true"
+              }
+            },
+            {
+              "name": "Create Classroom (Save classroomId)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const json = pm.response.json();",
+                      "if (json?.data?.id) pm.collectionVariables.set('classroomId', String(json.data.id));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Aula Postman {{courseId}}\",\n  \"building\": \"Edificio Central\",\n  \"floor\": \"1\",\n  \"capacity\": 25\n}"
+                },
+                "url": "{{baseUrl}}/api/v1/classrooms"
+              }
+            },
+            {
+              "name": "Get Classroom By ID",
+              "request": {
+                "method": "GET",
+                "url": "{{baseUrl}}/api/v1/classrooms/{{classroomId}}"
+              }
+            },
+            {
+              "name": "Update Classroom",
+              "request": {
+                "method": "PUT",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"capacity\": 30,\n  \"building\": \"Edificio Central\"\n}"
+                },
+                "url": "{{baseUrl}}/api/v1/classrooms/{{classroomId}}"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Schedule Slots",
+          "item": [
+            {
+              "name": "Get All Slots",
+              "request": {
+                "method": "GET",
+                "url": "{{baseUrl}}/api/v1/scheduling/slots?page=0&limit=20"
+              }
+            },
+            {
+              "name": "Create Slot (Save slotId)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const json = pm.response.json();",
+                      "if (json?.data?.id) pm.collectionVariables.set('slotId', String(json.data.id));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"classroomId\": {{classroomId}},\n  \"dayOfWeek\": \"MONDAY\",\n  \"startTime\": \"09:00\",\n  \"endTime\": \"11:00\",\n  \"notes\": \"Slot creado desde Postman\"\n}"
+                },
+                "url": "{{baseUrl}}/api/v1/scheduling/slots"
+              }
+            },
+            {
+              "name": "Create Overlap Slot (Expect 409)",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"classroomId\": {{classroomId}},\n  \"dayOfWeek\": \"MONDAY\",\n  \"startTime\": \"10:00\",\n  \"endTime\": \"12:00\"\n}"
+                },
+                "url": "{{baseUrl}}/api/v1/scheduling/slots"
+              }
+            },
+            {
+              "name": "Get Slot By ID",
+              "request": {
+                "method": "GET",
+                "url": "{{baseUrl}}/api/v1/scheduling/slots/{{slotId}}"
+              }
+            },
+            {
+              "name": "Update Slot",
+              "request": {
+                "method": "PUT",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"endTime\": \"11:30\",\n  \"notes\": \"Slot actualizado desde Postman\"\n}"
+                },
+                "url": "{{baseUrl}}/api/v1/scheduling/slots/{{slotId}}"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reservations",
+          "item": [
+            {
+              "name": "Get Reservations",
+              "request": {
+                "method": "GET",
+                "url": "{{baseUrl}}/api/v1/scheduling/reservations?page=0&limit=20"
+              }
+            },
+            {
+              "name": "Get Available Reservations (Dropdown)",
+              "request": {
+                "method": "GET",
+                "url": "{{baseUrl}}/api/v1/scheduling/reservations/available?page=0&limit=20&classroomId={{classroomId}}&dayOfWeek=MONDAY&startTimeFrom=08:00&endTimeTo=18:00"
+              }
+            },
+            {
+              "name": "Create Reservation (Save reservationId)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const json = pm.response.json();",
+                      "if (json?.data?.id) pm.collectionVariables.set('reservationId', String(json.data.id));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"slotId\": {{slotId}}\n}"
+                },
+                "url": "{{baseUrl}}/api/v1/scheduling/reservations"
+              }
+            },
+            {
+              "name": "Get Reservation By ID",
+              "request": {
+                "method": "GET",
+                "url": "{{baseUrl}}/api/v1/scheduling/reservations/{{reservationId}}"
+              }
+            },
+            {
+              "name": "Assign Reservation To Course",
+              "request": {
+                "method": "PATCH",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"targetType\": \"COURSE\",\n  \"targetId\": {{courseId}}\n}"
+                },
+                "url": "{{baseUrl}}/api/v1/scheduling/reservations/{{reservationId}}/assign"
+              }
+            },
+            {
+              "name": "Unassign Reservation",
+              "request": {
+                "method": "PATCH",
+                "url": "{{baseUrl}}/api/v1/scheduling/reservations/{{reservationId}}/unassign"
+              }
+            },
+            {
+              "name": "Inactivate Reservation",
+              "request": {
+                "method": "DELETE",
+                "url": "{{baseUrl}}/api/v1/scheduling/reservations/{{reservationId}}"
+              }
+            },
+            {
+              "name": "Get Reservations By Status",
+              "request": {
+                "method": "GET",
+                "url": "{{baseUrl}}/api/v1/scheduling/reservations?page=0&limit=20&status=AVAILABLE"
+              }
+            }
+          ]
         }
       ]
     },

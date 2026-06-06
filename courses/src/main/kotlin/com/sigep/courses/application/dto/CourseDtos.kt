@@ -1,8 +1,9 @@
 package com.sigep.courses.application.dto
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties
+import com.sigep.common.application.service.ReservationInfo
 import com.sigep.courses.domain.model.CourseStatus
 import com.sigep.courses.domain.model.CourseLevel
-import com.sigep.courses.domain.model.DayOfWeek
 import jakarta.validation.constraints.*
 import java.math.BigDecimal
 import java.time.LocalDate
@@ -24,21 +25,16 @@ data class CourseDto(
     val endDate: LocalDate?,
     val status: CourseStatus,
     val isPublished: Boolean,
-    val schedules: List<CourseScheduleDto>,
+    val hasReservation: Boolean,
+    val reservationSummary: ReservationInfo? = null,
     val enrolledStudents: Int,
-    val availableSeats: Int, // maxStudents - enrolledStudents
-    val isEnrollmentOpen: Boolean, // Based on dates and capacity
+    val availableSeats: Int,
+    val isEnrollmentOpen: Boolean,
     val createdAt: LocalDateTime,
     val updatedAt: LocalDateTime
 )
 
-data class CourseScheduleDto(
-    val id: Long?,
-    val dayOfWeek: DayOfWeek,
-    val startTime: String,
-    val endTime: String
-)
-
+@JsonIgnoreProperties(ignoreUnknown = true)
 data class CreateCourseRequest(
     @field:NotBlank(message = "Course code is required")
     @field:Size(min = 3, max = 50)
@@ -77,24 +73,10 @@ data class CreateCourseRequest(
     val price: BigDecimal,
 
     val startDate: LocalDate? = null,
-
     val endDate: LocalDate? = null,
-
-    val isPublished: Boolean = false,
-
-    @field:NotEmpty(message = "At least one schedule is required")
-    val schedules: List<CreateCourseScheduleRequest> = emptyList()
-)
-
-data class CreateCourseScheduleRequest(
-    @field:NotNull(message = "Day of week is required")
-    val dayOfWeek: DayOfWeek,
-
-    @field:NotBlank(message = "Start time is required")
-    val startTime: String, // Format: HH:mm
-
-    @field:NotBlank(message = "End time is required")
-    val endTime: String // Format: HH:mm
+    val reservationId: Long? = null,
+    val status: CourseStatus? = null,
+    val isPublished: Boolean = false
 )
 
 data class UpdateCourseRequest(
@@ -127,11 +109,8 @@ data class UpdateCourseRequest(
     val price: BigDecimal?,
 
     val startDate: LocalDate?,
-
     val endDate: LocalDate?,
-
     val status: CourseStatus?,
-
     val isPublished: Boolean?
 )
 
@@ -142,18 +121,16 @@ data class EnrollStudentRequest(
     val notes: String? = null
 )
 
-// DTO for course statistics
 data class CourseStatisticsDto(
     val totalCourses: Long,
     val activeCourses: Long,
     val publishedCourses: Long,
     val totalEnrollments: Long,
-    val averageEnrollmentRate: Double, // Percentage
+    val averageEnrollmentRate: Double,
     val coursesByLevel: Map<CourseLevel, Long>,
     val coursesByStatus: Map<CourseStatus, Long>
 )
 
-// DTO for simple course info (for dropdowns, lists, etc.)
 data class CourseSimpleDto(
     val id: Long,
     val code: String,
@@ -161,10 +138,10 @@ data class CourseSimpleDto(
     val level: CourseLevel,
     val price: BigDecimal,
     val availableSeats: Int,
-    val isEnrollmentOpen: Boolean
+    val isEnrollmentOpen: Boolean,
+    val hasReservation: Boolean
 )
 
-// DTO for filtering courses
 data class CourseFilterRequest(
     val level: CourseLevel? = null,
     val status: CourseStatus? = null,
