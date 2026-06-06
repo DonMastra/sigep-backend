@@ -2,9 +2,9 @@
 
 ## Estado actual de estructura de Base de Datos (SiGEP)
 
-**Fecha de relevamiento:** 2026-05-10  
-**Ultima actualizacion:** 2026-05-10 (incluye V11)  
-**Entorno auditado:** `sigep_db` (PostgreSQL), contraste con codigo Kotlin actual + snapshot de `users`.
+**Fecha de relevamiento:** 2026-05-31  
+**Ultima actualizacion:** 2026-05-31 (incluye V12)  
+**Entorno auditado:** `sigep_db` (PostgreSQL 15), validado contra codigo Kotlin actual y migraciones SQL.
 
 ## 1) Fuente de verdad operativa
 
@@ -16,11 +16,19 @@ Orden de prioridad:
 
 ## 2) Snapshot estructural actual
 
-### Tablas detectadas: 19
-`course_attendance`, `course_certificates`, `course_materials`, `course_schedules`, `course_sessions`, `courses`, `enrollments`, `exam_grade_history`, `exam_submissions`, `exams`, `non_teaching_staff`, `notifications`, `payments`, `registration_requests`, `session_exceptions`, `staff_attendance`, `students`, `teaching_staff`, `users`.
+### Tablas detectadas: 21
+`classrooms`, `course_attendance`, `course_certificates`, `course_materials`, `course_sessions`, `courses`, `enrollments`, `exam_grade_history`, `exam_submissions`, `exams`, `non_teaching_staff`, `notifications`, `payments`, `registration_requests`, `reservations`, `schedule_slots`, `session_exceptions`, `staff_attendance`, `students`, `teaching_staff`, `users`.
+
+### Cambios de V12 (Scheduling)
+- Se elimina tabla legacy `course_schedules`.
+- Se crean tablas nuevas:
+  - `classrooms`
+  - `schedule_slots`
+  - `reservations`
+- Se agrega indice unico parcial `uq_slot_active_reservation` para garantizar maximo una reserva activa por slot (`status <> 'INACTIVE'`).
 
 ### PK por modulo
-- Modulos generales (`users`, `students`, `courses`, `staff`, `payments`, etc.): **BIGINT**.
+- Modulos generales (`users`, `students`, `courses`, `staff`, `scheduling`, etc.): **BIGINT**.
 - Modulo exams (`exams`, `exam_submissions`, `exam_grade_history`): **UUID** en PK.
 
 ### FK cross-modulo (vigentes)
@@ -30,81 +38,88 @@ Orden de prioridad:
 - `exam_submissions.graded_by` -> `users.id` (BIGINT)
 - `exam_grade_history.changed_by` -> `users.id` (BIGINT)
 
-## 3) Cambios recientes relevantes (V10 + V11)
+### FK de scheduling (V12)
+- `schedule_slots.classroom_id` -> `classrooms.id` (`ON DELETE RESTRICT`)
+- `reservations.slot_id` -> `schedule_slots.id` (`ON DELETE RESTRICT`)
+
+## 3) Cambios recientes relevantes (V10 + V11 + V12)
 
 | Version | Archivo | Resultado |
 |---|---|---|
 | V10 | `scripts/migrations/V10__auth_registration_approval_workflow.sql` | `users.status` + tabla `registration_requests` para aprobacion de registro |
-| V11 | `scripts/migrations/V11__extend_users_profile_fields.sql` | nuevos campos de perfil en `users` + indice/constraint para `document_number` |
+| V11 | `scripts/migrations/V11__extend_users_profile_fields.sql` | nuevos campos de perfil en `users` |
+| V12 | `scripts/migrations/V12__create_scheduling_module.sql` | nuevo esquema de scheduling (`classrooms`, `schedule_slots`, `reservations`) y drop de `course_schedules` |
 
-## 4) Tabla `users` (estado actual)
+## 4) Validacion ejecutada en BD (2026-05-31)
 
-### Columnas base (previas)
-- `id` (BIGINT, PK)
-- `username` (varchar, unique, not null)
-- `email` (varchar, unique, not null)
-- `password` (varchar, not null)
-- `first_name` (varchar, not null)
-- `last_name` (varchar, not null)
-- `role` (varchar, not null)
-- `status` (varchar, not null)
-- `active` (boolean, not null)
-- `created_at` (timestamp, not null)
-- `updated_at` (timestamp, not null)
+### Ejecucion de migracion
+- Script ejecutado: `scripts/migrations/V12__create_scheduling_module.sql`
+- Resultado: `DROP TABLE`, `CREATE TABLE` e indices creados sin error.
 
-### Columnas nuevas (V11)
-- `phone_number` (varchar(20), null)
-- `address` (varchar(500), null)
-- `date_of_birth` (date, null)
-- `document_number` (varchar(50), null)
-- `emergency_contact` (varchar(255), null)
+### Estado del esquema scheduling
+- `classrooms`: columnas y defaults correctos (`active=true`, timestamps con `now()`).
+- `schedule_slots`: constraint `chk_slot_day_of_week` vigente y FK a `classrooms` vigente.
+- `reservations`: constraints `chk_reservation_target_type` y `chk_reservation_status` vigentes.
+- Indices detectados:
+  - `idx_classroom_name`
+  - `idx_slot_classroom`
+  - `idx_slot_day`
+  - `idx_reservation_slot`
+  - `idx_reservation_status`
+  - `idx_reservation_target`
+  - `uq_slot_active_reservation` (unico parcial)
 
-### Restricciones/indices nuevos (V11)
-- Indice: `idx_users_document_number` en `users(document_number)`.
-- Constraint: `users_document_number_unique_not_null` (UNIQUE NULLS DISTINCT con `WHERE document_number IS NOT NULL`).
+### Estado de datos al cierre de validacion
+- `classrooms`: 0 filas
+- `schedule_slots`: 0 filas
+- `reservations`: 0 filas
 
-### Evidencia de coherencia
-- El snapshot de `users` exportado (CSV) ya refleja estas 5 columnas nuevas.
-- En codigo, `User.kt` mapea explicitamente:
-  - `phoneNumber` -> `phone_number`
-  - `address` -> `address`
-  - `dateOfBirth` -> `date_of_birth`
-  - `documentNumber` -> `document_number`
-  - `emergencyContact` -> `emergency_contact`
+### Verificacion de deprecacion legacy
+- `course_schedules_exists = false` (tabla removida correctamente).
 
-## 5) Trazabilidad BD <-> Codigo <-> API
+## 5) Validacion complementaria de `users`
+
+- Se ejecuto `scripts/validate-db-schema.sql` y se verifico:
+  - Persisten los campos extendidos (`phone_number`, `address`, `date_of_birth`, `document_number`, `emergency_contact`).
+  - No hubo regresiones funcionales por V12 sobre `users`.
+- Observacion: la base actual muestra indices `uk...` para `email` y `username`; no aparece `idx_users_document_number` en este entorno auditado.
+
+## 6) Trazabilidad BD <-> Codigo <-> API
 
 ### Seguridad/Auth
-- `POST /api/v1/auth/register` ahora acepta perfil extendido y persiste en `users`.
+- `POST /api/v1/auth/register` persiste perfil extendido en `users`.
 - `GET /api/v1/users/me` expone esos campos desde `users`.
 
-### Students
-- `POST /api/v1/students/self-registration` usa `userId` del JWT y puede precargar datos desde perfil de `users`.
-- `guardianId` de `students` se deriva del usuario autenticado (no del payload).
+### Scheduling
+- `CourseSchedule` queda deprecado en modelo y BD.
+- La asignacion horaria se modela con:
+  - `schedule_slots` (franjas por aula)
+  - `reservations` (asignacion a `COURSE` o `SESSION`)
 
-## 6) Scripts operativos de validacion y datos
+## 7) Scripts operativos de validacion
 
-- `scripts/validate-db-schema.sql` -> validacion SQL compatible con DBeaver.
+- `scripts/migrations/V12__create_scheduling_module.sql` -> migracion de scheduling.
+- `scripts/validate-db-schema.sql` -> validacion de esquema de `users`.
 - `scripts/validate-db-schema.sh` -> validacion por consola (psql).
-- `scripts/backfill_users_profile_fields_dbeaver.sql` -> backfill de campos nuevos en `users` para datos historicos.
 
-## 7) Brechas residuales
+## 8) Brechas residuales
 
 1. **Pipeline unico de migraciones**:
-   - Sigue pendiente consolidar ejecucion automatica de migraciones para todo el monolito.
+   - Pendiente consolidar ejecucion automatica para todo el monolito.
 
-2. **Scripts legacy de datos**:
-   - `scripts/insert-test-data.sql` puede contener referencias desactualizadas frente a limpieza V8.
+2. **Script de validacion general**:
+   - `scripts/validate-db-schema.sql` hoy valida principalmente `users`; conviene extenderlo para incluir `classrooms`, `schedule_slots` y `reservations`.
 
-3. **Datos historicos incompletos en perfil**:
-   - Usuarios preexistentes pueden quedar con campos de perfil en null hasta ejecutar backfill.
+3. **Datos semilla scheduling**:
+   - No hay seed inicial de aulas/slots/reservas; el estado actual queda vacio por diseno.
 
-## 8) Comandos de auditoria rapida
+## 9) Comandos de auditoria rapida
 
 ```powershell
+Get-Content "scripts/migrations/V12__create_scheduling_module.sql" | docker exec -i sigep-postgres psql -U sigep_user -d sigep_db -v ON_ERROR_STOP=1
 docker exec sigep-postgres psql -U sigep_user -d sigep_db -c "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' ORDER BY table_name;"
-docker exec sigep-postgres psql -U sigep_user -d sigep_db -c "SELECT table_name,column_name,data_type,is_nullable,column_default FROM information_schema.columns WHERE table_schema='public' ORDER BY table_name,ordinal_position;"
-docker exec sigep-postgres psql -U sigep_user -d sigep_db -f /docker-entrypoint-initdb.d/validate-db-schema.sql
+docker exec sigep-postgres psql -U sigep_user -d sigep_db -c "SELECT tablename, indexname FROM pg_indexes WHERE schemaname='public' AND tablename IN ('classrooms','schedule_slots','reservations') ORDER BY tablename, indexname;"
+docker exec sigep-postgres psql -U sigep_user -d sigep_db -c "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='course_schedules') AS course_schedules_exists;"
 ```
 
 

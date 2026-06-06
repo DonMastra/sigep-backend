@@ -2,17 +2,19 @@ package com.sigep.courses.presentation.controller
 
 import com.sigep.common.application.dto.ApiResponse
 import com.sigep.common.application.dto.PageResponse
+import com.sigep.common.application.exception.UnauthorizedException
 import com.sigep.courses.application.dto.*
 import com.sigep.courses.application.service.AttendanceService
 import com.sigep.security.application.annotation.RequireAdmin
 import com.sigep.security.application.annotation.RequireAdminOrTeacher
+import com.sigep.security.application.annotation.RequireStaffOrGuardian
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
+import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
 import org.springframework.format.annotation.DateTimeFormat
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
-import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
 import java.time.LocalDate
 
@@ -43,6 +45,30 @@ class AttendanceController(
         return ResponseEntity.ok(ApiResponse.success(attendances))
     }
 
+    @GetMapping("/course/{courseId}")
+    @RequireAdminOrTeacher
+    @Operation(summary = "Get attendance by course")
+    fun getAttendanceByCourse(
+        @PathVariable courseId: Long,
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "10") limit: Int
+    ): ResponseEntity<ApiResponse<PageResponse<AttendanceDto>>> {
+        val attendances = attendanceService.getAttendanceByCourse(courseId, page, limit)
+        return ResponseEntity.ok(ApiResponse.success(attendances))
+    }
+
+    @GetMapping("/student/{studentId}")
+    @RequireStaffOrGuardian
+    @Operation(summary = "Get attendance by student")
+    fun getAttendanceByStudent(
+        @PathVariable studentId: Long,
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "10") limit: Int
+    ): ResponseEntity<ApiResponse<PageResponse<AttendanceDto>>> {
+        val attendances = attendanceService.getAttendanceByStudent(studentId, page, limit)
+        return ResponseEntity.ok(ApiResponse.success(attendances))
+    }
+
     @GetMapping("/course/{courseId}/date/{date}")
     @RequireAdminOrTeacher
     @Operation(summary = "Get attendance by course and date")
@@ -59,9 +85,9 @@ class AttendanceController(
     @Operation(summary = "Record attendance")
     fun recordAttendance(
         @Valid @RequestBody request: CreateAttendanceRequest,
-        authentication: Authentication
+        httpRequest: HttpServletRequest
     ): ResponseEntity<ApiResponse<AttendanceDto>> {
-        val recordedBy = authentication.name.toLongOrNull() ?: 1L // Get user ID from auth
+        val recordedBy = extractUserId(httpRequest)
         val attendance = attendanceService.recordAttendance(request, recordedBy)
         return ResponseEntity
             .status(HttpStatus.CREATED)
@@ -73,9 +99,9 @@ class AttendanceController(
     @Operation(summary = "Record bulk attendance for a course")
     fun recordBulkAttendance(
         @Valid @RequestBody request: BulkAttendanceRequest,
-        authentication: Authentication
+        httpRequest: HttpServletRequest
     ): ResponseEntity<ApiResponse<List<AttendanceDto>>> {
-        val recordedBy = authentication.name.toLongOrNull() ?: 1L
+        val recordedBy = extractUserId(httpRequest)
         val attendances = attendanceService.recordBulkAttendance(request, recordedBy)
         return ResponseEntity
             .status(HttpStatus.CREATED)
@@ -88,9 +114,9 @@ class AttendanceController(
     fun updateAttendance(
         @PathVariable id: Long,
         @Valid @RequestBody request: UpdateAttendanceRequest,
-        authentication: Authentication
+        httpRequest: HttpServletRequest
     ): ResponseEntity<ApiResponse<AttendanceDto>> {
-        val recordedBy = authentication.name.toLongOrNull() ?: 1L
+        val recordedBy = extractUserId(httpRequest)
         val attendance = attendanceService.updateAttendance(id, request, recordedBy)
         return ResponseEntity.ok(ApiResponse.success(attendance, "Attendance updated successfully"))
     }
@@ -131,6 +157,11 @@ class AttendanceController(
     ): ResponseEntity<ApiResponse<List<AttendanceDto>>> {
         val attendances = attendanceService.getAttendanceByDateRange(enrollmentId, request.startDate, request.endDate)
         return ResponseEntity.ok(ApiResponse.success(attendances))
+    }
+
+    private fun extractUserId(httpRequest: HttpServletRequest): Long {
+        return httpRequest.getAttribute("userId") as? Long
+            ?: throw UnauthorizedException("Token inválido o sin userId")
     }
 }
 

@@ -1,10 +1,22 @@
 package com.sigep.common.infrastructure.config
 
-import com.sigep.common.application.dto.ApiResponse
-import com.sigep.common.application.exception.*
+import com.sigep.common.application.dto.ErrorResponse
+import com.sigep.common.application.exception.BusinessException as AppBusinessException
+import com.sigep.common.application.exception.DuplicateResourceException as AppDuplicateResourceException
+import com.sigep.common.application.exception.ForbiddenException as AppForbiddenException
+import com.sigep.common.application.exception.ResourceConflictException as AppResourceConflictException
+import com.sigep.common.application.exception.ReservationAlreadyAssignedException as AppReservationAlreadyAssignedException
+import com.sigep.common.application.exception.ResourceNotFoundException as AppResourceNotFoundException
+import com.sigep.common.application.exception.UnauthorizedException as AppUnauthorizedException
+import com.sigep.common.application.exception.ValidationException as AppValidationException
+import com.sigep.common.domain.exception.BusinessException as DomainBusinessException
+import com.sigep.common.domain.exception.DuplicateResourceException as DomainDuplicateResourceException
+import com.sigep.common.domain.exception.ResourceNotFoundException as DomainResourceNotFoundException
+import jakarta.servlet.http.HttpServletRequest
 import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
+import org.springframework.http.converter.HttpMessageNotReadableException
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
@@ -14,68 +26,190 @@ class GlobalExceptionHandler {
 
     private val logger = LoggerFactory.getLogger(GlobalExceptionHandler::class.java)
 
-    @ExceptionHandler(ResourceNotFoundException::class)
-    fun handleResourceNotFound(ex: ResourceNotFoundException): ResponseEntity<ApiResponse<Nothing>> {
+    @ExceptionHandler(AppResourceNotFoundException::class)
+    fun handleResourceNotFound(ex: AppResourceNotFoundException, request: HttpServletRequest): ResponseEntity<ErrorResponse> {
         logger.warn("Resource not found: {}", ex.message)
-        return ResponseEntity
-            .status(HttpStatus.NOT_FOUND)
-            .body(ApiResponse.error(ex.message))
+        return buildErrorResponse(
+            status = HttpStatus.NOT_FOUND,
+            code = ex.code,
+            message = ex.message,
+            request = request
+        )
     }
 
-    @ExceptionHandler(ValidationException::class)
-    fun handleValidation(ex: ValidationException): ResponseEntity<ApiResponse<Nothing>> {
+    @ExceptionHandler(DomainResourceNotFoundException::class)
+    fun handleDomainResourceNotFound(ex: DomainResourceNotFoundException, request: HttpServletRequest): ResponseEntity<ErrorResponse> {
+        logger.warn("Resource not found: {}", ex.message)
+        return buildErrorResponse(
+            status = HttpStatus.NOT_FOUND,
+            code = "RESOURCE_NOT_FOUND",
+            message = ex.message ?: "Resource not found",
+            request = request
+        )
+    }
+
+    @ExceptionHandler(AppValidationException::class)
+    fun handleValidation(ex: AppValidationException, request: HttpServletRequest): ResponseEntity<ErrorResponse> {
         logger.warn("Validation error: {}", ex.message)
-        return ResponseEntity
-            .status(HttpStatus.BAD_REQUEST)
-            .body(ApiResponse.error(ex.message))
+        val details = ex.details ?: ex.validationDetails.takeIf { it.isNotEmpty() }?.joinToString(", ")
+        return buildErrorResponse(
+            status = HttpStatus.BAD_REQUEST,
+            code = ex.code,
+            message = ex.message,
+            request = request,
+            field = ex.field,
+            details = details
+        )
     }
 
-    @ExceptionHandler(UnauthorizedException::class)
-    fun handleUnauthorized(ex: UnauthorizedException): ResponseEntity<ApiResponse<Nothing>> {
+    @ExceptionHandler(AppUnauthorizedException::class)
+    fun handleUnauthorized(ex: AppUnauthorizedException, request: HttpServletRequest): ResponseEntity<ErrorResponse> {
         logger.warn("Unauthorized access: {}", ex.message)
-        return ResponseEntity
-            .status(HttpStatus.UNAUTHORIZED)
-            .body(ApiResponse.error(ex.message))
+        return buildErrorResponse(
+            status = HttpStatus.UNAUTHORIZED,
+            code = ex.code,
+            message = ex.message,
+            request = request
+        )
     }
 
-    @ExceptionHandler(ForbiddenException::class)
-    fun handleForbidden(ex: ForbiddenException): ResponseEntity<ApiResponse<Nothing>> {
+    @ExceptionHandler(AppForbiddenException::class)
+    fun handleForbidden(ex: AppForbiddenException, request: HttpServletRequest): ResponseEntity<ErrorResponse> {
         logger.warn("Forbidden access: {}", ex.message)
-        return ResponseEntity
-            .status(HttpStatus.FORBIDDEN)
-            .body(ApiResponse.error(ex.message))
+        return buildErrorResponse(
+            status = HttpStatus.FORBIDDEN,
+            code = ex.code,
+            message = ex.message,
+            request = request
+        )
     }
 
-    @ExceptionHandler(DuplicateResourceException::class)
-    fun handleDuplicateResource(ex: DuplicateResourceException): ResponseEntity<ApiResponse<Nothing>> {
+    @ExceptionHandler(AppDuplicateResourceException::class)
+    fun handleDuplicateResource(ex: AppDuplicateResourceException, request: HttpServletRequest): ResponseEntity<ErrorResponse> {
         logger.warn("Duplicate resource: {}", ex.message)
-        return ResponseEntity
-            .status(HttpStatus.CONFLICT)
-            .body(ApiResponse.error(ex.message))
+        return buildErrorResponse(
+            status = HttpStatus.CONFLICT,
+            code = ex.code,
+            message = ex.message,
+            request = request
+        )
+    }
+
+    @ExceptionHandler(AppResourceConflictException::class)
+    fun handleResourceConflict(ex: AppResourceConflictException, request: HttpServletRequest): ResponseEntity<ErrorResponse> {
+        logger.warn("Resource conflict: {}", ex.message)
+        return buildErrorResponse(
+            status = HttpStatus.CONFLICT,
+            code = ex.code,
+            message = ex.message,
+            request = request,
+            field = ex.field,
+            details = ex.details
+        )
+    }
+
+    @ExceptionHandler(AppReservationAlreadyAssignedException::class)
+    fun handleReservationAlreadyAssigned(ex: AppReservationAlreadyAssignedException, request: HttpServletRequest): ResponseEntity<ErrorResponse> {
+        logger.warn("Reservation already assigned: {}", ex.message)
+        return buildErrorResponse(
+            status = HttpStatus.CONFLICT,
+            code = ex.code,
+            message = ex.message,
+            request = request,
+            field = ex.field,
+            details = ex.details
+        )
+    }
+
+    @ExceptionHandler(DomainDuplicateResourceException::class)
+    fun handleDomainDuplicateResource(ex: DomainDuplicateResourceException, request: HttpServletRequest): ResponseEntity<ErrorResponse> {
+        logger.warn("Duplicate resource: {}", ex.message)
+        return buildErrorResponse(
+            status = HttpStatus.CONFLICT,
+            code = "DUPLICATE_RESOURCE",
+            message = ex.message ?: "Duplicate resource",
+            request = request
+        )
     }
 
     @ExceptionHandler(MethodArgumentNotValidException::class)
-    fun handleMethodArgumentNotValid(ex: MethodArgumentNotValidException): ResponseEntity<ApiResponse<Nothing>> {
-        val errors = ex.bindingResult.fieldErrors.map { "${it.field}: ${it.defaultMessage}" }
-        logger.warn("Validation failed: {}", errors)
-        return ResponseEntity
-            .status(HttpStatus.BAD_REQUEST)
-            .body(ApiResponse.error("Validation failed: ${errors.joinToString(", ")}"))
+    fun handleMethodArgumentNotValid(ex: MethodArgumentNotValidException, request: HttpServletRequest): ResponseEntity<ErrorResponse> {
+        val firstFieldError = ex.bindingResult.fieldErrors.firstOrNull()
+        val details = firstFieldError?.defaultMessage ?: "Validation failed"
+        logger.warn("Validation failed: {}", ex.bindingResult.fieldErrors)
+        return buildErrorResponse(
+            status = HttpStatus.BAD_REQUEST,
+            code = "VALIDATION_ERROR",
+            message = "Validation failed",
+            request = request,
+            field = firstFieldError?.field,
+            details = details
+        )
     }
 
-    @ExceptionHandler(BusinessException::class)
-    fun handleBusinessException(ex: BusinessException): ResponseEntity<ApiResponse<Nothing>> {
+    @ExceptionHandler(HttpMessageNotReadableException::class)
+    fun handleHttpMessageNotReadable(ex: HttpMessageNotReadableException, request: HttpServletRequest): ResponseEntity<ErrorResponse> {
+        logger.warn("Malformed request body: {}", ex.mostSpecificCause.message)
+        return buildErrorResponse(
+            status = HttpStatus.BAD_REQUEST,
+            code = "VALIDATION_ERROR",
+            message = "Validation failed",
+            request = request,
+            details = "Malformed request body or unsupported field in JSON"
+        )
+    }
+
+    @ExceptionHandler(AppBusinessException::class)
+    fun handleBusinessException(ex: AppBusinessException, request: HttpServletRequest): ResponseEntity<ErrorResponse> {
         logger.warn("Business exception: {}", ex.message)
-        return ResponseEntity
-            .status(HttpStatus.BAD_REQUEST)
-            .body(ApiResponse.error(ex.message))
+        return buildErrorResponse(
+            status = HttpStatus.BAD_REQUEST,
+            code = ex.code,
+            message = ex.message,
+            request = request,
+            field = ex.field,
+            details = ex.details
+        )
+    }
+
+    @ExceptionHandler(DomainBusinessException::class)
+    fun handleDomainBusinessException(ex: DomainBusinessException, request: HttpServletRequest): ResponseEntity<ErrorResponse> {
+        logger.warn("Business exception: {}", ex.message)
+        return buildErrorResponse(
+            status = HttpStatus.BAD_REQUEST,
+            code = "BUSINESS_RULE_VIOLATION",
+            message = ex.message ?: "Business rule violation",
+            request = request
+        )
     }
 
     @ExceptionHandler(Exception::class)
-    fun handleGenericException(ex: Exception): ResponseEntity<ApiResponse<Nothing>> {
+    fun handleGenericException(ex: Exception, request: HttpServletRequest): ResponseEntity<ErrorResponse> {
         logger.error("Unexpected error: {}", ex.message, ex)
-        return ResponseEntity
-            .status(HttpStatus.INTERNAL_SERVER_ERROR)
-            .body(ApiResponse.error("An unexpected error occurred"))
+        return buildErrorResponse(
+            status = HttpStatus.INTERNAL_SERVER_ERROR,
+            code = "INTERNAL_SERVER_ERROR",
+            message = "An unexpected error occurred",
+            request = request
+        )
+    }
+
+    private fun buildErrorResponse(
+        status: HttpStatus,
+        code: String,
+        message: String,
+        request: HttpServletRequest,
+        field: String? = null,
+        details: String? = null
+    ): ResponseEntity<ErrorResponse> {
+        val response = ErrorResponse(
+            status = status.value(),
+            code = code,
+            message = message,
+            field = field,
+            details = details,
+            path = request.requestURI
+        )
+        return ResponseEntity.status(status).body(response)
     }
 }

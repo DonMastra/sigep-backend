@@ -5,6 +5,7 @@ import com.sigep.common.application.dto.PageResponse
 import com.sigep.courses.application.dto.*
 import com.sigep.courses.application.service.CourseService
 import io.swagger.v3.oas.annotations.tags.Tag
+import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -22,11 +23,13 @@ class CourseController(
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER', 'GUARDIAN')")
     fun getAllCourses(
         @RequestParam(defaultValue = "0") page: Int,
-        @RequestParam(defaultValue = "10") limit: Int,
+        @RequestParam(required = false) limit: Int?,
+        @RequestParam(required = false) size: Int?,
         @RequestParam(defaultValue = "id") sort: String,
         @RequestParam(defaultValue = "ASC") order: String
     ): ResponseEntity<ApiResponse<PageResponse<CourseDto>>> {
-        val courses = courseService.getAllCourses(page, limit, sort, order)
+        val pageSize = limit ?: size ?: 10
+        val courses = courseService.getAllCourses(page, pageSize, sort, order)
         return ResponseEntity.ok(ApiResponse.success(courses))
     }
 
@@ -42,9 +45,11 @@ class CourseController(
     fun searchCourses(
         @RequestParam query: String,
         @RequestParam(defaultValue = "0") page: Int,
-        @RequestParam(defaultValue = "10") limit: Int
+        @RequestParam(required = false) limit: Int?,
+        @RequestParam(required = false) size: Int?
     ): ResponseEntity<ApiResponse<PageResponse<CourseDto>>> {
-        val courses = courseService.searchCourses(query, page, limit)
+        val pageSize = limit ?: size ?: 10
+        val courses = courseService.searchCourses(query, page, pageSize)
         return ResponseEntity.ok(ApiResponse.success(courses))
     }
 
@@ -53,9 +58,11 @@ class CourseController(
     fun getCoursesByTeacher(
         @PathVariable teacherId: Long,
         @RequestParam(defaultValue = "0") page: Int,
-        @RequestParam(defaultValue = "10") limit: Int
+        @RequestParam(required = false) limit: Int?,
+        @RequestParam(required = false) size: Int?
     ): ResponseEntity<ApiResponse<PageResponse<CourseDto>>> {
-        val courses = courseService.getCoursesByTeacher(teacherId, page, limit)
+        val pageSize = limit ?: size ?: 10
+        val courses = courseService.getCoursesByTeacher(teacherId, page, pageSize)
         return ResponseEntity.ok(ApiResponse.success(courses))
     }
 
@@ -89,9 +96,13 @@ class CourseController(
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     fun enrollStudent(
         @PathVariable id: Long,
-        @Valid @RequestBody request: EnrollStudentRequest
+        @Valid @RequestBody request: EnrollStudentRequest,
+        httpRequest: HttpServletRequest
     ): ResponseEntity<ApiResponse<EnrollmentDto>> {
-        val enrollment = courseService.enrollStudent(id, request)
+        val userId = httpRequest.getAttribute("userId") as? Long
+        val userRole = httpRequest.getAttribute("userRole") as? String
+
+        val enrollment = courseService.enrollStudent(id, request, userId, userRole)
         return ResponseEntity
             .status(HttpStatus.CREATED)
             .body(ApiResponse.success(enrollment, "Student enrolled successfully"))
@@ -102,18 +113,22 @@ class CourseController(
     fun filterCourses(
         @RequestBody filter: CourseFilterRequest,
         @RequestParam(defaultValue = "0") page: Int,
-        @RequestParam(defaultValue = "10") limit: Int
+        @RequestParam(required = false) limit: Int?,
+        @RequestParam(required = false) size: Int?
     ): ResponseEntity<ApiResponse<PageResponse<CourseDto>>> {
-        val courses = courseService.filterCourses(filter, page, limit)
+        val pageSize = limit ?: size ?: 10
+        val courses = courseService.filterCourses(filter, page, pageSize)
         return ResponseEntity.ok(ApiResponse.success(courses))
     }
 
     @GetMapping("/published")
     fun getPublishedCourses(
         @RequestParam(defaultValue = "0") page: Int,
-        @RequestParam(defaultValue = "10") limit: Int
+        @RequestParam(required = false) limit: Int?,
+        @RequestParam(required = false) size: Int?
     ): ResponseEntity<ApiResponse<PageResponse<CourseSimpleDto>>> {
-        val courses = courseService.getPublishedCourses(page, limit)
+        val pageSize = limit ?: size ?: 10
+        val courses = courseService.getPublishedCourses(page, pageSize)
         return ResponseEntity.ok(ApiResponse.success(courses))
     }
 
@@ -124,28 +139,28 @@ class CourseController(
         return ResponseEntity.ok(ApiResponse.success(statistics))
     }
 
-    @PutMapping("/{id}/publish")
+    @PatchMapping("/{id}/publish")
     @PreAuthorize("hasRole('ADMIN')")
     fun publishCourse(@PathVariable id: Long): ResponseEntity<ApiResponse<CourseDto>> {
         val course = courseService.publishCourse(id)
         return ResponseEntity.ok(ApiResponse.success(course, "Course published successfully"))
     }
 
-    @PutMapping("/{id}/unpublish")
+    @PatchMapping("/{id}/unpublish")
     @PreAuthorize("hasRole('ADMIN')")
     fun unpublishCourse(@PathVariable id: Long): ResponseEntity<ApiResponse<CourseDto>> {
         val course = courseService.unpublishCourse(id)
         return ResponseEntity.ok(ApiResponse.success(course, "Course unpublished successfully"))
     }
 
-    @PutMapping("/{id}/activate")
+    @PatchMapping("/{id}/activate")
     @PreAuthorize("hasRole('ADMIN')")
     fun activateCourse(@PathVariable id: Long): ResponseEntity<ApiResponse<CourseDto>> {
         val course = courseService.activateCourse(id)
         return ResponseEntity.ok(ApiResponse.success(course, "Course activated successfully"))
     }
 
-    @PutMapping("/{id}/deactivate")
+    @PatchMapping("/{id}/deactivate")
     @PreAuthorize("hasRole('ADMIN')")
     fun deactivateCourse(@PathVariable id: Long): ResponseEntity<ApiResponse<CourseDto>> {
         val course = courseService.deactivateCourse(id)

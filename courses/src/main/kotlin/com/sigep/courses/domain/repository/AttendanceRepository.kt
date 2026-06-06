@@ -47,5 +47,11 @@ interface AttendanceRepository : JpaRepository<Attendance, Long> {
         AND a.attendanceDate BETWEEN :startDate AND :endDate
     """)
     fun findByCourseIdAndDateRange(courseId: Long, startDate: LocalDate, endDate: LocalDate, pageable: Pageable): Page<Attendance>
+
+    @Query("SELECT a FROM Attendance a WHERE a.enrollment.course.id = :courseId ORDER BY a.attendanceDate DESC")
+    fun findByCourseId(courseId: Long, pageable: Pageable): Page<Attendance>
+
+    @Query("SELECT a FROM Attendance a WHERE a.enrollment.studentId = :studentId ORDER BY a.attendanceDate DESC")
+    fun findByStudentId(studentId: Long, pageable: Pageable): Page<Attendance>
 }
 

@@ -1,7 +1,9 @@
 package com.sigep.courses.application.dto
 
+import com.fasterxml.jackson.annotation.JsonAlias
 import com.sigep.courses.domain.model.AttendanceStatus
 import jakarta.validation.constraints.NotNull
+import jakarta.validation.constraints.NotEmpty
 import jakarta.validation.constraints.Size
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -44,14 +46,18 @@ data class UpdateAttendanceRequest(
 )
 
 data class BulkAttendanceRequest(
-    @field:NotNull(message = "Course ID is required")
-    val courseId: Long,
+    @field:JsonAlias("courseId")
+    val courseSessionId: Long? = null,
+
+    val courseId: Long? = null,
 
     @field:NotNull(message = "Attendance date is required")
-    val attendanceDate: LocalDate,
+    @field:JsonAlias("attendanceDate")
+    val date: LocalDate,
 
-    @field:NotNull(message = "Attendance records are required")
-    val attendances: List<StudentAttendanceRecord>
+    @field:NotEmpty(message = "Attendance records cannot be empty")
+    @field:JsonAlias("attendances")
+    val records: List<StudentAttendanceRecord>
 )
 
 data class StudentAttendanceRecord(

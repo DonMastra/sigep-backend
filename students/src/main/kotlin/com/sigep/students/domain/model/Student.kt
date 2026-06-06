@@ -46,6 +46,9 @@ data class Student(
     @Column(length = 1000)
     val medicalNotes: String? = null,
 
+    @Column(length = 500)
+    val photoUrl: String? = null,
+
     @Column(nullable = false)
     val active: Boolean = true,
 
