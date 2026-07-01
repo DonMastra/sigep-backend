@@ -2,7 +2,7 @@
 
 ## Objetivo del Sistema
 
-SiGEP Backend es la API REST que provee datos y reglas de negocio a la aplicacion web Angular SiGEP. El dominio es un instituto privado de ensenanza de ingles que necesita gestionar estudiantes, guardianes, cursos, inscripciones, asistencia, materiales, certificados, personal, examenes, horarios y, en el roadmap, pagos/facturacion, comunicaciones y reportes.
+SiGEP Backend es la API REST que provee datos y reglas de negocio a la aplicacion web Angular SiGEP. El dominio es un instituto privado de ensenanza de ingles que necesita gestionar estudiantes, guardianes, cursos, matriculacion, inscripciones, asistencia, materiales, certificados, personal, examenes, horarios y, en el roadmap, pagos/facturacion, comunicaciones y reportes.
 
 El objetivo tecnico es mantener un monolito modular con limites de dominio claros, preparado para una futura extraccion a microservicios sin romper contratos frontend.
 
@@ -12,6 +12,7 @@ La API debe soportar una gestion academica privada:
 
 - Administracion de usuarios, docentes, guardianes y estudiantes.
 - Oferta academica con cursos publicados y cursos administrados.
+- Matriculacion como proceso: solicitud, reserva de vacante, pago inicial mock y aprobacion administrativa.
 - Inscripcion y seguimiento academico de estudiantes.
 - Asistencia a clases y sesiones.
 - Gestion de materiales por curso.
@@ -35,6 +36,7 @@ staff/           dominio personal
 exams/           dominio examenes
 scheduling/      dominio horarios/reservas
 payments/        dominio facturacion/pagos planificado
+tuition/         dominio matriculacion y ledger mock inicial
 communications/  dominio notificaciones planificado
 reports/         dominio reportes planificado
 application/     aplicacion Spring Boot que importa modulos
@@ -75,6 +77,9 @@ Ejemplos:
 - `TeacherInfoProvider`: otros dominios resuelven datos docentes via interfaz.
 - `ReservationInfoProvider` y `ReservationAssignmentProvider`: coordinan reservas sin acoplar scheduling a cursos/sesiones.
 - `SchedulingTargetValidationProvider`: valida targets de reserva en el dominio correspondiente.
+- `StudentProfileProvider`: `tuition` crea/valida estudiantes sin depender de `students`.
+- `CourseEnrollmentCommandProvider`: `tuition` consulta cupos y crea `Enrollment` final sin depender de `courses`.
+- `GuardianAccountProvider`: `tuition` activa guardianes al aprobar matriculacion sin depender de repositorios de `security`.
 
 Estado real a considerar: `staff` y `exams` todavia dependen directamente de `courses` y `students`. No ampliar este patron; preferir providers nuevos.
 
@@ -190,9 +195,28 @@ Responsabilidades:
 
 Este modulo usa providers para integrarse con dominios duenos de los targets.
 
+### Tuition
+
+Responsabilidades:
+
+- Ciclos lectivos minimos para matriculacion.
+- Niveles y progresiones.
+- Planes de cuota y descuentos/becas.
+- Solicitudes de matriculacion por guardian.
+- Reserva temporal de vacante.
+- Ledger mock para matricula inicial y cuotas mensuales.
+- Aprobacion administrativa que confirma reserva, activa guardian si corresponde, crea estudiante nuevo y genera `Enrollment`.
+
+Limites:
+
+- No factura ni emite comprobantes fiscales.
+- No integra ARCA ni `mock-billing-service` todavia.
+- No almacena datos de tarjeta ni procesa pagos reales.
+- La cuenta `GUARDIAN` debe poder autenticarse para usar endpoints guardian; las cuentas `PENDING_APPROVAL` siguen sin login por regla global de auth.
+
 ### Payments/Billing
 
-Estado: planificado. Se espera que cubra:
+Estado: planificado. `tuition` ya deja un ledger mock inicial, pero pagos/facturacion real sigue pendiente. Se espera que cubra:
 
 - Cuentas corrientes de estudiantes.
 - Cuotas.
@@ -233,6 +257,7 @@ Estado: planificado. Se espera que cubra:
 - Si se modifica logica de negocio, agregar tests de servicio.
 - Si se modifica seguridad, revisar roles y flujo JWT.
 - Si se modifica scheduling, validar disponibilidad, asignacion, desasignacion y conflictos.
+- Si se modifica tuition, validar estados, reserva de cupo, ledger mock, ownership de guardian y aprobacion admin.
 
 ## Skills Utiles para Agentes
 
@@ -279,6 +304,7 @@ docker-compose up -d
 - `exams` no usa wrapper uniforme en todos sus endpoints.
 - `staff` y `exams` tienen dependencias directas que deberian reducirse.
 - `payments`, `communications` y `reports` pueden inducir a error si se documentan como completos.
+- `tuition` usa ledger mock; no tratarlo como facturacion real ni como integracion ARCA.
 - Migraciones y `ddl-auto` deben consolidarse antes de produccion.
 - Hay archivos nuevos/no trackeados en el workspace; no asumir que `git status` limpio.
 

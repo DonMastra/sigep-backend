@@ -36,6 +36,7 @@
 | Documento | Descripción | Audiencia |
 |-----------|-------------|-----------|
 | **[API_CONTRACT.md](API_CONTRACT.md)** | Contrato completo de API para integración frontend (TypeScript interfaces, ejemplos) | Desarrolladores Frontend |
+| **[TUITION_FRONTEND_COMMUNICATION.md](TUITION_FRONTEND_COMMUNICATION.md)** | Comunicado de integracion frontend para el modulo de matriculacion `tuition` | Desarrolladores Frontend |
 | **[Swagger UI](http://localhost:8080/swagger-ui/index.html)** | Documentación interactiva en vivo de todos los endpoints | Todos (requiere app corriendo) |
 
 ### 📝 Implementación
