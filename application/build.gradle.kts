@@ -13,6 +13,7 @@ dependencies {
     implementation(project(":staff"))
     implementation(project(":scheduling"))
     implementation(project(":payments"))
+    implementation(project(":tuition"))
     implementation(project(":exams"))
     implementation(project(":communications"))
     implementation(project(":reports"))

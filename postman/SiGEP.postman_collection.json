@@ -16,24 +16,126 @@
     ]
   },
   "variable": [
-    { "key": "baseUrl", "value": "http://localhost:8080" },
-    { "key": "token", "value": "" },
-    { "key": "refreshToken", "value": "" },
-    { "key": "studentId", "value": "1" },
-    { "key": "guardianId", "value": "6" },
-    { "key": "courseId", "value": "1" },
-    { "key": "classroomId", "value": "1" },
-    { "key": "slotId", "value": "1" },
-    { "key": "reservationId", "value": "1" },
-    { "key": "enrollmentId", "value": "1" },
-    { "key": "sessionId", "value": "1" },
-    { "key": "materialId", "value": "1" },
-    { "key": "certificateId", "value": "1" },
-    { "key": "teachingStaffId", "value": "1" },
-    { "key": "nonTeachingStaffId", "value": "1" },
-    { "key": "staffAttendanceId", "value": "1" },
-    { "key": "examId", "value": "11111111-1111-1111-1111-111111111101" },
-    { "key": "submissionId", "value": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaa1001" }
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "refreshToken",
+      "value": ""
+    },
+    {
+      "key": "studentId",
+      "value": "12"
+    },
+    {
+      "key": "guardianId",
+      "value": "6"
+    },
+    {
+      "key": "courseId",
+      "value": "1"
+    },
+    {
+      "key": "classroomId",
+      "value": "1"
+    },
+    {
+      "key": "slotId",
+      "value": "1"
+    },
+    {
+      "key": "reservationId",
+      "value": "1"
+    },
+    {
+      "key": "enrollmentId",
+      "value": "1"
+    },
+    {
+      "key": "sessionId",
+      "value": "1"
+    },
+    {
+      "key": "materialId",
+      "value": "1"
+    },
+    {
+      "key": "certificateId",
+      "value": "1"
+    },
+    {
+      "key": "teachingStaffId",
+      "value": "1"
+    },
+    {
+      "key": "nonTeachingStaffId",
+      "value": "1"
+    },
+    {
+      "key": "staffAttendanceId",
+      "value": "1"
+    },
+    {
+      "key": "examId",
+      "value": "11111111-1111-1111-1111-111111111101"
+    },
+    {
+      "key": "submissionId",
+      "value": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaa1001"
+    },
+    {
+      "key": "adminToken",
+      "value": ""
+    },
+    {
+      "key": "guardianToken",
+      "value": ""
+    },
+    {
+      "key": "tuitionRunId",
+      "value": ""
+    },
+    {
+      "key": "tuitionAcademicYearId",
+      "value": "1"
+    },
+    {
+      "key": "tuitionLevelId",
+      "value": "1"
+    },
+    {
+      "key": "tuitionNextLevelId",
+      "value": "2"
+    },
+    {
+      "key": "tuitionProgressionId",
+      "value": "1"
+    },
+    {
+      "key": "tuitionFeePlanId",
+      "value": "1"
+    },
+    {
+      "key": "tuitionDiscountId",
+      "value": "1"
+    },
+    {
+      "key": "tuitionApplicationId",
+      "value": "1"
+    },
+    {
+      "key": "tuitionEnrollmentId",
+      "value": "12"
+    },
+    {
+      "key": "tuitionCourseId",
+      "value": "18"
+    }
   ],
   "item": [
     {
@@ -57,9 +159,16 @@
             }
           ],
           "request": {
-            "auth": { "type": "noauth" },
+            "auth": {
+              "type": "noauth"
+            },
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"password123\"\n}"
@@ -70,9 +179,16 @@
         {
           "name": "Register",
           "request": {
-            "auth": { "type": "noauth" },
+            "auth": {
+              "type": "noauth"
+            },
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"username\": \"qa.user\",\n  \"email\": \"qa.user@sigep.edu.mx\",\n  \"password\": \"password123\",\n  \"firstName\": \"QA\",\n  \"lastName\": \"User\",\n  \"role\": \"TEACHER\"\n}"
@@ -83,9 +199,16 @@
         {
           "name": "Refresh Token",
           "request": {
-            "auth": { "type": "noauth" },
+            "auth": {
+              "type": "noauth"
+            },
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
@@ -121,9 +244,16 @@
             }
           ],
           "request": {
-            "auth": { "type": "noauth" },
+            "auth": {
+              "type": "noauth"
+            },
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"password123\"\n}"
@@ -134,7 +264,9 @@
         {
           "name": "02 - Public Published Courses (No Auth)",
           "request": {
-            "auth": { "type": "noauth" },
+            "auth": {
+              "type": "noauth"
+            },
             "method": "GET",
             "url": "{{baseUrl}}/api/v1/courses/published?page=0&limit=5"
           }
@@ -164,7 +296,12 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"code\": \"{{courseCode}}\",\n  \"name\": \"Smoke Course\",\n  \"description\": \"Smoke test course for courses module\",\n  \"level\": \"BEGINNER\",\n  \"duration\": 40,\n  \"maxStudents\": 12,\n  \"minStudents\": 4,\n  \"teacherId\": 3,\n  \"price\": 25000.00,\n  \"isPublished\": false,\n  \"schedules\": [\n    {\n      \"dayOfWeek\": \"MONDAY\",\n      \"startTime\": \"09:00\",\n      \"endTime\": \"11:00\"\n    }\n  ]\n}"
@@ -188,7 +325,12 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"studentId\": 1,\n  \"notes\": \"Smoke enrollment\"\n}"
@@ -200,7 +342,12 @@
           "name": "05 - Update Enrollment",
           "request": {
             "method": "PUT",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"status\": \"COMPLETED\",\n  \"finalGrade\": 95.0,\n  \"notes\": \"Smoke updated\"\n}"
@@ -250,7 +397,12 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"firstName\": \"Nuevo\",\n  \"lastName\": \"Estudiante\",\n  \"email\": \"nuevo.estudiante@sigep.edu.mx\",\n  \"documentNumber\": \"STU-POSTMAN-001\",\n  \"dateOfBirth\": \"2011-06-15\",\n  \"address\": \"Calle 123\",\n  \"phoneNumber\": \"+54-11-7000-9001\",\n  \"emergencyContact\": \"Ana Lopez +54-11-7000-9002\",\n  \"guardianId\": 6,\n  \"medicalNotes\": \"Sin observaciones\"\n}"
@@ -283,7 +435,12 @@
           "name": "Update Student",
           "request": {
             "method": "PUT",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"address\": \"Direccion actualizada via Postman\",\n  \"phoneNumber\": \"+54-11-7999-0001\",\n  \"active\": true\n}"
@@ -333,7 +490,12 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"code\": \"ENG-PM-001\",\n  \"name\": \"Postman Course\",\n  \"description\": \"Curso creado desde Postman para pruebas integrales.\",\n  \"level\": \"BEGINNER\",\n  \"duration\": 80,\n  \"maxStudents\": 12,\n  \"minStudents\": 4,\n  \"teacherId\": 3,\n  \"price\": 25000.00,\n  \"startDate\": \"2026-06-01\",\n  \"endDate\": \"2026-10-01\",\n  \"isPublished\": false,\n  \"schedules\": [\n    {\n      \"dayOfWeek\": \"MONDAY\",\n      \"startTime\": \"09:00\",\n      \"endTime\": \"11:00\"\n    }\n  ]\n}"
@@ -352,7 +514,12 @@
           "name": "Update Course",
           "request": {
             "method": "PUT",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"name\": \"Postman Course Updated\",\n  \"description\": \"Descripcion actualizada desde Postman.\",\n  \"maxStudents\": 14,\n  \"price\": 27500.00,\n  \"isPublished\": false\n}"
@@ -378,7 +545,12 @@
           "name": "Filter Courses",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"level\": \"BEGINNER\",\n  \"status\": \"ACTIVE\",\n  \"isPublished\": true\n}"
@@ -402,7 +574,12 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"studentId\": 1,\n  \"notes\": \"Inscripcion desde Postman\"\n}"
@@ -441,7 +618,9 @@
         {
           "name": "Get Published Courses (Public)",
           "request": {
-            "auth": { "type": "noauth" },
+            "auth": {
+              "type": "noauth"
+            },
             "method": "GET",
             "url": "{{baseUrl}}/api/v1/courses/published?page=0&limit=10"
           }
@@ -497,7 +676,12 @@
           "name": "Update Enrollment",
           "request": {
             "method": "PUT",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"status\": \"ACTIVE\",\n  \"notes\": \"Actualizado desde Postman\"\n}"
@@ -550,7 +734,12 @@
               ],
               "request": {
                 "method": "POST",
-                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
                 "body": {
                   "mode": "raw",
                   "raw": "{\n  \"name\": \"Aula Postman {{courseId}}\",\n  \"building\": \"Edificio Central\",\n  \"floor\": \"1\",\n  \"capacity\": 25\n}"
@@ -569,7 +758,12 @@
               "name": "Update Classroom",
               "request": {
                 "method": "PUT",
-                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
                 "body": {
                   "mode": "raw",
                   "raw": "{\n  \"capacity\": 30,\n  \"building\": \"Edificio Central\"\n}"
@@ -605,7 +799,12 @@
               ],
               "request": {
                 "method": "POST",
-                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
                 "body": {
                   "mode": "raw",
                   "raw": "{\n  \"classroomId\": {{classroomId}},\n  \"dayOfWeek\": \"MONDAY\",\n  \"startTime\": \"09:00\",\n  \"endTime\": \"11:00\",\n  \"notes\": \"Slot creado desde Postman\"\n}"
@@ -617,7 +816,12 @@
               "name": "Create Overlap Slot (Expect 409)",
               "request": {
                 "method": "POST",
-                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
                 "body": {
                   "mode": "raw",
                   "raw": "{\n  \"classroomId\": {{classroomId}},\n  \"dayOfWeek\": \"MONDAY\",\n  \"startTime\": \"10:00\",\n  \"endTime\": \"12:00\"\n}"
@@ -636,7 +840,12 @@
               "name": "Update Slot",
               "request": {
                 "method": "PUT",
-                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
                 "body": {
                   "mode": "raw",
                   "raw": "{\n  \"endTime\": \"11:30\",\n  \"notes\": \"Slot actualizado desde Postman\"\n}"
@@ -679,7 +888,12 @@
               ],
               "request": {
                 "method": "POST",
-                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
                 "body": {
                   "mode": "raw",
                   "raw": "{\n  \"slotId\": {{slotId}}\n}"
@@ -698,7 +912,12 @@
               "name": "Assign Reservation To Course",
               "request": {
                 "method": "PATCH",
-                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
                 "body": {
                   "mode": "raw",
                   "raw": "{\n  \"targetType\": \"COURSE\",\n  \"targetId\": {{courseId}}\n}"
@@ -736,14 +955,25 @@
       "item": [
         {
           "name": "Get Session By ID",
-          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/sessions/{{sessionId}}" }
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/sessions/{{sessionId}}"
+          }
         },
         {
           "name": "Create Session",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"courseId\": {{courseId}},\n  \"sessionDate\": \"2026-06-10\",\n  \"startTime\": \"09:00:00\",\n  \"endTime\": \"11:00:00\",\n  \"classroomId\": 100,\n  \"classroomName\": \"Aula PM\",\n  \"topic\": \"Topic from Postman\",\n  \"notes\": \"Manual session\",\n  \"isRecurring\": false\n}" },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"courseId\": {{courseId}},\n  \"sessionDate\": \"2026-06-10\",\n  \"startTime\": \"09:00:00\",\n  \"endTime\": \"11:00:00\",\n  \"classroomId\": 100,\n  \"classroomName\": \"Aula PM\",\n  \"topic\": \"Topic from Postman\",\n  \"notes\": \"Manual session\",\n  \"isRecurring\": false\n}"
+            },
             "url": "{{baseUrl}}/api/v1/sessions"
           }
         },
@@ -751,8 +981,16 @@
           "name": "Record Attendance",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"enrollmentId\": 1,\n  \"attendanceDate\": \"2026-06-10\",\n  \"status\": \"PRESENT\",\n  \"notes\": \"Recorded from Postman\"\n}" },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"enrollmentId\": 1,\n  \"attendanceDate\": \"2026-06-10\",\n  \"status\": \"PRESENT\",\n  \"notes\": \"Recorded from Postman\"\n}"
+            },
             "url": "{{baseUrl}}/api/v1/attendance"
           }
         },
@@ -772,8 +1010,16 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"courseId\": {{courseId}},\n  \"title\": \"Material Postman\",\n  \"description\": \"Material creado para prueba\",\n  \"type\": \"PDF\",\n  \"fileUrl\": \"/materials/postman/demo.pdf\",\n  \"fileName\": \"demo.pdf\",\n  \"fileSize\": 1024,\n  \"mimeType\": \"application/pdf\",\n  \"isVisible\": true,\n  \"orderIndex\": 99\n}" },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"courseId\": {{courseId}},\n  \"title\": \"Material Postman\",\n  \"description\": \"Material creado para prueba\",\n  \"type\": \"PDF\",\n  \"fileUrl\": \"/materials/postman/demo.pdf\",\n  \"fileName\": \"demo.pdf\",\n  \"fileSize\": 1024,\n  \"mimeType\": \"application/pdf\",\n  \"isVisible\": true,\n  \"orderIndex\": 99\n}"
+            },
             "url": "{{baseUrl}}/api/v1/materials"
           }
         },
@@ -802,8 +1048,16 @@
           "name": "Update Material",
           "request": {
             "method": "PUT",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"title\": \"Material Postman Updated\",\n  \"description\": \"Material actualizado desde Postman\",\n  \"orderIndex\": 3\n}" },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Material Postman Updated\",\n  \"description\": \"Material actualizado desde Postman\",\n  \"orderIndex\": 3\n}"
+            },
             "url": "{{baseUrl}}/api/v1/materials/{{materialId}}"
           }
         },
@@ -818,8 +1072,16 @@
           "name": "Reorder Materials",
           "request": {
             "method": "PUT",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"materialOrders\": [\n    {\n      \"materialId\": {{materialId}},\n      \"orderIndex\": 1\n    }\n  ]\n}" },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"materialOrders\": [\n    {\n      \"materialId\": {{materialId}},\n      \"orderIndex\": 1\n    }\n  ]\n}"
+            },
             "url": "{{baseUrl}}/api/v1/materials/course/{{courseId}}/reorder"
           }
         },
@@ -841,15 +1103,25 @@
           "name": "Issue Certificate",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"enrollmentId\": 1,\n  \"issueDate\": \"2026-06-15\",\n  \"expiryDate\": \"2029-06-15\",\n  \"finalGrade\": 95.5,\n  \"honors\": \"DISTINCTION\",\n  \"notes\": \"Issued from Postman\"\n}" },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"enrollmentId\": 1,\n  \"issueDate\": \"2026-06-15\",\n  \"expiryDate\": \"2029-06-15\",\n  \"finalGrade\": 95.5,\n  \"honors\": \"DISTINCTION\",\n  \"notes\": \"Issued from Postman\"\n}"
+            },
             "url": "{{baseUrl}}/api/v1/certificates"
           }
         },
         {
           "name": "Verify Certificate (Public)",
           "request": {
-            "auth": { "type": "noauth" },
+            "auth": {
+              "type": "noauth"
+            },
             "method": "GET",
             "url": "{{baseUrl}}/api/v1/certificates/verify/CERT-2026-A1-0001"
           }
@@ -876,7 +1148,12 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"courseId\": {{courseId}},\n  \"title\": \"Examen Postman\",\n  \"description\": \"Prueba de endpoint create exam\",\n  \"totalPoints\": 100.00,\n  \"weight\": 0.2,\n  \"timeLimitMinutes\": 60,\n  \"scheduledAt\": \"2026-06-20T10:00:00\",\n  \"visibilityStart\": \"2026-06-18T00:00:00\",\n  \"visibilityEnd\": \"2026-06-21T23:59:59\",\n  \"assignedTeachers\": [3,4],\n  \"notes\": \"Creado por Postman\",\n  \"roomInfo\": \"Aula 101\"\n}"
@@ -886,34 +1163,84 @@
         },
         {
           "name": "Get Exam By ID",
-          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/exams/{{examId}}" }
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/exams/{{examId}}"
+          }
         },
         {
           "name": "Get Exams By Course",
-          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/exams/course/{{courseId}}?page=0&size=20&sort=scheduledAt&order=DESC" }
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/exams/course/{{courseId}}?page=0&size=20&sort=scheduledAt&order=DESC"
+          }
         },
         {
           "name": "Get My Exams",
-          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/exams/my-exams?courseIds=1&courseIds=2&page=0&size=20" }
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/exams/my-exams?courseIds=1&courseIds=2&page=0&size=20"
+          }
         },
         {
           "name": "Get Visible Exams",
-          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/exams/visible?page=0&size=20" }
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/exams/visible?page=0&size=20"
+          }
         },
         {
           "name": "Update Exam",
           "request": {
             "method": "PUT",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"title\": \"Examen Postman Actualizado\",\n  \"notes\": \"Update test\"\n}" },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Examen Postman Actualizado\",\n  \"notes\": \"Update test\"\n}"
+            },
             "url": "{{baseUrl}}/api/v1/exams/{{examId}}"
           }
         },
-        { "name": "Publish Exam", "request": { "method": "POST", "url": "{{baseUrl}}/api/v1/exams/{{examId}}/publish" } },
-        { "name": "Close Exam", "request": { "method": "POST", "url": "{{baseUrl}}/api/v1/exams/{{examId}}/close" } },
-        { "name": "Cancel Exam", "request": { "method": "POST", "url": "{{baseUrl}}/api/v1/exams/{{examId}}/cancel" } },
-        { "name": "Exam Statistics", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/exams/{{examId}}/statistics" } },
-        { "name": "Course Exam Statistics", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/exams/course/{{courseId}}/statistics" } }
+        {
+          "name": "Publish Exam",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/exams/{{examId}}/publish"
+          }
+        },
+        {
+          "name": "Close Exam",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/exams/{{examId}}/close"
+          }
+        },
+        {
+          "name": "Cancel Exam",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/exams/{{examId}}/cancel"
+          }
+        },
+        {
+          "name": "Exam Statistics",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/exams/{{examId}}/statistics"
+          }
+        },
+        {
+          "name": "Course Exam Statistics",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/exams/course/{{courseId}}/statistics"
+          }
+        }
       ]
     },
     {
@@ -936,7 +1263,12 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"examId\": \"{{examId}}\",\n  \"studentId\": 1,\n  \"notes\": \"Submission from Postman\"\n}"
@@ -944,16 +1276,48 @@
             "url": "{{baseUrl}}/api/v1/exam-submissions"
           }
         },
-        { "name": "Get Submission By ID", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/exam-submissions/{{submissionId}}" } },
-        { "name": "Get Submissions By Exam", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/exam-submissions/exam/{{examId}}?page=0&size=50&sort=createdAt&order=ASC" } },
-        { "name": "Get Submissions By Student", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/exam-submissions/student/{{studentId}}?page=0&size=50" } },
-        { "name": "Get Student Exam History", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/exam-submissions/student/{{studentId}}/course/{{courseId}}/history" } },
+        {
+          "name": "Get Submission By ID",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/exam-submissions/{{submissionId}}"
+          }
+        },
+        {
+          "name": "Get Submissions By Exam",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/exam-submissions/exam/{{examId}}?page=0&size=50&sort=createdAt&order=ASC"
+          }
+        },
+        {
+          "name": "Get Submissions By Student",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/exam-submissions/student/{{studentId}}?page=0&size=50"
+          }
+        },
+        {
+          "name": "Get Student Exam History",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/exam-submissions/student/{{studentId}}/course/{{courseId}}/history"
+          }
+        },
         {
           "name": "Grade Submission",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"score\": 89.5,\n  \"feedback\": \"Buen trabajo\",\n  \"notes\": \"Grade from Postman\"\n}" },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"score\": 89.5,\n  \"feedback\": \"Buen trabajo\",\n  \"notes\": \"Grade from Postman\"\n}"
+            },
             "url": "{{baseUrl}}/api/v1/exam-submissions/{{submissionId}}/grade"
           }
         },
@@ -961,36 +1325,90 @@
           "name": "Update Grade",
           "request": {
             "method": "PUT",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"score\": 91.0,\n  \"feedback\": \"Ajuste de nota\",\n  \"reason\": \"Reevaluacion\"\n}" },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"score\": 91.0,\n  \"feedback\": \"Ajuste de nota\",\n  \"reason\": \"Reevaluacion\"\n}"
+            },
             "url": "{{baseUrl}}/api/v1/exam-submissions/{{submissionId}}/grade"
           }
         },
-        { "name": "Attach Scanned File", "request": { "method": "POST", "url": "{{baseUrl}}/api/v1/exam-submissions/{{submissionId}}/attach-file?filePath=/scans/postman.pdf" } },
-        { "name": "Cancel Submission", "request": { "method": "POST", "url": "{{baseUrl}}/api/v1/exam-submissions/{{submissionId}}/cancel" } },
-        { "name": "Get Grade History", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/exam-submissions/{{submissionId}}/grade-history" } }
+        {
+          "name": "Attach Scanned File",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/exam-submissions/{{submissionId}}/attach-file?filePath=/scans/postman.pdf"
+          }
+        },
+        {
+          "name": "Cancel Submission",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/exam-submissions/{{submissionId}}/cancel"
+          }
+        },
+        {
+          "name": "Get Grade History",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/exam-submissions/{{submissionId}}/grade-history"
+          }
+        }
       ]
     },
     {
       "name": "Staff",
       "item": [
-        { "name": "Get Teaching Staff", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/staff/teaching?page=0&limit=10&sort=lastName&order=ASC" } },
+        {
+          "name": "Get Teaching Staff",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/staff/teaching?page=0&limit=10&sort=lastName&order=ASC"
+          }
+        },
         {
           "name": "Create Teaching Staff",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"firstName\": \"Docente\",\n  \"lastName\": \"Postman\",\n  \"email\": \"docente.postman@sigep.edu.mx\",\n  \"phoneNumber\": \"+54-11-7333-0001\",\n  \"documentNumber\": \"DOC-PM-001\",\n  \"birthDate\": \"1990-01-01\",\n  \"address\": \"Av. Demo 123\",\n  \"hireDate\": \"2026-01-01\",\n  \"monthlySalary\": 800000,\n  \"specialization\": \"General English\",\n  \"emergencyContactName\": \"Contacto\",\n  \"emergencyContactPhone\": \"+54-11-7333-0002\",\n  \"qualifications\": \"CELTA\",\n  \"notes\": \"Creado para QA\"\n}" },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Docente\",\n  \"lastName\": \"Postman\",\n  \"email\": \"docente.postman@sigep.edu.mx\",\n  \"phoneNumber\": \"+54-11-7333-0001\",\n  \"documentNumber\": \"DOC-PM-001\",\n  \"birthDate\": \"1990-01-01\",\n  \"address\": \"Av. Demo 123\",\n  \"hireDate\": \"2026-01-01\",\n  \"monthlySalary\": 800000,\n  \"specialization\": \"General English\",\n  \"emergencyContactName\": \"Contacto\",\n  \"emergencyContactPhone\": \"+54-11-7333-0002\",\n  \"qualifications\": \"CELTA\",\n  \"notes\": \"Creado para QA\"\n}"
+            },
             "url": "{{baseUrl}}/api/v1/staff/teaching"
           }
         },
-        { "name": "Get Non-Teaching Staff", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/staff/non-teaching?page=0&limit=10&sort=lastName&order=ASC" } },
+        {
+          "name": "Get Non-Teaching Staff",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/staff/non-teaching?page=0&limit=10&sort=lastName&order=ASC"
+          }
+        },
         {
           "name": "Create Non-Teaching Staff",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"firstName\": \"NoDoc\",\n  \"lastName\": \"Postman\",\n  \"email\": \"nodoc.postman@sigep.edu.mx\",\n  \"phoneNumber\": \"+54-11-7444-0001\",\n  \"documentNumber\": \"NODOC-PM-001\",\n  \"birthDate\": \"1992-04-10\",\n  \"address\": \"Calle QA 321\",\n  \"hireDate\": \"2026-01-15\",\n  \"hourlyRate\": 7000,\n  \"role\": \"IT_SUPPORT\",\n  \"companyName\": \"TechOps\",\n  \"assignedTasks\": \"Soporte\",\n  \"emergencyContactName\": \"Contacto ND\",\n  \"emergencyContactPhone\": \"+54-11-7444-0002\"\n}" },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"NoDoc\",\n  \"lastName\": \"Postman\",\n  \"email\": \"nodoc.postman@sigep.edu.mx\",\n  \"phoneNumber\": \"+54-11-7444-0001\",\n  \"documentNumber\": \"NODOC-PM-001\",\n  \"birthDate\": \"1992-04-10\",\n  \"address\": \"Calle QA 321\",\n  \"hireDate\": \"2026-01-15\",\n  \"hourlyRate\": 7000,\n  \"role\": \"IT_SUPPORT\",\n  \"companyName\": \"TechOps\",\n  \"assignedTasks\": \"Soporte\",\n  \"emergencyContactName\": \"Contacto ND\",\n  \"emergencyContactPhone\": \"+54-11-7444-0002\"\n}"
+            },
             "url": "{{baseUrl}}/api/v1/staff/non-teaching"
           }
         },
@@ -998,8 +1416,16 @@
           "name": "Create Staff Attendance",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"teachingStaffId\": 1,\n  \"attendanceDate\": \"2026-06-01\",\n  \"checkInTime\": \"08:55:00\",\n  \"checkOutTime\": \"15:00:00\",\n  \"status\": \"PRESENT\",\n  \"notes\": \"Registro desde Postman\",\n  \"hoursWorked\": 6.08\n}" },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"teachingStaffId\": 1,\n  \"attendanceDate\": \"2026-06-01\",\n  \"checkInTime\": \"08:55:00\",\n  \"checkOutTime\": \"15:00:00\",\n  \"status\": \"PRESENT\",\n  \"notes\": \"Registro desde Postman\",\n  \"hoursWorked\": 6.08\n}"
+            },
             "url": "{{baseUrl}}/api/v1/staff/attendance"
           }
         },
@@ -1020,22 +1446,933 @@
       ]
     },
     {
+      "name": "Tuition",
+      "item": [
+        {
+          "name": "Smoke Flow",
+          "item": [
+            {
+              "name": "01 - Login Admin (Save adminToken)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const json = pm.response.json();",
+                      "pm.collectionVariables.set('token', json?.data?.token || '');",
+                      "pm.collectionVariables.set('adminToken', json?.data?.token || '');",
+                      "pm.collectionVariables.set('refreshToken', json?.data?.refreshToken || '');",
+                      "pm.collectionVariables.set('tuitionRunId', Date.now().toString());"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"password123\"\n}"
+                },
+                "url": "{{baseUrl}}/api/v1/auth/login"
+              }
+            },
+            {
+              "name": "02 - Login Guardian (Save guardianToken)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const json = pm.response.json();",
+                      "pm.collectionVariables.set('guardianToken', json?.data?.token || '');"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"username\": \"guardian.ana\",\n  \"password\": \"password123\"\n}"
+                },
+                "url": "{{baseUrl}}/api/v1/auth/login"
+              }
+            },
+            {
+              "name": "03 - Create Academic Year (Save tuitionAcademicYearId)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const json = pm.response.json();",
+                      "if (json?.data?.id) pm.collectionVariables.set('tuitionAcademicYearId', String(json.data.id));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "url": "{{baseUrl}}/api/v1/tuition/academic-years",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{adminToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Tuition Smoke {{tuitionRunId}}\",\n  \"startDate\": \"2026-03-01\",\n  \"firstTermStartDate\": \"2026-03-01\",\n  \"firstTermEndDate\": \"2026-07-15\",\n  \"secondTermStartDate\": \"2026-08-01\",\n  \"secondTermEndDate\": \"2026-12-15\",\n  \"endDate\": \"2026-12-20\",\n  \"status\": \"OPEN\"\n}"
+                }
+              }
+            },
+            {
+              "name": "04 - Create BEGINNER Level (Save tuitionLevelId)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const json = pm.response.json();",
+                      "if (json?.data?.id) pm.collectionVariables.set('tuitionLevelId', String(json.data.id));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "url": "{{baseUrl}}/api/v1/tuition/levels",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{adminToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"code\": \"BEGINNER\",\n  \"name\": \"Beginner\",\n  \"segment\": \"TEENS\",\n  \"levelOrder\": 1,\n  \"active\": true\n}"
+                }
+              }
+            },
+            {
+              "name": "05 - Create ELEMENTARY Level (Save tuitionNextLevelId)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const json = pm.response.json();",
+                      "if (json?.data?.id) pm.collectionVariables.set('tuitionNextLevelId', String(json.data.id));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "url": "{{baseUrl}}/api/v1/tuition/levels",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{adminToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"code\": \"ELEMENTARY\",\n  \"name\": \"Elementary\",\n  \"segment\": \"TEENS\",\n  \"levelOrder\": 2,\n  \"active\": true\n}"
+                }
+              }
+            },
+            {
+              "name": "06 - Create Level Progression (Save tuitionProgressionId)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const json = pm.response.json();",
+                      "if (json?.data?.id) pm.collectionVariables.set('tuitionProgressionId', String(json.data.id));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "url": "{{baseUrl}}/api/v1/tuition/level-progressions",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{adminToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"fromLevelId\": {{tuitionLevelId}},\n  \"toLevelId\": {{tuitionNextLevelId}},\n  \"rule\": \"PASS_PREVIOUS_LEVEL\",\n  \"active\": true\n}"
+                }
+              }
+            },
+            {
+              "name": "07 - Create Fee Plan (Save tuitionFeePlanId)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const json = pm.response.json();",
+                      "if (json?.data?.id) pm.collectionVariables.set('tuitionFeePlanId', String(json.data.id));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "url": "{{baseUrl}}/api/v1/tuition/fee-plans",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{adminToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"academicYearId\": {{tuitionAcademicYearId}},\n  \"name\": \"Teen Plan {{tuitionRunId}}\",\n  \"segment\": \"TEENS\",\n  \"levelId\": {{tuitionLevelId}},\n  \"enrollmentFee\": 25000.00,\n  \"monthlyFee\": 55000.00,\n  \"installments\": 9,\n  \"currency\": \"ARS\",\n  \"validFrom\": \"2026-01-01\",\n  \"validTo\": \"2026-12-31\",\n  \"status\": \"ACTIVE\"\n}"
+                }
+              }
+            },
+            {
+              "name": "08 - Create Segment Discount (Save tuitionDiscountId)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const json = pm.response.json();",
+                      "if (json?.data?.id) pm.collectionVariables.set('tuitionDiscountId', String(json.data.id));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "url": "{{baseUrl}}/api/v1/tuition/discounts",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{adminToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"segment\": \"TEENS\",\n  \"levelId\": {{tuitionLevelId}},\n  \"type\": \"DISCOUNT\",\n  \"percentage\": 10.00,\n  \"amount\": 0.00,\n  \"validFrom\": \"2026-01-01\",\n  \"validTo\": \"2026-12-31\",\n  \"reason\": \"Postman smoke discount\",\n  \"active\": true\n}"
+                }
+              }
+            },
+            {
+              "name": "09 - Create New Student Application (Save tuitionApplicationId)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const json = pm.response.json();",
+                      "if (json?.data?.id) pm.collectionVariables.set('tuitionApplicationId', String(json.data.id));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "url": "{{baseUrl}}/api/v1/tuition/applications",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{guardianToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"academicYearId\": {{tuitionAcademicYearId}},\n  \"requestedLevelId\": {{tuitionLevelId}},\n  \"requestedCourseId\": {{tuitionCourseId}},\n  \"feePlanId\": {{tuitionFeePlanId}},\n  \"applicationType\": \"NEW_STUDENT\",\n  \"studentFirstName\": \"Alumno\",\n  \"studentLastName\": \"Tuition {{tuitionRunId}}\",\n  \"studentEmail\": \"tuition.{{tuitionRunId}}@example.com\",\n  \"studentDocumentNumber\": \"TUI-{{tuitionRunId}}\",\n  \"studentDateOfBirth\": \"2012-05-10\",\n  \"studentAddress\": \"Calle Tuition 123\",\n  \"studentPhoneNumber\": \"+54-11-5555-0101\",\n  \"studentEmergencyContact\": \"Tutor +54-11-5555-0102\",\n  \"studentMedicalNotes\": \"Sin observaciones\"\n}"
+                }
+              }
+            },
+            {
+              "name": "10 - Reserve Seat",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const json = pm.response.json();",
+                      "if (json?.data?.id) pm.collectionVariables.set('tuitionApplicationId', String(json.data.id));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "url": "{{baseUrl}}/api/v1/tuition/applications/{{tuitionApplicationId}}/reserve-seat",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{guardianToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "11 - Mock Payment",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const json = pm.response.json();",
+                      "if (json?.data?.id) pm.collectionVariables.set('tuitionApplicationId', String(json.data.id));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "url": "{{baseUrl}}/api/v1/tuition/applications/{{tuitionApplicationId}}/mock-payment",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{guardianToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "12 - My Applications",
+              "request": {
+                "method": "GET",
+                "url": "{{baseUrl}}/api/v1/tuition/my-applications?page=0&limit=20",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{guardianToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "13 - Admin List Ready Applications",
+              "request": {
+                "method": "GET",
+                "url": "{{baseUrl}}/api/v1/tuition/applications?status=READY_FOR_ADMIN_APPROVAL&page=0&limit=20",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{adminToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "14 - Approve Application (Save enrollment/student)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const json = pm.response.json();",
+                      "if (json?.data?.id) pm.collectionVariables.set('tuitionApplicationId', String(json.data.id));",
+                      "if (json?.data?.enrollmentId) pm.collectionVariables.set('tuitionEnrollmentId', String(json.data.enrollmentId));",
+                      "if (json?.data?.studentId) pm.collectionVariables.set('studentId', String(json.data.studentId));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "PUT",
+                "url": "{{baseUrl}}/api/v1/tuition/applications/{{tuitionApplicationId}}/approve",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{adminToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"adminNotes\": \"Approved from Postman smoke flow\"\n}"
+                }
+              }
+            },
+            {
+              "name": "15 - Admin List Approved Applications",
+              "request": {
+                "method": "GET",
+                "url": "{{baseUrl}}/api/v1/tuition/applications?status=APPROVED&page=0&limit=20",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{adminToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Catalogs",
+          "item": [
+            {
+              "name": "List Academic Years",
+              "request": {
+                "method": "GET",
+                "url": "{{baseUrl}}/api/v1/tuition/academic-years?page=0&limit=20",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{adminToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Update Academic Year",
+              "request": {
+                "method": "PUT",
+                "url": "{{baseUrl}}/api/v1/tuition/academic-years/{{tuitionAcademicYearId}}",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{adminToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"status\": \"OPEN\"\n}"
+                }
+              }
+            },
+            {
+              "name": "Delete Academic Year",
+              "request": {
+                "method": "DELETE",
+                "url": "{{baseUrl}}/api/v1/tuition/academic-years/{{tuitionAcademicYearId}}",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{adminToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "List Levels",
+              "request": {
+                "method": "GET",
+                "url": "{{baseUrl}}/api/v1/tuition/levels?activeOnly=false&page=0&limit=50",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{adminToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Update Level",
+              "request": {
+                "method": "PUT",
+                "url": "{{baseUrl}}/api/v1/tuition/levels/{{tuitionLevelId}}",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{adminToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Beginner Updated\",\n  \"active\": true\n}"
+                }
+              }
+            },
+            {
+              "name": "Delete Level",
+              "request": {
+                "method": "DELETE",
+                "url": "{{baseUrl}}/api/v1/tuition/levels/{{tuitionLevelId}}",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{adminToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "List Level Progressions",
+              "request": {
+                "method": "GET",
+                "url": "{{baseUrl}}/api/v1/tuition/level-progressions?page=0&limit=50",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{adminToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Update Level Progression",
+              "request": {
+                "method": "PUT",
+                "url": "{{baseUrl}}/api/v1/tuition/level-progressions/{{tuitionProgressionId}}",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{adminToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"toLevelId\": {{tuitionNextLevelId}},\n  \"active\": true\n}"
+                }
+              }
+            },
+            {
+              "name": "Delete Level Progression",
+              "request": {
+                "method": "DELETE",
+                "url": "{{baseUrl}}/api/v1/tuition/level-progressions/{{tuitionProgressionId}}",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{adminToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "List Fee Plans",
+              "request": {
+                "method": "GET",
+                "url": "{{baseUrl}}/api/v1/tuition/fee-plans?page=0&limit=50",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{adminToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Update Fee Plan",
+              "request": {
+                "method": "PUT",
+                "url": "{{baseUrl}}/api/v1/tuition/fee-plans/{{tuitionFeePlanId}}",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{adminToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"monthlyFee\": 56000.00,\n  \"status\": \"ACTIVE\"\n}"
+                }
+              }
+            },
+            {
+              "name": "Delete Fee Plan",
+              "request": {
+                "method": "DELETE",
+                "url": "{{baseUrl}}/api/v1/tuition/fee-plans/{{tuitionFeePlanId}}",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{adminToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "List Discounts",
+              "request": {
+                "method": "GET",
+                "url": "{{baseUrl}}/api/v1/tuition/discounts?page=0&limit=50",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{adminToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Update Discount",
+              "request": {
+                "method": "PUT",
+                "url": "{{baseUrl}}/api/v1/tuition/discounts/{{tuitionDiscountId}}",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{adminToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"percentage\": 12.50,\n  \"reason\": \"Updated from Postman\"\n}"
+                }
+              }
+            },
+            {
+              "name": "Delete Discount",
+              "request": {
+                "method": "DELETE",
+                "url": "{{baseUrl}}/api/v1/tuition/discounts/{{tuitionDiscountId}}",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{adminToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin Decisions",
+          "item": [
+            {
+              "name": "List Applications",
+              "request": {
+                "method": "GET",
+                "url": "{{baseUrl}}/api/v1/tuition/applications?page=0&limit=20",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{adminToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Approve Application",
+              "request": {
+                "method": "PUT",
+                "url": "{{baseUrl}}/api/v1/tuition/applications/{{tuitionApplicationId}}/approve",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{adminToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"adminNotes\": \"Approved by admin\"\n}"
+                }
+              }
+            },
+            {
+              "name": "Reject Application",
+              "request": {
+                "method": "PUT",
+                "url": "{{baseUrl}}/api/v1/tuition/applications/{{tuitionApplicationId}}/reject",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{adminToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"adminNotes\": \"Rejected by admin\"\n}"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "Teacher Performance & Admin",
       "item": [
-        { "name": "Get Teacher Performance", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/teachers/{{teachingStaffId}}/performance" } },
-        { "name": "Get Teacher Exams", "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/teachers/{{teachingStaffId}}/exams?page=0&size=20&sort=scheduledAt&order=DESC" } },
+        {
+          "name": "Get Teacher Performance",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/teachers/{{teachingStaffId}}/performance"
+          }
+        },
+        {
+          "name": "Get Teacher Exams",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/teachers/{{teachingStaffId}}/exams?page=0&size=20&sort=scheduledAt&order=DESC"
+          }
+        },
         {
           "name": "Compare Teachers Performance",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "[1,2,3]" },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "[1,2,3]"
+            },
             "url": "{{baseUrl}}/api/v1/teachers/compare"
           }
         },
-        { "name": "Clear Cache", "request": { "method": "DELETE", "url": "{{baseUrl}}/api/v1/admin/cache/clear" } }
+        {
+          "name": "Clear Cache",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/api/v1/admin/cache/clear"
+          }
+        }
       ]
     }
   ]
 }
-

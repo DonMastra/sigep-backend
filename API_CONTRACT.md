@@ -1,6 +1,6 @@
 # API Contract - SiGEP Backend
 
-Contrato REST para integracion del frontend Angular SiGEP con el backend. Este documento refleja el estado actual del workspace al 2026-06-05.
+Contrato REST para integracion del frontend Angular SiGEP con el backend. Este documento refleja el estado actual del workspace al 2026-06-17.
 
 ## Informacion General
 
@@ -107,6 +107,7 @@ Nota: algunos endpoints aceptan `limit` y `size`; si ambos existen, el backend s
 - `exams` y `exam-submissions` actualmente devuelven varios DTOs o `PageResponse<T>` directamente, sin `ApiResponse<T>`.
 - `DELETE /api/v1/exams/{id}` devuelve `204 NO_CONTENT`; la mayoria de otros DELETE devuelve `200 OK` con wrapper.
 - `payments`, `communications` y `reports` no exponen API funcional completa.
+- `tuition` expone ledger mock para matriculacion; no factura, no emite CAE y no procesa pagos reales.
 - `GET /api/v1/students/{id}/payment-status` devuelve estado temporal/mock hasta completar facturacion/pagos.
 - `GET /api/v1/students/{id}/photo` devuelve binario de imagen, no `ApiResponse`.
 
@@ -319,6 +320,94 @@ Base: `/api/v1/enrollments`
 | PUT | `/{id}` | ADMIN, TEACHER | Actualiza inscripcion, estado o calificaciones. |
 | DELETE | `/{id}` | ADMIN | Elimina inscripcion. |
 | POST | `/bulk` | ADMIN, TEACHER | Crea inscripciones masivas. |
+
+## Tuition
+
+Base: `/api/v1/tuition`
+
+Tuition gestiona matriculacion como proceso previo a la inscripcion academica final. `Enrollment` se crea solo cuando admin aprueba una solicitud `READY_FOR_ADMIN_APPROVAL`.
+
+### Guardian flow
+
+| Metodo | Ruta | Roles | Descripcion |
+|---|---|---|---|
+| POST | `/applications` | GUARDIAN | Crea solicitud `SUBMITTED` para alumno nuevo, adicional o regular. |
+| GET | `/my-applications` | GUARDIAN | Lista solicitudes del guardian autenticado. |
+| POST | `/applications/{id}/reserve-seat` | GUARDIAN | Reserva una vacante y genera ledger mock de matricula inicial. |
+| POST | `/applications/{id}/mock-payment` | GUARDIAN | Marca la matricula inicial como `MOCK_PAID`; no factura. |
+
+### Admin flow
+
+| Metodo | Ruta | Roles | Descripcion |
+|---|---|---|---|
+| GET | `/applications?status=&academicYearId=` | ADMIN | Lista solicitudes con filtros. |
+| PUT | `/applications/{id}/approve` | ADMIN | Confirma reserva, activa guardian si corresponde, crea estudiante/enrollment y cuotas mock. |
+| PUT | `/applications/{id}/reject` | ADMIN | Rechaza solicitud, libera cupo y cancela ledger. |
+
+### Admin catalogs
+
+| Metodo | Ruta | Roles | Descripcion |
+|---|---|---|---|
+| GET/POST | `/academic-years` | ADMIN | Lista o crea ciclos lectivos de matriculacion. |
+| PUT/DELETE | `/academic-years/{id}` | ADMIN | Actualiza o elimina ciclo. |
+| GET/POST | `/levels` | ADMIN | Lista o crea niveles. |
+| PUT/DELETE | `/levels/{id}` | ADMIN | Actualiza o elimina nivel. |
+| GET/POST | `/level-progressions` | ADMIN | Lista o crea correlaciones de nivel. |
+| PUT/DELETE | `/level-progressions/{id}` | ADMIN | Actualiza o elimina progresion. |
+| GET/POST | `/fee-plans` | ADMIN | Lista o crea planes de cuota. |
+| PUT/DELETE | `/fee-plans/{id}` | ADMIN | Actualiza o elimina plan. |
+| GET/POST | `/discounts` | ADMIN | Lista o crea descuentos/becas. |
+| PUT/DELETE | `/discounts/{id}` | ADMIN | Actualiza o elimina descuento/beca. |
+
+Enums principales:
+
+```ts
+type TuitionAcademicYearStatus = 'DRAFT' | 'OPEN' | 'CLOSED';
+type TuitionSegment = 'CHILDREN' | 'TEENS' | 'ADULTS';
+type TuitionApplicationType = 'NEW_STUDENT' | 'REGULAR_PROMOTION' | 'ADDITIONAL_STUDENT';
+type TuitionApplicationStatus =
+  | 'DRAFT'
+  | 'SUBMITTED'
+  | 'SEAT_RESERVED'
+  | 'PAYMENT_PENDING'
+  | 'READY_FOR_ADMIN_APPROVAL'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'CANCELLED'
+  | 'EXPIRED';
+type TuitionLedgerConcept = 'TUITION_ENROLLMENT' | 'MONTHLY_FEE';
+type TuitionLedgerStatus = 'MOCK_PENDING' | 'MOCK_PAID' | 'CANCELLED';
+```
+
+Solicitud:
+
+```ts
+interface CreateTuitionApplicationRequest {
+  academicYearId: number;
+  requestedLevelId: number;
+  requestedCourseId: number;
+  feePlanId?: number;
+  applicationType: TuitionApplicationType;
+  studentId?: number;
+  studentFirstName?: string;
+  studentLastName?: string;
+  studentEmail?: string;
+  studentDocumentNumber?: string;
+  studentDateOfBirth?: string;
+  studentAddress?: string;
+  studentPhoneNumber?: string;
+  studentEmergencyContact?: string;
+  studentMedicalNotes?: string;
+}
+```
+
+Notas:
+
+- `REGULAR_PROMOTION` requiere `studentId`; si no hay correlacion clara de nivel, la solicitud queda `SUBMITTED` con `warningMessage`.
+- Para alumno nuevo sin `studentId`, los campos snapshot del estudiante son obligatorios.
+- `requestedLevel.code` debe coincidir con el `CourseLevel` del curso solicitado.
+- La reserva descuenta cupos solo dentro de `tuition`; `Enrollment` real se crea al aprobar.
+- El mock payment solo genera referencias internas `MOCK-TUITION-{applicationId}-{ledgerId}`.
 
 ## Course Sessions
 
@@ -608,7 +697,7 @@ Base: `/api/v1/admin/cache`
 
 ### Payments
 
-Estado: planificado/en desarrollo. Existe entidad `Payment`, pero no hay controlador REST funcional completo.
+Estado: planificado/en desarrollo. Existe entidad `Payment`, pero no hay controlador REST funcional completo. `tuition` genera ledger mock inicial y cuotas mock, pero no reemplaza el modulo real de pagos/facturacion.
 
 Capacidades esperadas:
 
@@ -645,6 +734,7 @@ Capacidades esperadas:
 - Usar `limit` como parametro principal de paginacion salvo endpoints de `exams`, donde `size` es el parametro documentado.
 - Tratar `GET /students/{id}/photo` como blob.
 - No depender de pagos/facturacion como modulo listo; usar `payment-status` solo como placeholder visible.
+- Para matriculacion, consumir `tuition` como flujo independiente y tratar `ledgerEntries` como mock hasta que exista pagos/facturacion.
 - Consumir `GET /courses/published` para catalogos publicos sin autenticacion.
 - Usar `/scheduling/reservations/available` para combos de asignacion horaria.
 

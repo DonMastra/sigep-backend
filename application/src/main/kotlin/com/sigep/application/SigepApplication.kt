@@ -20,7 +20,8 @@ import org.springframework.scheduling.annotation.EnableScheduling
     "com.sigep.courses.domain.model",
     "com.sigep.staff.domain.model",
     "com.sigep.security.domain.model",
-    "com.sigep.scheduling.domain.model"
+    "com.sigep.scheduling.domain.model",
+    "com.sigep.tuition.domain.model"
 ])
 @EnableCaching
 @EnableScheduling
