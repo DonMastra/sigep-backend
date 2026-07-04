@@ -39,11 +39,13 @@ import com.sigep.tuition.domain.repository.TuitionLevelProgressionRepository
 import com.sigep.tuition.domain.repository.TuitionLevelRepository
 import com.sigep.tuition.domain.repository.TuitionSeatReservationRepository
 import org.slf4j.LoggerFactory
+import org.springframework.dao.DataAccessException
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -298,6 +300,7 @@ class TuitionApplicationService(
     }
 
     @Scheduled(fixedDelayString = "\${app.tuition.reservation-expiration-fixed-delay-ms:600000}")
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     fun expireUnpaidReservations() {
         val now = LocalDateTime.now()
         val expirableStatuses = setOf(
@@ -306,16 +309,24 @@ class TuitionApplicationService(
             TuitionApplicationStatus.PAYMENT_PENDING
         )
 
-        seatReservationRepository.findExpiredActiveReservations(now = now).forEach { reservation ->
-            val application = reservation.application
-            if (application.status in expirableStatuses) {
-                seatReservationRepository.save(reservation.copy(status = TuitionSeatReservationStatus.EXPIRED, updatedAt = now))
-                ledgerEntryRepository.findByApplicationId(application.id!!).forEach { entry ->
-                    ledgerEntryRepository.save(entry.copy(status = TuitionLedgerStatus.CANCELLED, updatedAt = now))
+        try {
+            seatReservationRepository.findExpiredActiveReservations(now = now).forEach { reservation ->
+                val application = reservation.application
+                if (application.status in expirableStatuses) {
+                    seatReservationRepository.save(reservation.copy(status = TuitionSeatReservationStatus.EXPIRED, updatedAt = now))
+                    ledgerEntryRepository.findByApplicationId(application.id!!).forEach { entry ->
+                        ledgerEntryRepository.save(entry.copy(status = TuitionLedgerStatus.CANCELLED, updatedAt = now))
+                    }
+                    applicationRepository.save(application.copy(status = TuitionApplicationStatus.EXPIRED, updatedAt = now))
+                    logger.info("Expired tuition application {} due to unpaid reservation", application.id)
                 }
-                applicationRepository.save(application.copy(status = TuitionApplicationStatus.EXPIRED, updatedAt = now))
-                logger.info("Expired tuition application {} due to unpaid reservation", application.id)
             }
+        } catch (ex: DataAccessException) {
+            logger.warn(
+                "Skipping unpaid tuition reservation expiration because the tuition schema is not ready. " +
+                    "Apply scripts/migrations/V13__create_tuition_module.sql before using tuition workflows.",
+                ex
+            )
         }
     }
 

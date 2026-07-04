@@ -38,10 +38,21 @@ ALTER TABLE students ALTER COLUMN document_number    SET NOT NULL;
 -- -----------------------------------------------------------------------
 -- Step 3: course_sessions — migrate legacy scheduled_date -> session_date
 -- -----------------------------------------------------------------------
-UPDATE course_sessions
-SET session_date = scheduled_date
-WHERE session_date IS NULL
-  AND scheduled_date IS NOT NULL;
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'course_sessions'
+          AND column_name = 'scheduled_date'
+    ) THEN
+        UPDATE course_sessions
+        SET session_date = scheduled_date
+        WHERE session_date IS NULL
+          AND scheduled_date IS NOT NULL;
+    END IF;
+END $$;
 
 -- -----------------------------------------------------------------------
 -- Step 4: course_sessions — fill default times for legacy rows without hours

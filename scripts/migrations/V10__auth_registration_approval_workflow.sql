@@ -2,7 +2,7 @@
 -- Adds account status to users and creates registration_requests table.
 
 ALTER TABLE users
-    ADD COLUMN IF NOT EXISTS status VARCHAR(30);
+    ADD COLUMN IF NOT EXISTS status VARCHAR(255);
 
 UPDATE users
 SET status = CASE
@@ -28,14 +28,14 @@ BEGIN
 END $$;
 
 CREATE TABLE IF NOT EXISTS registration_requests (
-    id VARCHAR(100) PRIMARY KEY,
+    id VARCHAR(255) PRIMARY KEY,
     user_id BIGINT NOT NULL UNIQUE,
     username VARCHAR(255) NOT NULL,
     email VARCHAR(255) NOT NULL,
     first_name VARCHAR(255) NOT NULL,
     last_name VARCHAR(255) NOT NULL,
-    requested_role VARCHAR(30) NOT NULL,
-    status VARCHAR(30) NOT NULL,
+    requested_role VARCHAR(255) NOT NULL,
+    status VARCHAR(255) NOT NULL,
     created_at TIMESTAMP NOT NULL,
     reviewed_at TIMESTAMP NULL,
     reviewed_by BIGINT NULL,
@@ -43,14 +43,8 @@ CREATE TABLE IF NOT EXISTS registration_requests (
     CONSTRAINT fk_registration_request_user
         FOREIGN KEY (user_id) REFERENCES users(id),
     CONSTRAINT registration_requests_requested_role_check
-        CHECK (requested_role IN ('GUARDIAN', 'TEACHER')),
+        CHECK (requested_role IN ('ADMIN', 'TEACHER', 'GUARDIAN')),
     CONSTRAINT registration_requests_status_check
         CHECK (status IN ('PENDING_APPROVAL', 'ACTIVE', 'REJECTED'))
 );
-
-CREATE INDEX IF NOT EXISTS idx_registration_requests_status
-    ON registration_requests(status);
-
-CREATE INDEX IF NOT EXISTS idx_registration_requests_created_at
-    ON registration_requests(created_at);
 
