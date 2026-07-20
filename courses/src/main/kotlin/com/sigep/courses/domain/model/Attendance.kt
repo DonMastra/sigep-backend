@@ -18,6 +18,10 @@ data class Attendance(
     @JoinColumn(name = "enrollment_id", nullable = false)
     val enrollment: Enrollment,
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "course_session_id")
+    val courseSession: CourseSession? = null,
+
     @Column(nullable = false)
     val attendanceDate: LocalDate,
 

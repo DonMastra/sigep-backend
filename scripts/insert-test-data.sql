@@ -20,18 +20,18 @@ BEGIN;
 -- ============================================================================
 -- USERS
 -- ============================================================================
--- BCrypt hash para "password123"
+-- BCrypt hash valido para "password123" (strength 12)
 INSERT INTO users (
     id, username, email, password, first_name, last_name, role, active, created_at, updated_at
 ) VALUES
-    (1, 'admin', 'admin@sigep.edu.mx', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYIr6E8h.9i', 'Admin', 'Sistema', 'ADMIN', true, NOW() - INTERVAL '120 days', NOW() - INTERVAL '1 days'),
-    (2, 'coordinator', 'coordinator@sigep.edu.mx', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYIr6E8h.9i', 'Carla', 'Coordinadora', 'ADMIN', true, NOW() - INTERVAL '100 days', NOW() - INTERVAL '2 days'),
-    (3, 'teacher.juan', 'juan.teacher@sigep.edu.mx', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYIr6E8h.9i', 'Juan', 'Paredes', 'TEACHER', true, NOW() - INTERVAL '90 days', NOW() - INTERVAL '3 days'),
-    (4, 'teacher.maria', 'maria.teacher@sigep.edu.mx', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYIr6E8h.9i', 'Maria', 'Gomez', 'TEACHER', true, NOW() - INTERVAL '88 days', NOW() - INTERVAL '4 days'),
-    (5, 'teacher.luis', 'luis.teacher@sigep.edu.mx', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYIr6E8h.9i', 'Luis', 'Romero', 'TEACHER', true, NOW() - INTERVAL '85 days', NOW() - INTERVAL '5 days'),
-    (6, 'guardian.ana', 'ana.guardian@sigep.edu.mx', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYIr6E8h.9i', 'Ana', 'Lopez', 'GUARDIAN', true, NOW() - INTERVAL '80 days', NOW() - INTERVAL '2 days'),
-    (7, 'guardian.pablo', 'pablo.guardian@sigep.edu.mx', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYIr6E8h.9i', 'Pablo', 'Diaz', 'GUARDIAN', true, NOW() - INTERVAL '78 days', NOW() - INTERVAL '2 days'),
-    (8, 'guardian.sofia', 'sofia.guardian@sigep.edu.mx', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYIr6E8h.9i', 'Sofia', 'Ruiz', 'GUARDIAN', true, NOW() - INTERVAL '75 days', NOW() - INTERVAL '1 days');
+    (1, 'admin', 'admin@sigep.edu.mx', '$2a$12$s8S1ftMF00C/p/vQMbgyfemtqzTqdWFkhuuhsOzAHjV7.k2S9kzYm', 'Admin', 'Sistema', 'ADMIN', true, NOW() - INTERVAL '120 days', NOW() - INTERVAL '1 days'),
+    (2, 'coordinator', 'coordinator@sigep.edu.mx', '$2a$12$s8S1ftMF00C/p/vQMbgyfemtqzTqdWFkhuuhsOzAHjV7.k2S9kzYm', 'Carla', 'Coordinadora', 'ADMIN', true, NOW() - INTERVAL '100 days', NOW() - INTERVAL '2 days'),
+    (3, 'teacher.juan', 'juan.teacher@sigep.edu.mx', '$2a$12$s8S1ftMF00C/p/vQMbgyfemtqzTqdWFkhuuhsOzAHjV7.k2S9kzYm', 'Juan', 'Paredes', 'TEACHER', true, NOW() - INTERVAL '90 days', NOW() - INTERVAL '3 days'),
+    (4, 'teacher.maria', 'maria.teacher@sigep.edu.mx', '$2a$12$s8S1ftMF00C/p/vQMbgyfemtqzTqdWFkhuuhsOzAHjV7.k2S9kzYm', 'Maria', 'Gomez', 'TEACHER', true, NOW() - INTERVAL '88 days', NOW() - INTERVAL '4 days'),
+    (5, 'teacher.luis', 'luis.teacher@sigep.edu.mx', '$2a$12$s8S1ftMF00C/p/vQMbgyfemtqzTqdWFkhuuhsOzAHjV7.k2S9kzYm', 'Luis', 'Romero', 'TEACHER', true, NOW() - INTERVAL '85 days', NOW() - INTERVAL '5 days'),
+    (6, 'guardian.ana', 'ana.guardian@sigep.edu.mx', '$2a$12$s8S1ftMF00C/p/vQMbgyfemtqzTqdWFkhuuhsOzAHjV7.k2S9kzYm', 'Ana', 'Lopez', 'GUARDIAN', true, NOW() - INTERVAL '80 days', NOW() - INTERVAL '2 days'),
+    (7, 'guardian.pablo', 'pablo.guardian@sigep.edu.mx', '$2a$12$s8S1ftMF00C/p/vQMbgyfemtqzTqdWFkhuuhsOzAHjV7.k2S9kzYm', 'Pablo', 'Diaz', 'GUARDIAN', true, NOW() - INTERVAL '78 days', NOW() - INTERVAL '2 days'),
+    (8, 'guardian.sofia', 'sofia.guardian@sigep.edu.mx', '$2a$12$s8S1ftMF00C/p/vQMbgyfemtqzTqdWFkhuuhsOzAHjV7.k2S9kzYm', 'Sofia', 'Ruiz', 'GUARDIAN', true, NOW() - INTERVAL '75 days', NOW() - INTERVAL '1 days');
 
 -- ============================================================================
 -- STUDENTS

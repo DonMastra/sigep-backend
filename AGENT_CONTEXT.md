@@ -1,5 +1,10 @@
 # AGENT_CONTEXT.md - Contexto para Agentes SiGEP Backend
 
+> **Estado QA (2026-07-20).** Este documento complementa las secciones historicas
+> y describe el contrato operativo que debe respetarse al cerrar el primer flujo
+> manual. Ante una discrepancia, prevalecen las entidades/DTOs y los controladores
+> actuales, seguidos por `API_CONTRACT.md` y las migraciones versionadas.
+
 ## Objetivo del Sistema
 
 SiGEP Backend es la API REST que provee datos y reglas de negocio a la aplicacion web Angular SiGEP. El dominio es un instituto privado de ensenanza de ingles que necesita gestionar estudiantes, guardianes, cursos, matriculacion, inscripciones, asistencia, materiales, certificados, personal, examenes, horarios y, en el roadmap, pagos/facturacion, comunicaciones y reportes.
@@ -113,6 +118,13 @@ Los controladores que necesitan actor actual leen `userId` y `userRole` desde `H
 - Scripts SQL viven en `scripts/` y `scripts/migrations/`.
 - La mayoria de IDs son `Long`.
 - `exams` usa `UUID` por razones historicas de migracion.
+- `V14__fix_first_manual_flow.sql` agrega compatibilidad del flujo QA (vinculo y foto
+  docente, docente nullable en cursos, codigo de curso case-insensitive, `course_level`,
+  reglas de progresion y asistencia por sesion). `V15__repair_legacy_test_password_hash.sql`
+  solo corrige el hash conocido de los usuarios de prueba legacy.
+- Las migraciones SQL se validan sobre una base descartable o dentro de una transaccion
+  revertida; no se deben ejecutar automaticamente sobre el contenedor actual sin backup
+  y aprobacion explicita.
 
 ## API y Contrato Frontend
 
@@ -124,7 +136,9 @@ La API esta bajo `/api/v1`. El frontend Angular deberia:
 - Manejar `ErrorResponse` centralmente.
 - Tratar imagenes de estudiantes como `Blob`.
 - Usar `limit` como paginacion principal salvo endpoints con `size`.
-- No asumir pagos/facturacion como completo.
+- No asumir pagos/facturacion como completo: `tuition` solo produce un ledger mock.
+- Las fechas JSON sin hora se serializan como `YYYY-MM-DD` y las horas de sesiones/reservas
+  como `HH:mm`, sin conversion UTC.
 
 Consultar `API_CONTRACT.md` antes de implementar pantallas.
 
@@ -162,6 +176,17 @@ Responsabilidades:
 - Materiales.
 - Certificados.
 
+Contrato QA: `CourseDto.teacherId` es nullable; `enrolledStudents` cuenta solo
+inscripciones `ACTIVE` y `totalEnrollments` cuenta todas. Publicar exige estado valido,
+docente asignado y reserva, pero no una matricula minima. El catalogo `GET /courses/published`
+esta habilitado para `GUARDIAN`.
+
+La asistencia masiva usa el contenedor `{ courseSessionId, date, records }`.
+Cada registro se identifica por `enrollmentId + courseSessionId`, por lo que repetir
+el envio actualiza la fila existente. La fecha debe coincidir con la sesion seleccionada;
+`PRESENT` y `LATE` computan asistencia efectiva, mientras `JUSTIFIED` y licencias se
+informan por separado. `studentName` se resuelve mediante `StudentProfileProvider`.
+
 ### Staff
 
 Responsabilidades:
@@ -170,6 +195,12 @@ Responsabilidades:
 - Personal no docente.
 - Asistencia laboral.
 - Resolucion de docentes para otros modulos.
+
+El alta de docente (`POST /staff/teaching`) crea en una transaccion una cuenta activa
+`TEACHER` con BCrypt a partir de `username`/`initialPassword`, enlaza `linkedUserId` y
+aplica `assignedCourseIds`. La edicion no acepta credenciales; puede cambiar datos
+personales/laborales, vinculo y asignaciones. Las fotos se cargan por multipart y se
+persisten en PostgreSQL.
 
 ### Exams
 
@@ -206,6 +237,18 @@ Responsabilidades:
 - Reserva temporal de vacante.
 - Ledger mock para matricula inicial y cuotas mensuales.
 - Aprobacion administrativa que confirma reserva, activa guardian si corresponde, crea estudiante nuevo y genera `Enrollment`.
+
+Contrato QA adicional:
+
+- `GUARDIAN` puede leer ciclos abiertos, niveles activos, planes vigentes y cursos publicados;
+  la escritura de catalogos permanece exclusiva de `ADMIN`.
+- `TuitionLevel.courseLevel` es el mapeo explicito al enum de cursos. Se mantienen los
+  respaldos legacy `A1 -> BEGINNER` y `A2 -> ELEMENTARY` cuando el catalogo aun no tiene
+  valor.
+- `PASS_PREVIOUS_LEVEL` bloquea una progresion no aprobada; `ADMIN_APPROVAL` marca
+  `requiresAdminOverride` y exige nota administrativa no vacia al aprobar.
+- El ledger mock genera la matricula y cuotas de enero a diciembre del mismo ciclo lectivo
+  (maximo 12 vencimientos), y nunca debe interpretarse como factura fiscal.
 
 Limites:
 

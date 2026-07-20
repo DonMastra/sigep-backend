@@ -112,7 +112,7 @@ class StudentService(
             enrollmentDate = request.enrollmentDate ?: LocalDate.now(),
             medicalNotes = request.medicalNotes,
             active = request.active,
-            currentLevel = "BEGINNER", // Default
+            currentLevel = request.currentLevel,
             createdAt = LocalDateTime.now(),
             updatedAt = LocalDateTime.now()
         )
@@ -213,6 +213,7 @@ class StudentService(
             medicalNotes = request.medicalNotes ?: student.medicalNotes,
             photoUrl = student.photoUrl,
             active = request.active ?: student.active,
+            currentLevel = request.currentLevel ?: student.currentLevel,
             updatedAt = LocalDateTime.now()
         )
 
@@ -340,6 +341,7 @@ class StudentService(
             guardianId = guardianId,
             currentCourseId = currentEnrollment?.courseId,
             currentCourseName = currentEnrollment?.courseName,
+            currentLevel = currentLevel,
             active = active,
             photoUrl = photoUrl,
             phoneNumber = phoneNumber,
@@ -371,6 +373,7 @@ class StudentService(
             medicalNotes = medicalNotes,
             currentCourseId = currentEnrollment?.courseId,
             currentCourseName = currentEnrollment?.courseName,
+            currentLevel = currentLevel,
             active = active,
             photoUrl = photoUrl,
             courseHistory = allEnrollments,  // Ya son EnrollmentSummaryDto

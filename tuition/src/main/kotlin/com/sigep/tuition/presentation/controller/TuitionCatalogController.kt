@@ -25,6 +25,7 @@ import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
+import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -39,7 +40,7 @@ import org.springframework.web.bind.annotation.RestController
 @RequestMapping("/api/v1/tuition")
 @Tag(name = "Tuition Catalogs", description = "Administrative catalogs for tuition workflow")
 @SecurityRequirement(name = "Bearer Authentication")
-@RequireAdmin
+@PreAuthorize("hasAnyRole('ADMIN', 'GUARDIAN')")
 class TuitionCatalogController(
     private val tuitionCatalogService: TuitionCatalogService
 ) {
@@ -53,10 +54,12 @@ class TuitionCatalogController(
         ResponseEntity.ok(ApiResponse.success(tuitionCatalogService.listAcademicYears(status, page, limit)))
 
     @PostMapping("/academic-years")
+    @RequireAdmin
     fun createAcademicYear(@Valid @RequestBody request: CreateTuitionAcademicYearRequest): ResponseEntity<ApiResponse<TuitionAcademicYearDto>> =
         ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(tuitionCatalogService.createAcademicYear(request), "Academic year created"))
 
     @PutMapping("/academic-years/{id}")
+    @RequireAdmin
     fun updateAcademicYear(
         @PathVariable id: Long,
         @Valid @RequestBody request: UpdateTuitionAcademicYearRequest
@@ -64,6 +67,7 @@ class TuitionCatalogController(
         ResponseEntity.ok(ApiResponse.success(tuitionCatalogService.updateAcademicYear(id, request), "Academic year updated"))
 
     @DeleteMapping("/academic-years/{id}")
+    @RequireAdmin
     fun deleteAcademicYear(@PathVariable id: Long): ResponseEntity<ApiResponse<Unit>> {
         tuitionCatalogService.deleteAcademicYear(id)
         return ResponseEntity.ok(ApiResponse.successNoContent("Academic year deleted"))
@@ -78,10 +82,12 @@ class TuitionCatalogController(
         ResponseEntity.ok(ApiResponse.success(tuitionCatalogService.listLevels(activeOnly, page, limit)))
 
     @PostMapping("/levels")
+    @RequireAdmin
     fun createLevel(@Valid @RequestBody request: CreateTuitionLevelRequest): ResponseEntity<ApiResponse<TuitionLevelDto>> =
         ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(tuitionCatalogService.createLevel(request), "Tuition level created"))
 
     @PutMapping("/levels/{id}")
+    @RequireAdmin
     fun updateLevel(
         @PathVariable id: Long,
         @Valid @RequestBody request: UpdateTuitionLevelRequest
@@ -89,6 +95,7 @@ class TuitionCatalogController(
         ResponseEntity.ok(ApiResponse.success(tuitionCatalogService.updateLevel(id, request), "Tuition level updated"))
 
     @DeleteMapping("/levels/{id}")
+    @RequireAdmin
     fun deleteLevel(@PathVariable id: Long): ResponseEntity<ApiResponse<Unit>> {
         tuitionCatalogService.deleteLevel(id)
         return ResponseEntity.ok(ApiResponse.successNoContent("Tuition level deleted"))
@@ -102,10 +109,12 @@ class TuitionCatalogController(
         ResponseEntity.ok(ApiResponse.success(tuitionCatalogService.listProgressions(page, limit)))
 
     @PostMapping("/level-progressions")
+    @RequireAdmin
     fun createProgression(@Valid @RequestBody request: CreateTuitionLevelProgressionRequest): ResponseEntity<ApiResponse<TuitionLevelProgressionDto>> =
         ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(tuitionCatalogService.createProgression(request), "Tuition level progression created"))
 
     @PutMapping("/level-progressions/{id}")
+    @RequireAdmin
     fun updateProgression(
         @PathVariable id: Long,
         @Valid @RequestBody request: UpdateTuitionLevelProgressionRequest
@@ -113,6 +122,7 @@ class TuitionCatalogController(
         ResponseEntity.ok(ApiResponse.success(tuitionCatalogService.updateProgression(id, request), "Tuition level progression updated"))
 
     @DeleteMapping("/level-progressions/{id}")
+    @RequireAdmin
     fun deleteProgression(@PathVariable id: Long): ResponseEntity<ApiResponse<Unit>> {
         tuitionCatalogService.deleteProgression(id)
         return ResponseEntity.ok(ApiResponse.successNoContent("Tuition level progression deleted"))
@@ -126,10 +136,12 @@ class TuitionCatalogController(
         ResponseEntity.ok(ApiResponse.success(tuitionCatalogService.listFeePlans(page, limit)))
 
     @PostMapping("/fee-plans")
+    @RequireAdmin
     fun createFeePlan(@Valid @RequestBody request: CreateTuitionFeePlanRequest): ResponseEntity<ApiResponse<TuitionFeePlanDto>> =
         ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(tuitionCatalogService.createFeePlan(request), "Tuition fee plan created"))
 
     @PutMapping("/fee-plans/{id}")
+    @RequireAdmin
     fun updateFeePlan(
         @PathVariable id: Long,
         @Valid @RequestBody request: UpdateTuitionFeePlanRequest
@@ -137,12 +149,14 @@ class TuitionCatalogController(
         ResponseEntity.ok(ApiResponse.success(tuitionCatalogService.updateFeePlan(id, request), "Tuition fee plan updated"))
 
     @DeleteMapping("/fee-plans/{id}")
+    @RequireAdmin
     fun deleteFeePlan(@PathVariable id: Long): ResponseEntity<ApiResponse<Unit>> {
         tuitionCatalogService.deleteFeePlan(id)
         return ResponseEntity.ok(ApiResponse.successNoContent("Tuition fee plan deleted"))
     }
 
     @GetMapping("/discounts")
+    @RequireAdmin
     fun listDiscounts(
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(defaultValue = "50") limit: Int
@@ -150,10 +164,12 @@ class TuitionCatalogController(
         ResponseEntity.ok(ApiResponse.success(tuitionCatalogService.listDiscounts(page, limit)))
 
     @PostMapping("/discounts")
+    @RequireAdmin
     fun createDiscount(@Valid @RequestBody request: CreateTuitionDiscountRequest): ResponseEntity<ApiResponse<TuitionDiscountDto>> =
         ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(tuitionCatalogService.createDiscount(request), "Tuition discount created"))
 
     @PutMapping("/discounts/{id}")
+    @RequireAdmin
     fun updateDiscount(
         @PathVariable id: Long,
         @Valid @RequestBody request: UpdateTuitionDiscountRequest
@@ -161,6 +177,7 @@ class TuitionCatalogController(
         ResponseEntity.ok(ApiResponse.success(tuitionCatalogService.updateDiscount(id, request), "Tuition discount updated"))
 
     @DeleteMapping("/discounts/{id}")
+    @RequireAdmin
     fun deleteDiscount(@PathVariable id: Long): ResponseEntity<ApiResponse<Unit>> {
         tuitionCatalogService.deleteDiscount(id)
         return ResponseEntity.ok(ApiResponse.successNoContent("Tuition discount deleted"))

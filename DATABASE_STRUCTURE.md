@@ -3,7 +3,7 @@
 ## Estado actual de estructura de Base de Datos (SiGEP)
 
 **Fecha de relevamiento:** 2026-05-31  
-**Ultima actualizacion:** 2026-06-17 (incluye V13 tuition)  
+**Ultima actualizacion:** 2026-07-20 (incluye V14/V15 y compatibilidad del flujo manual)
 **Entorno auditado:** `sigep_db` (PostgreSQL 15), validado contra codigo Kotlin actual y migraciones SQL.
 
 ## 1) Fuente de verdad operativa
@@ -42,6 +42,23 @@ Orden de prioridad:
 - `tuition_seat_reservations` reserva una vacante por solicitud antes de crear `enrollments`.
 - `tuition_ledger_entries` modela deuda mock; no factura, no emite CAE y no almacena datos de tarjeta.
 
+### Cambios de V14/V15 (primer flujo manual)
+
+- `teaching_staff.linked_user_id` enlaza un docente con una cuenta `users` activa de rol
+  `TEACHER`; `photo_data`, `photo_content_type` y `photo_filename` almacenan la foto en
+  PostgreSQL. El indice parcial evita dos docentes con la misma cuenta.
+- `courses.teacher_id` pasa a ser nullable y `uk_courses_code_ci` garantiza codigo unico
+  sin distinguir mayusculas.
+- `tuition_levels.course_level` explicita el mapeo al nivel de cursos; la migracion conserva
+  `BEGINNER`/`ELEMENTARY` y traduce `A1`/`A2` a esos valores.
+- `tuition_applications.progression_rule` y `requires_admin_override` registran excepciones
+  de progresion.
+- `course_attendance.course_session_id` referencia la sesion real; el indice unico parcial
+  `uk_attendance_enrollment_session` permite una asistencia por alumno/sesion y varias sesiones
+  en una misma fecha.
+- V15 solo reemplaza el hash BCrypt legacy conocido de los usuarios de prueba; no migra
+  contrasenas arbitrarias.
+
 ### PK por modulo
 - Modulos generales (`users`, `students`, `courses`, `staff`, `scheduling`, `tuition`, etc.): **BIGINT**.
 - Modulo exams (`exams`, `exam_submissions`, `exam_grade_history`): **UUID** en PK.
@@ -58,6 +75,8 @@ Orden de prioridad:
 - `tuition_applications.enrollment_id` -> `enrollments.id` (BIGINT, nullable)
 - `tuition_discounts.student_id` -> `students.id` (BIGINT, nullable)
 - `tuition_ledger_entries.student_id` -> `students.id` (BIGINT, nullable)
+- `teaching_staff.linked_user_id` -> `users.id` (BIGINT, `ON DELETE SET NULL`)
+- `course_attendance.course_session_id` -> `course_sessions.id` (BIGINT, `ON DELETE RESTRICT`)
 
 ### FK de scheduling (V12)
 - `schedule_slots.classroom_id` -> `classrooms.id` (`ON DELETE RESTRICT`)
@@ -145,6 +164,15 @@ Orden de prioridad:
 
 4. **Datos semilla tuition**:
    - No hay seed inicial de ciclos, niveles, progresiones ni planes de cuota; deben cargarse por API admin antes de usar el flujo.
+
+5. **Aplicacion de V14/V15**:
+   - Los scripts estan versionados como artefactos operativos. Validarlos primero en una
+     base descartable o en una transaccion revertida; el contenedor local existente no debe
+     modificarse automaticamente durante el desarrollo.
+
+6. **Ledger mock**:
+   - Las cuotas mensuales se generan/normalizan para enero-diciembre del año de inicio del
+     ciclo lectivo (hasta 12 filas). La normalizacion de DTO no reescribe filas historicas.
 
 ## 9) Comandos de auditoria rapida
 

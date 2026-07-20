@@ -14,11 +14,13 @@ import java.math.BigDecimal
 @Repository
 interface CourseRepository : JpaRepository<Course, Long> {
 
-    fun existsByCode(code: String): Boolean
+    fun existsByCodeIgnoreCase(code: String): Boolean
 
     fun findByStatus(status: CourseStatus, pageable: Pageable): Page<Course>
 
     fun findByTeacherId(teacherId: Long, pageable: Pageable): Page<Course>
+
+    fun findAllByTeacherId(teacherId: Long): List<Course>
 
     fun findByLevel(level: CourseLevel, pageable: Pageable): Page<Course>
 

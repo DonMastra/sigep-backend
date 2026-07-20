@@ -18,7 +18,7 @@ data class CourseDto(
     val duration: Int,
     val maxStudents: Int,
     val minStudents: Int,
-    val teacherId: Long,
+    val teacherId: Long?,
     val teacherName: String? = null,
     val price: BigDecimal,
     val startDate: LocalDate?,
@@ -28,6 +28,7 @@ data class CourseDto(
     val hasReservation: Boolean,
     val reservationSummary: ReservationInfo? = null,
     val enrolledStudents: Int,
+    val totalEnrollments: Int,
     val availableSeats: Int,
     val isEnrollmentOpen: Boolean,
     val createdAt: LocalDateTime,
@@ -37,8 +38,8 @@ data class CourseDto(
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class CreateCourseRequest(
     @field:NotBlank(message = "Course code is required")
-    @field:Size(min = 3, max = 50)
-    @field:Pattern(regexp = "^[A-Z0-9-]+$", message = "Code must contain only uppercase letters, numbers and hyphens")
+    @field:Size(min = 1, max = 50)
+    @field:Pattern(regexp = "^[\\p{L}\\p{N} ._-]+$", message = "Code may contain letters, numbers, spaces, hyphens, underscores and dots")
     val code: String,
 
     @field:NotBlank(message = "Course name is required")
@@ -65,8 +66,7 @@ data class CreateCourseRequest(
     @field:Min(value = 1, message = "Min students must be at least 1")
     val minStudents: Int = 1,
 
-    @field:NotNull(message = "Teacher ID is required")
-    val teacherId: Long,
+    val teacherId: Long? = null,
 
     @field:NotNull(message = "Price is required")
     @field:DecimalMin(value = "0.0", message = "Price must be positive")
@@ -80,8 +80,8 @@ data class CreateCourseRequest(
 )
 
 data class UpdateCourseRequest(
-    @field:Size(min = 3, max = 50)
-    @field:Pattern(regexp = "^[A-Z0-9-]+$", message = "Code must contain only uppercase letters, numbers and hyphens")
+    @field:Size(min = 1, max = 50)
+    @field:Pattern(regexp = "^[\\p{L}\\p{N} ._-]+$", message = "Code may contain letters, numbers, spaces, hyphens, underscores and dots")
     val code: String?,
 
     @field:Size(min = 3, max = 200)

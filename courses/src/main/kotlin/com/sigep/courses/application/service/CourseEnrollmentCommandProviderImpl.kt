@@ -36,8 +36,7 @@ class CourseEnrollmentCommandProviderImpl(
         val enrollmentOpen = course.isPublished &&
             course.status == CourseStatus.ACTIVE &&
             availableSeats > 0 &&
-            hasReservation &&
-            (course.startDate == null || !course.startDate.isBefore(LocalDate.now()))
+            hasReservation
 
         return CourseSeatAvailability(
             courseId = course.id!!,

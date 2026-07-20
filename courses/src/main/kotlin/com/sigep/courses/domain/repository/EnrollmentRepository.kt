@@ -19,6 +19,8 @@ interface EnrollmentRepository : JpaRepository<Enrollment, Long> {
     @Query("SELECT COUNT(e) FROM Enrollment e WHERE e.course.id = :courseId AND e.status = 'ACTIVE'")
     fun countActiveEnrollmentsByCourse(courseId: Long): Long
 
+    fun countByCourseId(courseId: Long): Long
+
     fun countByStatus(status: EnrollmentStatus): Long
 }
 
