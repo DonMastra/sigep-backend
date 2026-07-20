@@ -6,7 +6,9 @@ El proyecto esta implementado como monolito modular en Kotlin y Spring Boot, con
 
 ## Estado Actual
 
-Estado del workspace inspeccionado: branch `feature008-courses-flow`, con cambios locales sin commit y archivos nuevos en desarrollo. La documentacion refleja el estado del checkout, incluyendo modulos no trackeados como `scheduling/src`.
+Estado del workspace inspeccionado: branch `bugfix/issues-first-flow-run`, con cambios locales
+del cierre QA y archivos de prueba manual que no deben incluirse automaticamente en commits.
+La documentacion refleja el flujo completo validado al 2026-07-20.
 
 ### Funcional
 
@@ -16,6 +18,11 @@ Estado del workspace inspeccionado: branch `feature008-courses-flow`, con cambio
 - Staff docente y no docente, asistencia de personal y resolucion batch de docentes.
 - Examenes presenciales, submissions, calificaciones, historial de cambios y analitica de docentes.
 - Scheduling operativo para aulas, slots y reservas.
+- Flujo QA de matriculacion para `GUARDIAN` y `ADMIN`: catalogos, cursos publicados, reserva de
+  vacante, pago mock, aprobacion y ledger de enero a diciembre del ciclo.
+- Alta/edicion de docentes con cuenta `TEACHER` enlazada, asignacion exacta de cursos y foto
+  multipart persistida en PostgreSQL.
+- Asistencia por sesion real con nombres de estudiantes y payload bulk idempotente.
 - Redis cache, Actuator, Prometheus y Swagger/OpenAPI.
 
 ### En Desarrollo o Planificado
@@ -24,6 +31,9 @@ Estado del workspace inspeccionado: branch `feature008-courses-flow`, con cambio
 - Comunicaciones/notificaciones: existe entidad base `Notification`; falta flujo real de envio SMTP/in-app.
 - Reportes avanzados: modulo incluido, pendiente de implementacion funcional.
 - Migraciones formales: hay scripts SQL y migraciones parciales; el perfil dev usa `ddl-auto: update`.
+
+El flujo anterior es estable para QA, pero pagos/facturacion, comunicaciones y reportes siguen
+fuera de alcance. `tuition_ledger_entries` es una vista mock operativa, no un comprobante fiscal.
 
 ## Stack
 
@@ -83,6 +93,7 @@ Nota de estado: `staff` y `exams` aun tienen dependencias directas con `courses`
 ## API
 
 - Base local: `http://localhost:8080`
+- Base QA Render: `https://sigep-backend-qa.onrender.com`
 - Prefijo: `/api/v1`
 - Swagger UI: `http://localhost:8080/swagger-ui.html`
 - OpenAPI JSON: `http://localhost:8080/v3/api-docs`
@@ -151,6 +162,8 @@ Valores relevantes:
 - Redis: `localhost:6379`
 - Timezone Jackson: `America/Argentina/Buenos_Aires`
 - CORS: `http://localhost:4200`, `https://sigep.edu.mx`
+- QA CORS: `https://sigep-ui-xi.vercel.app`, `https://sigep-qa.vercel.app` y el patron
+  `https://*.vercel.app` (ver `render.yaml`).
 - Rate limit: 100 requests por minuto por cliente
 - Cache Redis TTL: 10 minutos
 
@@ -201,6 +214,16 @@ Scripts utiles:
 - `scripts/validate-db-schema.sql`
 - `scripts/migrations/`
 
+Migraciones del cierre QA:
+
+- `V14__fix_first_manual_flow.sql`: vinculo/foto docente, docente nullable, codigo de curso
+  case-insensitive, mapeo `course_level`, reglas de progresion y asistencia por sesion.
+- `V15__repair_legacy_test_password_hash.sql`: reparacion acotada del hash BCrypt de datos
+  legacy de prueba.
+
+Validarlas en una base descartable o transaccion revertida antes de aplicarlas al contenedor
+actual; no se ejecutan automaticamente durante esta implementacion.
+
 ## Documentacion Relacionada
 
 - [API_CONTRACT.md](API_CONTRACT.md): contrato para frontend.
@@ -238,4 +261,4 @@ Scripts utiles:
 - Aplicacion frontend esperada: Angular en `http://localhost:4200`
 - Proyecto privado: SiGEP, Sistema de Gestion de Ensenanza Privada
 
-Ultima actualizacion documental: 2026-06-05.
+Ultima actualizacion documental: 2026-07-20.

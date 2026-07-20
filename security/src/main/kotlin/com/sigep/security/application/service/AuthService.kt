@@ -41,10 +41,9 @@ class AuthService(
 
         validateActiveAccountForLogin(user)
 
-        // TODO: revisar la verificación de contraseña
-        /*if (!passwordEncoder.matches(request.password, user.password)) {
+        if (!passwordEncoder.matches(request.password, user.password)) {
             throw UnauthorizedException("Invalid credentials")
-        }*/
+        }
 
         val token = jwtTokenProvider.generateToken(user)
         val refreshToken = jwtTokenProvider.generateRefreshToken(user)

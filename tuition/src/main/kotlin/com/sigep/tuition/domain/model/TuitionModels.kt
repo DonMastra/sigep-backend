@@ -16,6 +16,7 @@ import jakarta.persistence.ManyToOne
 import jakarta.persistence.OneToOne
 import jakarta.persistence.Table
 import jakarta.persistence.UniqueConstraint
+import org.hibernate.annotations.ColumnDefault
 import java.math.BigDecimal
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -87,6 +88,9 @@ data class TuitionLevel(
 
     @Column(name = "level_order", nullable = false)
     val levelOrder: Int,
+
+    @Column(name = "course_level", length = 40)
+    val courseLevel: String? = null,
 
     @Column(nullable = false)
     val active: Boolean = true,
@@ -323,6 +327,14 @@ data class TuitionApplication(
     @Column(name = "warning_message", length = 1000)
     val warningMessage: String? = null,
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "progression_rule", length = 30)
+    val progressionRule: TuitionProgressionRule? = null,
+
+    @ColumnDefault("false")
+    @Column(name = "requires_admin_override", nullable = false)
+    val requiresAdminOverride: Boolean = false,
+
     @Column(name = "admin_notes", length = 1000)
     val adminNotes: String? = null,
 
@@ -441,7 +453,7 @@ data class TuitionLedgerEntry(
 
 enum class TuitionAcademicYearStatus { DRAFT, OPEN, CLOSED }
 enum class TuitionSegment { CHILDREN, TEENS, ADULTS }
-enum class TuitionProgressionRule { PASS_PREVIOUS_LEVEL }
+enum class TuitionProgressionRule { PASS_PREVIOUS_LEVEL, ADMIN_APPROVAL }
 enum class TuitionFeePlanStatus { ACTIVE, INACTIVE }
 enum class TuitionDiscountType { SCHOLARSHIP, DISCOUNT }
 enum class TuitionApplicationType { NEW_STUDENT, REGULAR_PROMOTION, ADDITIONAL_STUDENT }

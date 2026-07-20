@@ -4,8 +4,11 @@ import java.time.LocalDate
 
 interface StudentProfileProvider {
     fun getStudentProfile(studentId: Long): StudentProfileInfo?
+    fun getStudentProfiles(studentIds: Collection<Long>): Map<Long, StudentProfileInfo> =
+        studentIds.distinct().mapNotNull { id -> getStudentProfile(id)?.let { id to it } }.toMap()
     fun validateGuardianOwnsStudent(guardianUserId: Long, studentId: Long): Boolean
     fun createStudentForTuition(guardianUserId: Long, request: StudentProfileCreateRequest): StudentProfileInfo
+    fun updateCurrentLevel(studentId: Long, currentLevel: String): StudentProfileInfo
 }
 
 data class StudentProfileInfo(

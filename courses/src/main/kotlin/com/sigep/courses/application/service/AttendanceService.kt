@@ -1,6 +1,7 @@
 package com.sigep.courses.application.service
 
 import com.sigep.common.application.dto.PageResponse
+import com.sigep.common.application.service.StudentProfileProvider
 import com.sigep.common.domain.exception.BusinessException
 import com.sigep.common.domain.exception.ResourceNotFoundException
 import com.sigep.courses.application.dto.*
@@ -8,6 +9,7 @@ import com.sigep.courses.domain.model.Attendance
 import com.sigep.courses.domain.model.AttendanceStatus
 import com.sigep.courses.domain.repository.AttendanceRepository
 import com.sigep.courses.domain.repository.EnrollmentRepository
+import com.sigep.courses.domain.repository.CourseSessionRepository
 import org.slf4j.LoggerFactory
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
@@ -20,7 +22,9 @@ import java.time.LocalDateTime
 @Transactional
 class AttendanceService(
     private val attendanceRepository: AttendanceRepository,
-    private val enrollmentRepository: EnrollmentRepository
+    private val enrollmentRepository: EnrollmentRepository,
+    private val courseSessionRepository: CourseSessionRepository,
+    private val studentProfileProvider: StudentProfileProvider
 ) {
 
     private val logger = LoggerFactory.getLogger(AttendanceService::class.java)
@@ -89,11 +93,16 @@ class AttendanceService(
         val enrollment = enrollmentRepository.findById(request.enrollmentId)
             .orElseThrow { ResourceNotFoundException("Enrollment not found with id: ${request.enrollmentId}") }
 
+        val sessionId = request.courseSessionId
+            ?: throw BusinessException("Course session ID is required")
+        val session = courseSessionRepository.findById(sessionId)
+            .orElseThrow { ResourceNotFoundException("Course session not found with id: $sessionId") }
+        if (enrollment.course.id != session.course.id || request.attendanceDate != session.sessionDate) {
+            throw BusinessException("Attendance enrollment and date must match the selected course session")
+        }
+
         // Verificar si ya existe un registro de asistencia para este día
-        val existingAttendance = attendanceRepository.findByEnrollmentIdAndAttendanceDate(
-            request.enrollmentId,
-            request.attendanceDate
-        )
+        val existingAttendance = attendanceRepository.findByEnrollmentIdAndCourseSessionId(request.enrollmentId, sessionId)
 
         if (existingAttendance.isPresent) {
             throw BusinessException("Attendance already recorded for this date. Use update instead.")
@@ -101,6 +110,7 @@ class AttendanceService(
 
         val attendance = Attendance(
             enrollment = enrollment,
+            courseSession = session,
             attendanceDate = request.attendanceDate,
             status = request.status,
             notes = request.notes,
@@ -116,7 +126,14 @@ class AttendanceService(
     }
 
     fun recordBulkAttendance(request: BulkAttendanceRequest, recordedBy: Long): List<AttendanceDto> {
-        val resolvedCourseId = resolveBulkCourseId(request)
+        val sessionId = request.courseSessionId
+            ?: throw BusinessException("Course session ID is required")
+        val session = courseSessionRepository.findById(sessionId)
+            .orElseThrow { ResourceNotFoundException("Course session not found with id: $sessionId") }
+        if (request.date != session.sessionDate) {
+            throw BusinessException("Attendance date must match the selected course session")
+        }
+        val resolvedCourseId = session.course.id!!
         logger.info("Recording bulk attendance for course {} on {}", resolvedCourseId, request.date)
 
         val savedAttendances = request.records.map { record ->
@@ -129,10 +146,7 @@ class AttendanceService(
             }
 
             // Verificar si ya existe, si existe actualizar, si no crear
-            val existingAttendance = attendanceRepository.findByEnrollmentIdAndAttendanceDate(
-                record.enrollmentId,
-                request.date
-            )
+            val existingAttendance = attendanceRepository.findByEnrollmentIdAndCourseSessionId(record.enrollmentId, sessionId)
 
             if (existingAttendance.isPresent) {
                 val updated = existingAttendance.get().copy(
@@ -145,6 +159,7 @@ class AttendanceService(
             } else {
                 val newAttendance = Attendance(
                     enrollment = enrollment,
+                    courseSession = session,
                     attendanceDate = request.date,
                     status = record.status,
                     notes = record.notes,
@@ -158,28 +173,6 @@ class AttendanceService(
 
         logger.info("Bulk attendance recorded successfully for {} students", savedAttendances.size)
         return savedAttendances.map { it.toDto() }
-    }
-
-    private fun resolveBulkCourseId(request: BulkAttendanceRequest): Long {
-        if (request.courseId != null) {
-            return request.courseId
-        }
-
-        if (request.records.isEmpty()) {
-            throw BusinessException("Attendance records cannot be empty")
-        }
-
-        val enrollments = request.records.map { record ->
-            enrollmentRepository.findById(record.enrollmentId)
-                .orElseThrow { ResourceNotFoundException("Enrollment not found with id: ${record.enrollmentId}") }
-        }
-
-        val courseIds = enrollments.mapNotNull { it.course.id }.distinct()
-        if (courseIds.size != 1) {
-            throw BusinessException("All attendance records must belong to the same course")
-        }
-
-        return courseIds.first()
     }
 
     fun updateAttendance(id: Long, request: UpdateAttendanceRequest, recordedBy: Long): AttendanceDto {
@@ -233,7 +226,7 @@ class AttendanceService(
         return AttendanceStatisticsDto(
             enrollmentId = enrollmentId,
             studentId = enrollment.studentId,
-            studentName = null, // Can be populated if needed
+            studentName = studentProfileProvider.getStudentProfile(enrollment.studentId)?.let { "${it.firstName} ${it.lastName}".trim() },
             totalClasses = totalClasses,
             present = present,
             absent = absent,
@@ -285,8 +278,9 @@ class AttendanceService(
     private fun Attendance.toDto() = AttendanceDto(
         id = id!!,
         enrollmentId = enrollment.id!!,
+        courseSessionId = courseSession?.id,
         studentId = enrollment.studentId,
-        studentName = null, // Can be populated via join if needed
+        studentName = studentProfileProvider.getStudentProfile(enrollment.studentId)?.let { "${it.firstName} ${it.lastName}".trim() },
         courseId = enrollment.course.id!!,
         courseName = enrollment.course.name,
         attendanceDate = attendanceDate,

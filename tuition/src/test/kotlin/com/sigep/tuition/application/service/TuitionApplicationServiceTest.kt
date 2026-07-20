@@ -7,6 +7,7 @@ import com.sigep.common.application.service.GuardianAccountInfo
 import com.sigep.common.application.service.GuardianAccountProvider
 import com.sigep.common.application.service.StudentProfileInfo
 import com.sigep.common.application.service.StudentProfileProvider
+import com.sigep.common.application.exception.ValidationException
 import com.sigep.tuition.application.dto.CreateTuitionApplicationRequest
 import com.sigep.tuition.application.dto.TuitionDecisionRequest
 import com.sigep.tuition.domain.model.TuitionAcademicYear
@@ -40,7 +41,7 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.util.Optional
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
+import kotlin.test.assertFailsWith
 
 class TuitionApplicationServiceTest {
 
@@ -118,13 +119,36 @@ class TuitionApplicationServiceTest {
     }
 
     @Test
-    fun `regular promotion without completed enrollment stays submitted with warning`() {
+    fun `regular promotion without completed enrollment is rejected`() {
         mockCommonCreationDependencies()
         every { studentProfileProvider.validateGuardianOwnsStudent(10L, 20L) } returns true
         every { courseEnrollmentCommandProvider.getLatestCompletedEnrollment(20L) } returns null
-        every { applicationRepository.save(any()) } answers { firstArg<TuitionApplication>().copy(id = 123L) }
-        every { seatReservationRepository.findByApplicationId(123L) } returns Optional.empty()
-        every { ledgerEntryRepository.findByApplicationId(123L) } returns emptyList()
+
+        assertFailsWith<ValidationException> {
+            service.createApplication(
+                guardianUserId = 10L,
+                request = CreateTuitionApplicationRequest(
+                    academicYearId = 1L,
+                    requestedLevelId = 2L,
+                    requestedCourseId = 99L,
+                    applicationType = TuitionApplicationType.REGULAR_PROMOTION,
+                    studentId = 20L
+                )
+            )
+        }
+
+    }
+
+    @Test
+    fun `creates application when legacy A1 level has no explicit course mapping`() {
+        mockCommonCreationDependencies()
+        val legacyLevel = level.copy(code = "A1", courseLevel = null)
+        every { levelRepository.findById(2L) } returns Optional.of(legacyLevel)
+        every { courseEnrollmentCommandProvider.getCourseSeatAvailability(99L) } returns seatAvailability().copy(courseLevel = "BEGINNER")
+        every { feePlanRepository.findActiveCandidates(1L, TuitionFeePlanStatus.ACTIVE, any()) } returns listOf(feePlan.copy(level = legacyLevel))
+        every { applicationRepository.save(any()) } answers { firstArg<TuitionApplication>().copy(id = 124L) }
+        every { seatReservationRepository.findByApplicationId(124L) } returns Optional.empty()
+        every { ledgerEntryRepository.findByApplicationId(124L) } returns emptyList()
 
         val response = service.createApplication(
             guardianUserId = 10L,
@@ -132,15 +156,20 @@ class TuitionApplicationServiceTest {
                 academicYearId = 1L,
                 requestedLevelId = 2L,
                 requestedCourseId = 99L,
-                applicationType = TuitionApplicationType.REGULAR_PROMOTION,
-                studentId = 20L
+                applicationType = TuitionApplicationType.NEW_STUDENT,
+                studentFirstName = "Jane",
+                studentLastName = "Doe",
+                studentEmail = "jane@example.com",
+                studentDocumentNumber = "12345678",
+                studentDateOfBirth = LocalDate.of(2012, 1, 1),
+                studentAddress = "Main 123",
+                studentPhoneNumber = "1111-2222",
+                studentEmergencyContact = "Parent"
             )
         )
 
         assertEquals(TuitionApplicationStatus.SUBMITTED, response.status)
-        assertTrue(response.warningMessage!!.contains("no completed enrollment", ignoreCase = true))
-        assertEquals(20L, response.studentId)
-        assertEquals(emptyList(), response.ledgerEntries)
+        assertEquals(2L, response.requestedLevelId)
     }
 
     @Test
@@ -214,6 +243,7 @@ class TuitionApplicationServiceTest {
         } returns true
         every { guardianAccountProvider.activateGuardianForTuition(10L, 1L, "ok") } returns guardianInfo()
         every { studentProfileProvider.createStudentForTuition(10L, any()) } returns studentInfo(77L)
+        every { studentProfileProvider.updateCurrentLevel(77L, "INTERMEDIATE") } returns studentInfo(77L)
         every { courseEnrollmentCommandProvider.createActiveEnrollment(77L, 99L, any()) } returns CourseEnrollmentResult(
             enrollmentId = 88L,
             studentId = 77L,
@@ -243,6 +273,9 @@ class TuitionApplicationServiceTest {
         assertEquals(88L, response.enrollmentId)
         assertEquals(TuitionSeatReservationStatus.CONFIRMED, response.seatReservation!!.status)
         assertEquals(4, response.ledgerEntries.size)
+        assertEquals(listOf("2027-01-20", "2027-02-20", "2027-03-20"), response.ledgerEntries
+            .filter { it.concept == TuitionLedgerConcept.MONTHLY_FEE }
+            .map { it.dueDate.toString() })
     }
 
     private fun mockCommonCreationDependencies() {

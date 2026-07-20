@@ -6,6 +6,7 @@ import com.sigep.common.application.exception.BusinessException
 import com.sigep.common.application.dto.PageResponse
 import com.sigep.common.application.service.ReservationAssignmentProvider
 import com.sigep.common.application.service.ReservationInfoProvider
+import com.sigep.common.application.service.StudentProfileProvider
 import com.sigep.courses.application.dto.*
 import com.sigep.courses.application.event.CourseEventPublisher
 import com.sigep.courses.domain.event.CoursePublishedEvent
@@ -31,7 +32,8 @@ class CourseService(
     private val eventPublisher: CourseEventPublisher,
     private val userRepository: UserRepository,
     private val reservationInfoProvider: ReservationInfoProvider,
-    private val reservationAssignmentProviderProvider: ObjectProvider<ReservationAssignmentProvider>
+    private val reservationAssignmentProviderProvider: ObjectProvider<ReservationAssignmentProvider>,
+    private val studentProfileProviderProvider: ObjectProvider<StudentProfileProvider>
 ) {
 
     private val logger = LoggerFactory.getLogger(CourseService::class.java)
@@ -91,7 +93,7 @@ class CourseService(
     fun createCourse(request: CreateCourseRequest): CourseDto {
         logger.info("Creating new course: {}", request.name)
 
-        if (courseRepository.existsByCode(request.code)) {
+        if (courseRepository.existsByCodeIgnoreCase(request.code)) {
             throw BusinessException("Course code '${request.code}' already exists")
         }
         if (request.minStudents > request.maxStudents) {
@@ -142,7 +144,7 @@ class CourseService(
         val course = courseRepository.findById(id)
             .orElseThrow { ResourceNotFoundException("Course not found with id: $id") }
 
-        if (request.code != null && request.code != course.code && courseRepository.existsByCode(request.code)) {
+        if (request.code != null && !request.code.equals(course.code, ignoreCase = true) && courseRepository.existsByCodeIgnoreCase(request.code)) {
             throw BusinessException("Course code '${request.code}' already exists")
         }
 
@@ -317,14 +319,16 @@ class CourseService(
             )
         }
 
-        val activeEnrollments = enrollmentRepository.countActiveEnrollmentsByCourse(id).toInt()
-        if (activeEnrollments < course.minStudents) {
+        if (course.teacherId == null) {
             throw BusinessException(
-                message = "Cannot publish course with fewer than minimum required students (${course.minStudents})",
+                message = "No se puede publicar el curso sin un docente asignado",
                 code = "BUSINESS_RULE_VIOLATION",
-                field = "enrolledStudents",
-                details = "Current enrollments: $activeEnrollments, required: ${course.minStudents}"
+                field = "teacherId",
+                details = "Assign an active TEACHER account before publishing"
             )
+        }
+        if (course.status == CourseStatus.CANCELLED || course.status == CourseStatus.COMPLETED) {
+            throw BusinessException("Only active or inactive courses can be published")
         }
 
         val updatedCourse = course.copy(isPublished = true, updatedAt = LocalDateTime.now())
@@ -384,18 +388,18 @@ class CourseService(
 
     private fun Course.toDto(teacherNameCache: MutableMap<Long, String?> = mutableMapOf()): CourseDto {
         val enrolledCount = enrollmentRepository.countActiveEnrollmentsByCourse(id!!).toInt()
-        val resolvedTeacherName = teacherNameCache.getOrPut(teacherId) {
-            userRepository.findById(teacherId)
+        val resolvedTeacherName = teacherId?.let { id -> teacherNameCache.getOrPut(id) {
+            userRepository.findById(id)
                 .map { user -> "${user.firstName} ${user.lastName}".trim() }
                 .orElse(null)
-        }
+        } }
+        val totalEnrollmentCount = enrollmentRepository.countByCourseId(id).toInt()
         val availableSeats = maxStudents - enrolledCount
         val reservationSummary = reservationInfoProvider.getReservationByCourse(id)
         val isEnrollmentOpen = isPublished &&
                                status == CourseStatus.ACTIVE &&
                                availableSeats > 0 &&
-                               reservationSummary != null &&
-                               (startDate == null || !startDate.isBefore(java.time.LocalDate.now()))
+                               reservationSummary != null
 
         return CourseDto(
             id = id,
@@ -416,6 +420,7 @@ class CourseService(
             hasReservation = reservationSummary != null,
             reservationSummary = reservationSummary,
             enrolledStudents = enrolledCount,
+            totalEnrollments = totalEnrollmentCount,
             availableSeats = availableSeats,
             isEnrollmentOpen = isEnrollmentOpen,
             createdAt = createdAt,
@@ -430,8 +435,7 @@ class CourseService(
         val isEnrollmentOpen = isPublished &&
                                status == CourseStatus.ACTIVE &&
                                availableSeats > 0 &&
-                               hasReservation &&
-                               (startDate == null || !startDate.isBefore(java.time.LocalDate.now()))
+                               hasReservation
 
         return CourseSimpleDto(
             id = id,
@@ -448,7 +452,9 @@ class CourseService(
     private fun Enrollment.toDto() = EnrollmentDto(
         id = id!!,
         studentId = studentId,
-        studentName = null,
+        studentName = studentProfileProviderProvider.getIfAvailable()
+            ?.getStudentProfile(studentId)
+            ?.let { "${it.firstName} ${it.lastName}".trim() },
         courseId = course.id!!,
         courseName = course.name,
         enrollmentDate = enrollmentDate,

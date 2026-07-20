@@ -21,6 +21,10 @@ interface TeachingStaffRepository : JpaRepository<TeachingStaff, Long> {
 
     fun findAllByIdInAndIsActiveTrue(ids: Collection<Long>): List<TeachingStaff>
 
+    fun findByLinkedUserId(linkedUserId: Long): TeachingStaff?
+
+    fun findAllByLinkedUserIdInAndIsActiveTrue(ids: Collection<Long>): List<TeachingStaff>
+
     @Query("""
         SELECT t FROM TeachingStaff t 
         WHERE t.isActive = true 

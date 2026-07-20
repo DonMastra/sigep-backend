@@ -260,7 +260,7 @@ class CourseMaterialService(
         updatedAt = updatedAt
     )
 
-    private fun validateTeacherAccess(actorUserId: Long?, actorRole: String?, courseTeacherId: Long) {
+    private fun validateTeacherAccess(actorUserId: Long?, actorRole: String?, courseTeacherId: Long?) {
         if (actorRole == "TEACHER" && actorUserId != courseTeacherId) {
             throw ForbiddenException("Teachers can only manage materials for their assigned courses")
         }

@@ -4,9 +4,13 @@ import com.fasterxml.jackson.annotation.JsonIgnore
 import com.sigep.staff.domain.model.PaymentStatus
 import java.time.LocalDate
 import java.time.LocalDateTime
+import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.Size
 
 data class TeachingStaffDto(
     val id: Long,
+    val linkedUserId: Long?,
+    val username: String?,
     val firstName: String,
     val lastName: String,
     val fullName: String,
@@ -72,6 +76,7 @@ data class CreateTeachingStaffRequest(
     val address: String,
     val hireDate: LocalDate,
     val monthlySalary: Double,
+    val paymentStatus: PaymentStatus = PaymentStatus.UP_TO_DATE,
     val specialization: String? = null,
     val observations: String? = null,
     val emergencyContactName: String? = null,
@@ -79,7 +84,11 @@ data class CreateTeachingStaffRequest(
     /** Campo combinado aceptado del frontend: "Nombre / Teléfono" — se splitea automáticamente */
     val emergencyContact: String? = null,
     val qualifications: String? = null,
-    val notes: String? = null
+    val notes: String? = null,
+    @field:NotBlank val username: String,
+    @field:NotBlank @field:Size(min = 8, max = 100) val initialPassword: String,
+    val assignedCourseIds: List<Long> = emptyList(),
+    val confirmCourseReassignments: Boolean = false
 ) {
     /** Resuelve el nombre del contacto de emergencia desde los dos campos o el campo único */
     @get:JsonIgnore
@@ -96,6 +105,9 @@ data class UpdateTeachingStaffRequest(
     val lastName: String? = null,
     val email: String? = null,
     val phoneNumber: String? = null,
+    val documentNumber: String? = null,
+    val birthDate: LocalDate? = null,
+    val hireDate: LocalDate? = null,
     val address: String? = null,
     val monthlySalary: Double? = null,
     val paymentStatus: PaymentStatus? = null,
@@ -106,7 +118,11 @@ data class UpdateTeachingStaffRequest(
     val emergencyContactPhone: String? = null,
     /** Campo combinado aceptado del frontend: "Nombre / Teléfono" */
     val emergencyContact: String? = null,
-    val qualifications: String? = null
+    val qualifications: String? = null,
+    val linkedUserId: Long? = null,
+    val assignedCourseIds: List<Long>? = null,
+    val confirmCourseReassignments: Boolean = false,
+    val isActive: Boolean? = null
 ) {
     @get:JsonIgnore
     val resolvedEmergencyContactName: String?

@@ -33,8 +33,8 @@ data class Course(
     @Column(nullable = false)
     val minStudents: Int = 1,
 
-    @Column(nullable = false)
-    val teacherId: Long,
+    @Column(nullable = true)
+    val teacherId: Long? = null,
 
     @Column(nullable = false, precision = 10, scale = 2)
     val price: java.math.BigDecimal,

@@ -90,11 +90,8 @@ class SecurityConfig(
         val origins = allowedOrigins.split(",").map { it.trim() }.filter { it.isNotBlank() }
         val originPatterns = allowedOriginPatterns.split(",").map { it.trim() }.filter { it.isNotBlank() }
 
-        if (originPatterns.isNotEmpty()) {
-            configuration.allowedOriginPatterns = originPatterns
-        } else {
-            configuration.allowedOrigins = origins
-        }
+        configuration.allowedOrigins = origins
+        configuration.allowedOriginPatterns = originPatterns
 
         // Allowed methods
         configuration.allowedMethods = listOf("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")

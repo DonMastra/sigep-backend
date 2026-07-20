@@ -11,6 +11,9 @@ data class TeachingStaff(
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     val id: Long? = null,
 
+    @Column(name = "linked_user_id", unique = true)
+    val linkedUserId: Long? = null,
+
     @Column(nullable = false)
     val firstName: String,
 
@@ -62,7 +65,17 @@ data class TeachingStaff(
     val emergencyContactName: String,
 
     @Column(nullable = false)
-    val emergencyContactPhone: String
+    val emergencyContactPhone: String,
+
+    @Lob
+    @Column(name = "photo_data")
+    val photoData: ByteArray? = null,
+
+    @Column(name = "photo_content_type", length = 100)
+    val photoContentType: String? = null,
+
+    @Column(name = "photo_filename")
+    val photoFilename: String? = null
 ) : AuditMetadata() {
 
     val fullName: String

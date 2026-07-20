@@ -138,6 +138,7 @@ class TuitionCatalogService(
                 name = request.name.trim(),
                 segment = request.segment,
                 levelOrder = request.levelOrder,
+                courseLevel = request.courseLevel,
                 active = request.active,
                 createdAt = now,
                 updatedAt = now
@@ -158,6 +159,7 @@ class TuitionCatalogService(
                 name = request.name?.trim() ?: existing.name,
                 segment = request.segment ?: existing.segment,
                 levelOrder = request.levelOrder ?: existing.levelOrder,
+                courseLevel = request.courseLevel ?: existing.courseLevel,
                 active = request.active ?: existing.active,
                 updatedAt = LocalDateTime.now()
             )
@@ -429,6 +431,7 @@ class TuitionCatalogService(
         name = name,
         segment = segment,
         levelOrder = levelOrder,
+        courseLevel = courseLevel,
         active = active,
         createdAt = createdAt,
         updatedAt = updatedAt

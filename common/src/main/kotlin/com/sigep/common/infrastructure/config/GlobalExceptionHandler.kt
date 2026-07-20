@@ -17,6 +17,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.http.converter.HttpMessageNotReadableException
+import org.springframework.security.authorization.AuthorizationDeniedException
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
@@ -80,6 +81,17 @@ class GlobalExceptionHandler {
             status = HttpStatus.FORBIDDEN,
             code = ex.code,
             message = ex.message,
+            request = request
+        )
+    }
+
+    @ExceptionHandler(AuthorizationDeniedException::class)
+    fun handleAuthorizationDenied(ex: AuthorizationDeniedException, request: HttpServletRequest): ResponseEntity<ErrorResponse> {
+        logger.warn("Authorization denied: {}", ex.message)
+        return buildErrorResponse(
+            status = HttpStatus.FORBIDDEN,
+            code = "FORBIDDEN",
+            message = "You do not have permission to perform this action",
             request = request
         )
     }

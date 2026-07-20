@@ -1,10 +1,11 @@
 # API Contract - SiGEP Backend
 
-Contrato REST para integracion del frontend Angular SiGEP con el backend. Este documento refleja el estado actual del workspace al 2026-06-17.
+Contrato REST para integracion del frontend Angular SiGEP con el backend. Este documento refleja el estado QA del workspace al 2026-07-20.
 
 ## Informacion General
 
 - Base local: `http://localhost:8080`
+- Base QA Render: `https://sigep-backend-qa.onrender.com`
 - Base productiva esperada: `https://api.sigep.edu.mx`
 - Prefijo API: `/api/v1`
 - Swagger UI: `/swagger-ui.html`
@@ -13,6 +14,18 @@ Contrato REST para integracion del frontend Angular SiGEP con el backend. Este d
 - Fechas: ISO 8601. Para fechas sin hora se usa `YYYY-MM-DD`.
 - Horas de scheduling: strings `HH:mm`.
 - Timezone de negocio: `America/Argentina/Buenos_Aires`.
+- Las fechas sin hora se interpretan literalmente como fecha local (`YYYY-MM-DD`), sin convertir a UTC.
+- Las horas de reservas y sesiones usan `HH:mm`.
+- QA CORS permite `https://sigep-ui-xi.vercel.app`, `https://sigep-qa.vercel.app` y el
+  patron `https://*.vercel.app`; el preflight debe responder antes de probar el login.
+
+## Cambios estabilizados del primer flujo manual
+
+- La validacion de contrasena en login es obligatoria y compara el hash BCrypt almacenado.
+- Los errores de autenticacion/autorizacion se exponen como `401`/`403` (`AuthorizationDeniedException`
+  no debe terminar en `500`).
+- Las lecturas idempotentes de sesiones pueden reintentarse una vez en el frontend cuando la red
+  responde `status 0`; no cambia el contrato ni duplica escrituras.
 
 ## Autenticacion
 
@@ -268,6 +281,7 @@ interface StudentDto {
   guardianPhone?: string;
   guardianEmail?: string;
   documentNumber?: string;
+  currentLevel?: string;
   emergencyContact?: string;
   active: boolean;
   photoUrl?: string;
@@ -306,6 +320,12 @@ type CourseLevel = 'BEGINNER' | 'ELEMENTARY' | 'PRE_INTERMEDIATE' | 'INTERMEDIAT
 ```
 
 Nota: la asignacion de aula/horario se maneja con reservas en `scheduling`; los cursos pueden consumir providers de scheduling.
+
+`CourseDto.teacherId` puede ser `null`. `enrolledStudents` representa exclusivamente
+inscripciones `ACTIVE`; `totalEnrollments` incluye todas las inscripciones. El codigo de
+curso admite de 1 a 50 caracteres alfanumericos, espacios, guion, guion bajo y punto, con
+unicidad insensible a mayusculas. Publicar no exige una matricula minima, pero si docente,
+reserva, estado valido y disponibilidad.
 
 ## Enrollments
 
@@ -348,13 +368,16 @@ Tuition gestiona matriculacion como proceso previo a la inscripcion academica fi
 
 | Metodo | Ruta | Roles | Descripcion |
 |---|---|---|---|
-| GET/POST | `/academic-years` | ADMIN | Lista o crea ciclos lectivos de matriculacion. |
+| GET | `/academic-years` | ADMIN, GUARDIAN | Lista ciclos; `status=OPEN` permite el catalogo del tutor. |
+| POST | `/academic-years` | ADMIN | Crea ciclo lectivo de matriculacion. |
 | PUT/DELETE | `/academic-years/{id}` | ADMIN | Actualiza o elimina ciclo. |
-| GET/POST | `/levels` | ADMIN | Lista o crea niveles. |
+| GET | `/levels` | ADMIN, GUARDIAN | Lista niveles; `activeOnly=true` filtra catalogo disponible. |
+| POST | `/levels` | ADMIN | Crea nivel. |
 | PUT/DELETE | `/levels/{id}` | ADMIN | Actualiza o elimina nivel. |
 | GET/POST | `/level-progressions` | ADMIN | Lista o crea correlaciones de nivel. |
 | PUT/DELETE | `/level-progressions/{id}` | ADMIN | Actualiza o elimina progresion. |
-| GET/POST | `/fee-plans` | ADMIN | Lista o crea planes de cuota. |
+| GET | `/fee-plans` | ADMIN, GUARDIAN | Lista planes vigentes filtrables por ciclo/nivel/segmento. |
+| POST | `/fee-plans` | ADMIN | Crea plan de cuota. |
 | PUT/DELETE | `/fee-plans/{id}` | ADMIN | Actualiza o elimina plan. |
 | GET/POST | `/discounts` | ADMIN | Lista o crea descuentos/becas. |
 | PUT/DELETE | `/discounts/{id}` | ADMIN | Actualiza o elimina descuento/beca. |
@@ -377,6 +400,8 @@ type TuitionApplicationStatus =
   | 'EXPIRED';
 type TuitionLedgerConcept = 'TUITION_ENROLLMENT' | 'MONTHLY_FEE';
 type TuitionLedgerStatus = 'MOCK_PENDING' | 'MOCK_PAID' | 'CANCELLED';
+
+type TuitionProgressionRule = 'PASS_PREVIOUS_LEVEL' | 'ADMIN_APPROVAL';
 ```
 
 Solicitud:
@@ -405,9 +430,16 @@ Notas:
 
 - `REGULAR_PROMOTION` requiere `studentId`; si no hay correlacion clara de nivel, la solicitud queda `SUBMITTED` con `warningMessage`.
 - Para alumno nuevo sin `studentId`, los campos snapshot del estudiante son obligatorios.
-- `requestedLevel.code` debe coincidir con el `CourseLevel` del curso solicitado.
+- `requestedLevel.courseLevel` debe coincidir con el `CourseLevel` del curso solicitado.
+  Como compatibilidad, el backend resuelve `A1 -> BEGINNER` y `A2 -> ELEMENTARY`, y usa
+  `requestedLevel.code` como respaldo si el catalogo legacy aun no tiene `courseLevel`.
 - La reserva descuenta cupos solo dentro de `tuition`; `Enrollment` real se crea al aprobar.
 - El mock payment solo genera referencias internas `MOCK-TUITION-{applicationId}-{ledgerId}`.
+- `PASS_PREVIOUS_LEVEL` bloquea si el estudiante regular no aprobo el nivel de origen o
+  solicita un destino diferente. `ADMIN_APPROVAL` deja `requiresAdminOverride=true` y el
+  endpoint de aprobacion exige `adminNotes` no vacio.
+- Las entradas `MONTHLY_FEE` se generan de enero a diciembre del año de inicio del ciclo
+  (como maximo 12 cuotas), aunque la solicitud o reserva se cree durante otro mes.
 
 ## Course Sessions
 
@@ -445,6 +477,26 @@ Base: `/api/v1/attendance`
 | GET | `/enrollment/{enrollmentId}/statistics` | ADMIN, TEACHER | Estadisticas de asistencia. |
 | GET | `/course/{courseId}/report/{date}` | ADMIN, TEACHER | Reporte diario de curso. |
 | POST | `/enrollment/{enrollmentId}/range` | ADMIN, TEACHER | Consulta por rango desde body. |
+
+### BulkAttendanceRequest
+
+El body es un objeto (no un array raiz):
+
+```json
+{
+  "courseSessionId": 42,
+  "date": "2026-07-20",
+  "records": [
+    { "enrollmentId": 13, "status": "PRESENT", "notes": null },
+    { "enrollmentId": 14, "status": "LATE", "notes": "10 minutos" }
+  ]
+}
+```
+
+`attendanceDate` es un alias de `date` y `attendances` un alias de `records` para
+compatibilidad. La fecha debe coincidir con `courseSessionId`; la clave idempotente
+es `(enrollmentId, courseSessionId)`. Las respuestas exponen `courseSessionId`,
+`attendanceDate` y `studentName` cuando existe el estudiante.
 
 ## Course Materials
 
@@ -499,7 +551,16 @@ Base: `/api/v1/staff/teaching`
 | POST | `/resolve` | ADMIN, TEACHER | Resuelve ids a nombres. |
 | POST | `/` | ADMIN | Crea docente. |
 | PUT | `/{id}` | ADMIN | Actualiza docente. |
+| POST | `/{id}/photo` | ADMIN | Sube foto multipart (`file`); valida tipo y tamaño. |
+| GET | `/{id}/photo` | ADMIN, TEACHER | Descarga foto binaria si existe. |
 | DELETE | `/{id}` | ADMIN | Soft delete. |
+
+`CreateTeachingStaffRequest` requiere `username` e `initialPassword` (minimo 8 caracteres)
+y puede recibir `assignedCourseIds`; crea una cuenta activa `TEACHER` y enlaza el docente
+transaccionalmente. `UpdateTeachingStaffRequest` no acepta credenciales: recibe solo datos
+personales/laborales, `linkedUserId`, `assignedCourseIds`, `confirmCourseReassignments` e
+`isActive`. Las asignaciones son exactas: cursos quitados quedan sin docente y las
+reasignaciones requieren confirmacion.
 
 ### Non-Teaching Staff
 
