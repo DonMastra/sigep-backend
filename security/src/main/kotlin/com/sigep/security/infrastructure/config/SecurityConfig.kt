@@ -29,7 +29,9 @@ class SecurityConfig(
     private val customAuthenticationEntryPoint: CustomAuthenticationEntryPoint,
     private val customAccessDeniedHandler: CustomAccessDeniedHandler,
     @Value("\${app.cors.allowed-origins:http://localhost:4200}")
-    private val allowedOrigins: String
+    private val allowedOrigins: String,
+    @Value("\${app.cors.allowed-origin-patterns:}")
+    private val allowedOriginPatterns: String
 ) {
 
     @Bean
@@ -85,8 +87,11 @@ class SecurityConfig(
     fun corsConfigurationSource(): CorsConfigurationSource {
         val configuration = CorsConfiguration()
 
-        // Parse allowed origins from configuration
-        configuration.allowedOrigins = allowedOrigins.split(",").map { it.trim() }
+        val origins = allowedOrigins.split(",").map { it.trim() }.filter { it.isNotBlank() }
+        val originPatterns = allowedOriginPatterns.split(",").map { it.trim() }.filter { it.isNotBlank() }
+
+        configuration.allowedOrigins = origins
+        configuration.allowedOriginPatterns = originPatterns
 
         // Allowed methods
         configuration.allowedMethods = listOf("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")

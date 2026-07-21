@@ -2,6 +2,7 @@ package com.sigep.courses.application.service
 
 import com.sigep.common.application.exception.ForbiddenException
 import com.sigep.common.application.dto.PageResponse
+import com.sigep.common.application.service.StudentProfileProvider
 import com.sigep.common.domain.exception.ResourceNotFoundException
 import com.sigep.common.domain.exception.BusinessException
 import com.sigep.courses.application.dto.EnrollmentDto
@@ -23,7 +24,8 @@ import java.time.LocalDateTime
 @Transactional
 class EnrollmentService(
     private val enrollmentRepository: EnrollmentRepository,
-    private val courseRepository: CourseRepository
+    private val courseRepository: CourseRepository,
+    private val studentProfileProvider: StudentProfileProvider
 ) {
 
     private val logger = LoggerFactory.getLogger(EnrollmentService::class.java)
@@ -171,7 +173,7 @@ class EnrollmentService(
     private fun Enrollment.toDto() = EnrollmentDto(
         id = id!!,
         studentId = studentId,
-        studentName = null,
+        studentName = studentProfileProvider.getStudentProfile(studentId)?.let { "${it.firstName} ${it.lastName}".trim() },
         courseId = course.id!!,
         courseName = course.name,
         enrollmentDate = enrollmentDate,

@@ -11,6 +11,7 @@ import java.time.LocalDateTime
 data class AttendanceDto(
     val id: Long,
     val enrollmentId: Long,
+    val courseSessionId: Long?,
     val studentId: Long,
     val studentName: String? = null,
     val courseId: Long,
@@ -27,6 +28,8 @@ data class AttendanceDto(
 data class CreateAttendanceRequest(
     @field:NotNull(message = "Enrollment ID is required")
     val enrollmentId: Long,
+
+    val courseSessionId: Long? = null,
 
     @field:NotNull(message = "Attendance date is required")
     val attendanceDate: LocalDate,
@@ -46,7 +49,6 @@ data class UpdateAttendanceRequest(
 )
 
 data class BulkAttendanceRequest(
-    @field:JsonAlias("courseId")
     val courseSessionId: Long? = null,
 
     val courseId: Long? = null,

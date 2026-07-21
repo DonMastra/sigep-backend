@@ -28,6 +28,7 @@ import com.sigep.tuition.domain.model.TuitionLedgerConcept
 import com.sigep.tuition.domain.model.TuitionLedgerEntry
 import com.sigep.tuition.domain.model.TuitionLedgerStatus
 import com.sigep.tuition.domain.model.TuitionLevel
+import com.sigep.tuition.domain.model.TuitionProgressionRule
 import com.sigep.tuition.domain.model.TuitionSeatReservation
 import com.sigep.tuition.domain.model.TuitionSeatReservationStatus
 import com.sigep.tuition.domain.repository.TuitionAcademicYearRepository
@@ -39,11 +40,13 @@ import com.sigep.tuition.domain.repository.TuitionLevelProgressionRepository
 import com.sigep.tuition.domain.repository.TuitionLevelRepository
 import com.sigep.tuition.domain.repository.TuitionSeatReservationRepository
 import org.slf4j.LoggerFactory
+import org.springframework.dao.DataAccessException
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -76,16 +79,18 @@ class TuitionApplicationService(
         val academicYear = getOpenAcademicYear(request.academicYearId)
         val requestedLevel = getActiveLevel(request.requestedLevelId)
         val seatAvailability = courseEnrollmentCommandProvider.getCourseSeatAvailability(request.requestedCourseId)
-        if (seatAvailability.courseLevel != requestedLevel.code) {
+        val mappedCourseLevel = resolveCourseLevel(requestedLevel)
+            ?: throw ValidationException("Requested tuition level is not mapped to a course level", field = "requestedLevelId")
+        if (seatAvailability.courseLevel != mappedCourseLevel) {
             throw ValidationException(
                 message = "Requested level does not match course level",
                 field = "requestedLevelId",
-                details = "Course level=${seatAvailability.courseLevel}, requestedLevel=${requestedLevel.code}"
+                details = "Course level=${seatAvailability.courseLevel}, requestedLevel=$mappedCourseLevel"
             )
         }
 
         validateStudentInput(guardianUserId, request)
-        val warning = buildApplicationWarning(request, requestedLevel)
+        val progression = evaluateProgression(request, requestedLevel)
         val feePlan = resolveFeePlan(request.feePlanId, academicYear, requestedLevel)
         val now = LocalDateTime.now()
 
@@ -107,7 +112,9 @@ class TuitionApplicationService(
             applicationType = request.applicationType,
             status = TuitionApplicationStatus.SUBMITTED,
             feePlan = feePlan,
-            warningMessage = warning,
+            warningMessage = progression.warning,
+            progressionRule = progression.rule,
+            requiresAdminOverride = progression.requiresAdminOverride,
             submittedAt = now,
             createdAt = now,
             updatedAt = now
@@ -231,6 +238,12 @@ class TuitionApplicationService(
         if (!enrollmentFeePaid) {
             throw BusinessException("Initial tuition enrollment fee must be mock-paid before approval")
         }
+        if (application.requiresAdminOverride && request.adminNotes.isNullOrBlank()) {
+            throw ValidationException(
+                message = "Administrative notes are required to approve this progression exception",
+                field = "adminNotes"
+            )
+        }
 
         guardianAccountProvider.activateGuardianForTuition(application.guardianUserId, adminUserId, request.adminNotes)
         val studentId = resolveOrCreateStudent(application)
@@ -239,6 +252,7 @@ class TuitionApplicationService(
             courseId = application.requestedCourseId,
             notes = "Created by tuition application ${application.id}"
         )
+        studentProfileProvider.updateCurrentLevel(studentId, application.requestedLevel.code)
 
         val now = LocalDateTime.now()
         val approvedApplication = applicationRepository.save(
@@ -298,6 +312,7 @@ class TuitionApplicationService(
     }
 
     @Scheduled(fixedDelayString = "\${app.tuition.reservation-expiration-fixed-delay-ms:600000}")
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     fun expireUnpaidReservations() {
         val now = LocalDateTime.now()
         val expirableStatuses = setOf(
@@ -306,16 +321,24 @@ class TuitionApplicationService(
             TuitionApplicationStatus.PAYMENT_PENDING
         )
 
-        seatReservationRepository.findExpiredActiveReservations(now = now).forEach { reservation ->
-            val application = reservation.application
-            if (application.status in expirableStatuses) {
-                seatReservationRepository.save(reservation.copy(status = TuitionSeatReservationStatus.EXPIRED, updatedAt = now))
-                ledgerEntryRepository.findByApplicationId(application.id!!).forEach { entry ->
-                    ledgerEntryRepository.save(entry.copy(status = TuitionLedgerStatus.CANCELLED, updatedAt = now))
+        try {
+            seatReservationRepository.findExpiredActiveReservations(now = now).forEach { reservation ->
+                val application = reservation.application
+                if (application.status in expirableStatuses) {
+                    seatReservationRepository.save(reservation.copy(status = TuitionSeatReservationStatus.EXPIRED, updatedAt = now))
+                    ledgerEntryRepository.findByApplicationId(application.id!!).forEach { entry ->
+                        ledgerEntryRepository.save(entry.copy(status = TuitionLedgerStatus.CANCELLED, updatedAt = now))
+                    }
+                    applicationRepository.save(application.copy(status = TuitionApplicationStatus.EXPIRED, updatedAt = now))
+                    logger.info("Expired tuition application {} due to unpaid reservation", application.id)
                 }
-                applicationRepository.save(application.copy(status = TuitionApplicationStatus.EXPIRED, updatedAt = now))
-                logger.info("Expired tuition application {} due to unpaid reservation", application.id)
             }
+        } catch (ex: DataAccessException) {
+            logger.warn(
+                "Skipping unpaid tuition reservation expiration because the tuition schema is not ready. " +
+                    "Apply scripts/migrations/V13__create_tuition_module.sql before using tuition workflows.",
+                ex
+            )
         }
     }
 
@@ -384,24 +407,61 @@ class TuitionApplicationService(
         }
     }
 
-    private fun buildApplicationWarning(request: CreateTuitionApplicationRequest, requestedLevel: TuitionLevel): String? {
+    private fun evaluateProgression(request: CreateTuitionApplicationRequest, requestedLevel: TuitionLevel): ProgressionEvaluation {
         if (request.applicationType != TuitionApplicationType.REGULAR_PROMOTION || request.studentId == null) {
-            return null
+            return ProgressionEvaluation()
         }
 
         val latestCompleted = courseEnrollmentCommandProvider.getLatestCompletedEnrollment(request.studentId)
-            ?: return "Student has no completed enrollment; admin must manually verify level progression."
+            ?: throw ValidationException("Student must pass the previous level before requesting promotion", field = "studentId")
 
-        val fromLevel = levelRepository.findByCode(latestCompleted.courseLevel).orElse(null)
-            ?: return "Completed course level ${latestCompleted.courseLevel} is not mapped to tuition levels."
+        val currentLevel = studentProfileProvider.getStudentProfile(request.studentId)?.currentLevel
+        val fromLevel = currentLevel?.let { levelRepository.findByCode(it).orElse(null) }
+            ?: levelRepository.findAll()
+                .filter { it.active && resolveCourseLevel(it) == latestCompleted.courseLevel }
+                .minByOrNull { it.levelOrder }
+            ?: throw ValidationException(
+                "Completed course level ${latestCompleted.courseLevel} is not mapped to tuition levels",
+                field = "studentId"
+            )
 
         val progression = progressionRepository.findByFromLevelIdAndActiveTrue(fromLevel.id!!).orElse(null)
-            ?: return "No active tuition progression exists from level ${fromLevel.code}."
+            ?: throw ValidationException("No active tuition progression exists from level ${fromLevel.code}", field = "requestedLevelId")
 
-        return if (progression.toLevel.id != requestedLevel.id) {
-            "Requested level ${requestedLevel.code} does not match expected next level ${progression.toLevel.code}."
+        if (progression.toLevel.id != requestedLevel.id) {
+            throw ValidationException(
+                "Requested level ${requestedLevel.code} does not match allowed destination ${progression.toLevel.code}",
+                field = "requestedLevelId"
+            )
+        }
+
+        if (progression.rule == TuitionProgressionRule.PASS_PREVIOUS_LEVEL &&
+            resolveCourseLevel(fromLevel) != latestCompleted.courseLevel) {
+            throw ValidationException("Student has not passed the configured origin level ${fromLevel.code}", field = "studentId")
+        }
+
+        return if (progression.rule == TuitionProgressionRule.ADMIN_APPROVAL) {
+            ProgressionEvaluation(
+                rule = progression.rule,
+                requiresAdminOverride = true,
+                warning = "Esta progresión es una excepción y requiere aprobación administrativa con una nota."
+            )
         } else {
-            null
+            ProgressionEvaluation(rule = progression.rule)
+        }
+    }
+
+    /**
+     * Resolves the course enum used by the courses module from a tuition level.
+     * Legacy catalogs may still store A1/A2 in code or leave courseLevel null.
+     */
+    private fun resolveCourseLevel(level: TuitionLevel): String? {
+        val value = level.courseLevel?.trim()?.uppercase()
+            ?: level.code.trim().uppercase()
+        return when (value) {
+            "A1" -> "BEGINNER"
+            "A2" -> "ELEMENTARY"
+            else -> value.takeIf { it.isNotBlank() }
         }
     }
 
@@ -500,8 +560,9 @@ class TuitionApplicationService(
         }
 
         val now = LocalDateTime.now()
-        val firstDueDate = application.academicYear.startDate.takeIf { !it.isBefore(LocalDate.now()) } ?: LocalDate.now()
-        val entries = (0 until application.feePlan.installments).map { index ->
+        val academicYear = application.academicYear.startDate.year
+        val installments = application.feePlan.installments.coerceAtMost(12)
+        val entries = (0 until installments).map { index ->
             val appliedDiscount = calculateDiscount(
                 grossAmount = application.feePlan.monthlyFee,
                 studentId = studentId,
@@ -515,7 +576,7 @@ class TuitionApplicationService(
                 grossAmount = application.feePlan.monthlyFee,
                 discountAmount = appliedDiscount.amount,
                 netAmount = (application.feePlan.monthlyFee - appliedDiscount.amount).normalizeMoney(),
-                dueDate = firstDueDate.plusMonths(index.toLong()),
+                dueDate = LocalDate.of(academicYear, index + 1, 20),
                 status = TuitionLedgerStatus.MOCK_PENDING,
                 createdAt = now,
                 updatedAt = now
@@ -577,6 +638,7 @@ class TuitionApplicationService(
     private fun TuitionApplication.toDto(): TuitionApplicationDto {
         val reservation = id?.let { seatReservationRepository.findByApplicationId(it).orElse(null) }
         val ledgerEntries = id?.let { ledgerEntryRepository.findByApplicationId(it) }.orEmpty()
+        val displayLedgerEntries = normalizeLegacyMonthlyDates(this, ledgerEntries)
         return TuitionApplicationDto(
             id = id!!,
             guardianUserId = guardianUserId,
@@ -596,15 +658,41 @@ class TuitionApplicationService(
             feePlan = feePlan.toDto(),
             enrollmentId = enrollmentId,
             warningMessage = warningMessage,
+            progressionRule = progressionRule,
+            requiresAdminOverride = requiresAdminOverride,
             adminNotes = adminNotes,
             seatReservation = reservation?.toDto(),
-            ledgerEntries = ledgerEntries.map { it.toDto() },
+            ledgerEntries = displayLedgerEntries.map { it.toDto() },
             submittedAt = submittedAt,
             approvedAt = approvedAt,
             approvedBy = approvedBy,
             createdAt = createdAt,
             updatedAt = updatedAt
         )
+    }
+
+    /**
+     * Legacy approvals were generated from the current month and could cross
+     * into the following year. Keep persisted rows untouched, but expose the
+     * academic-year calendar consistently in read DTOs.
+     */
+    private fun normalizeLegacyMonthlyDates(
+        application: TuitionApplication,
+        entries: List<TuitionLedgerEntry>
+    ): List<TuitionLedgerEntry> {
+        val monthly = entries
+            .filter { it.concept == TuitionLedgerConcept.MONTHLY_FEE }
+            .sortedWith(compareBy<TuitionLedgerEntry> { it.dueDate }.thenBy { it.id })
+            .take(12)
+        if (monthly.isEmpty()) {
+            return entries
+        }
+
+        val year = application.academicYear.startDate.year
+        val normalized = monthly.mapIndexed { index, entry ->
+            entry.id to entry.copy(dueDate = LocalDate.of(year, index + 1, 20))
+        }.toMap()
+        return entries.map { normalized[it.id] ?: it }
     }
 
     private fun TuitionFeePlan.toDto() = TuitionFeePlanDto(
@@ -667,5 +755,11 @@ class TuitionApplicationService(
     private data class AppliedDiscount(
         val discount: TuitionDiscount?,
         val amount: BigDecimal
+    )
+
+    private data class ProgressionEvaluation(
+        val rule: TuitionProgressionRule? = null,
+        val requiresAdminOverride: Boolean = false,
+        val warning: String? = null
     )
 }

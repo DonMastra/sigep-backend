@@ -71,8 +71,3 @@ CREATE INDEX IF NOT EXISTS idx_reservation_slot   ON reservations (slot_id);
 CREATE INDEX IF NOT EXISTS idx_reservation_status ON reservations (status);
 CREATE INDEX IF NOT EXISTS idx_reservation_target ON reservations (target_type, target_id);
 
--- Enforce uniqueness: a slot can have at most one non-INACTIVE reservation at a time
-CREATE UNIQUE INDEX IF NOT EXISTS uq_slot_active_reservation
-    ON reservations (slot_id)
-    WHERE status <> 'INACTIVE';
-

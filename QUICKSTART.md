@@ -1,225 +1,99 @@
-# 🚀 Guía de Inicio Rápido - SiGEP Backend
+# SiGEP Backend - Quickstart
 
-## 📋 Prerequisitos
+Guia de arranque local y validacion del primer flujo manual QA (actualizada 2026-07-20).
 
-Antes de comenzar, asegúrate de tener instalado:
+## Prerequisitos
 
-- ✅ JDK 17 o superior
-- ✅ Docker y Docker Compose (para PostgreSQL y Redis)
-- ✅ Git
+- JDK 17 o superior.
+- Docker y Docker Compose.
+- Git.
 
-## 🏁 Pasos para Iniciar
+## Arranque local
 
-### 1. Clonar el repositorio (si aplica)
+Desde la raiz del backend:
 
-```bash
-git clone <repository-url>
-cd sigep-backend
-```
-
-### 2. Iniciar servicios de infraestructura (PostgreSQL + Redis)
-
-```cmd
+```powershell
 docker-compose up -d
-```
-
-Esto iniciará:
-- PostgreSQL en `localhost:5432`
-- Redis en `localhost:6379`
-- PgAdmin en `localhost:5050` (admin@sigep.com / admin)
-- Redis Commander en `localhost:8081`
-
-### 3. Verificar que los servicios estén corriendo
-
-```cmd
 docker-compose ps
+gradlew.bat :application:bootRun --args="--spring.profiles.active=dev"
 ```
 
-Deberías ver 4 contenedores en estado "Up".
+Servicios esperados:
 
-### 4. Compilar el proyecto
+- PostgreSQL: `localhost:5432` (`sigep_db`, usuario `sigep_user`).
+- Redis: `localhost:6379`.
+- API: `http://localhost:8080`.
+- Swagger: `http://localhost:8080/swagger-ui.html`.
+- OpenAPI: `http://localhost:8080/v3/api-docs`.
+- Health: `http://localhost:8080/actuator/health`.
 
-```cmd
-gradlew clean build
+El frontend local se ejecuta en `http://localhost:4200`, usa `environment.ts` con
+`apiUrl=/api/v1` y el proxy `proxy.conf.cjs`.
+
+## Build y tests
+
+```powershell
+gradlew.bat clean build
+gradlew.bat :security:test
+gradlew.bat :staff:test
+gradlew.bat :courses:test
+gradlew.bat :students:test
+gradlew.bat :tuition:test
 ```
 
-Este comando:
-- Descargará todas las dependencias
-- Compilará todos los módulos
-- Ejecutará los tests
+Para ejecutar el JAR:
 
-### 5. Ejecutar la aplicación
-
-```cmd
-gradlew :application:bootRun
-```
-
-O usando el JAR generado:
-
-```cmd
+```powershell
+gradlew.bat :application:bootJar
 java -jar application\build\libs\sigep-backend.jar
 ```
 
-### 6. Verificar que la aplicación esté corriendo
+## Flujo manual QA (pasos 1-9)
 
-Abre tu navegador y accede a:
+Antes de iniciar, carga por API admin un ciclo `OPEN`, niveles activos con `courseLevel`,
+planes vigentes y un curso con docente y reserva.
 
-- 🏥 Health Check: http://localhost:8080/actuator/health
-- 📚 Swagger UI: http://localhost:8080/swagger-ui.html
-- 📄 API Docs: http://localhost:8080/v3/api-docs
+1. Crear docente con `username` e `initialPassword`; comprobar login con la cuenta `TEACHER`.
+2. Crear curso con codigo de 1-50 caracteres permitidos, docente y reserva; publicarlo sin
+   exigir una cantidad minima de alumnos.
+3. Como `GUARDIAN`, leer catalogos y seleccionar ciclo, nivel, curso y plan.
+4. Crear solicitud, reservar vacante y registrar pago mock.
+5. Aprobar como `ADMIN`; comprobar estudiante, `currentLevel`, enrollment y contadores
+   `enrolledStudents` (activos) / `totalEnrollments` (total).
+6. Crear/editar sesiones en `/api/v1/sessions` y verificar conflictos.
+7. Registrar asistencia con el body `{courseSessionId, date, records}`; la fecha debe ser la
+   fecha de la sesion y el envio repetido actualiza la misma combinacion alumno/sesion.
+8. Revisar nombres de estudiante, presentes/tardanzas y justificadas/licencias en estadisticas.
+9. Revisar el ledger mock: matricula y cuotas vencen de enero a diciembre del mismo ciclo.
 
-## 🧪 Probar la API
+## Diagnostico rapido
 
-### 1. Registrar un usuario administrador
+- `401 Invalid credentials`: la cuenta debe estar `ACTIVE` y la contraseña debe coincidir con
+  el hash BCrypt almacenado. V15 solo repara el hash legacy de los usuarios de prueba conocidos.
+- `400 Requested tuition level is not mapped...`: completar `tuition_levels.course_level`;
+  se mantienen `A1 -> BEGINNER` y `A2 -> ELEMENTARY` como compatibilidad.
+- `400 Course is not open for tuition enrollment`: el curso necesita estado publicado/activo,
+  docente, reserva y cupo disponible.
+- `400 Attendance date must match...`: enviar `date` igual a la fecha de `courseSessionId`.
+- `403`: `GUARDIAN` puede leer catalogos de tuition, pero solo `ADMIN` puede crearlos o editarlos.
+- `Failed to fetch` en navegador local: revisar que el backend escuche en 8080 y que Angular
+  use el proxy; no diagnosticarlo como CORS de Render.
 
-```bash
-curl -X POST http://localhost:8080/api/v1/auth/register ^
-  -H "Content-Type: application/json" ^
-  -d "{\"username\":\"admin\",\"email\":\"admin@sigep.com\",\"password\":\"admin123\",\"firstName\":\"Admin\",\"lastName\":\"Sistema\",\"role\":\"ADMIN\"}"
-```
+## Base de datos y migraciones
 
-### 2. Iniciar sesión
-
-```bash
-curl -X POST http://localhost:8080/api/v1/auth/login ^
-  -H "Content-Type: application/json" ^
-  -d "{\"username\":\"admin\",\"password\":\"admin123\"}"
-```
-
-Guarda el `token` de la respuesta.
-
-### 3. Crear un estudiante
-
-```bash
-curl -X POST http://localhost:8080/api/v1/students ^
-  -H "Content-Type: application/json" ^
-  -H "Authorization: Bearer TU_TOKEN_AQUI" ^
-  -d "{\"firstName\":\"Juan\",\"lastName\":\"Pérez\",\"email\":\"juan@example.com\",\"phone\":\"+525512345678\",\"dateOfBirth\":\"2005-01-15\",\"address\":\"Calle Principal 123\",\"guardianId\":1,\"currentLevel\":\"Beginner\"}"
-```
-
-### 4. Listar estudiantes
-
-```bash
-curl -X GET "http://localhost:8080/api/v1/students?page=0&limit=10" ^
-  -H "Authorization: Bearer TU_TOKEN_AQUI"
-```
-
-## 🛠️ Comandos Útiles
-
-### Desarrollo
-
-```cmd
-REM Compilar sin tests
-gradlew build -x test
-
-REM Ejecutar tests
-gradlew test
-
-REM Ejecutar tests de un módulo específico
-gradlew :students:test
-
-REM Limpiar y recompilar
-gradlew clean build
-```
-
-### Docker
-
-```cmd
-REM Iniciar servicios
-docker-compose up -d
-
-REM Detener servicios
-docker-compose down
-
-REM Ver logs
-docker-compose logs -f
-
-REM Reiniciar servicios
-docker-compose restart
-```
-
-### Base de Datos
-
-```cmd
-REM Conectar a PostgreSQL
+```powershell
 docker exec -it sigep-postgres psql -U sigep_user -d sigep_db
-
-REM Backup de la base de datos
 docker exec -t sigep-postgres pg_dump -U sigep_user sigep_db > backup.sql
-
-REM Restaurar base de datos
-docker exec -i sigep-postgres psql -U sigep_user sigep_db < backup.sql
 ```
 
-## 📊 Monitoreo
+`scripts/migrations/V14__fix_first_manual_flow.sql` agrega vinculo/foto docente, docente
+nullable, codigo case-insensitive, `course_level`, progresiones y asistencia por sesion.
+`V15__repair_legacy_test_password_hash.sql` corrige solo el hash BCrypt legacy conocido.
 
-Una vez que la aplicación esté corriendo:
+Validar ambas migraciones en una base descartable o dentro de una transaccion revertida antes
+de aplicarlas al contenedor actual. No se ejecutan automaticamente durante esta implementacion.
 
-- **Métricas**: http://localhost:8080/actuator/metrics
-- **Prometheus**: http://localhost:8080/actuator/prometheus
-- **PgAdmin**: http://localhost:5050 (admin@sigep.com / admin)
-- **Redis Commander**: http://localhost:8081
+## Infraestructura auxiliar
 
-## 🐛 Solución de Problemas
-
-### La aplicación no inicia
-
-1. Verifica que PostgreSQL y Redis estén corriendo:
-   ```cmd
-   docker-compose ps
-   ```
-
-2. Verifica los logs:
-   ```cmd
-   docker-compose logs postgres
-   docker-compose logs redis
-   ```
-
-### Error de conexión a la base de datos
-
-Verifica la configuración en `application/src/main/resources/application.properties`:
-
-```properties
-spring.datasource.url=jdbc:postgresql://localhost:5432/sigep_db
-spring.datasource.username=sigep_user
-spring.datasource.password=sigep_password
-```
-
-### Puerto 8080 ya está en uso
-
-Cambia el puerto en `application.properties`:
-
-```properties
-server.port=8081
-```
-
-### Problemas con Gradle
-
-```cmd
-REM Limpiar cache de Gradle
-gradlew clean --refresh-dependencies
-
-REM O borrar la carpeta .gradle
-rmdir /s /q .gradle
-gradlew build
-```
-
-## 📚 Próximos Pasos
-
-1. ✅ Explorar la documentación de la API en Swagger
-2. ✅ Revisar los archivos README.md y ARCHITECTURE.md
-3. ✅ Implementar los módulos restantes (courses, payments, etc.)
-4. ✅ Configurar perfiles de Spring (dev, prod)
-5. ✅ Implementar tests de integración
-
-## 🆘 Soporte
-
-Para problemas o dudas:
-- Revisa la documentación en README.md
-- Revisa la arquitectura en ARCHITECTURE.md
-- Consulta los logs de la aplicación
-
----
-
-**¡Listo! Tu backend está corriendo en http://localhost:8080** 🎉
-
+`docker-compose.yml` tambien levanta pgAdmin (`localhost:5050`) y Redis Commander
+(`localhost:8081`). Los logs se consultan con `docker-compose logs -f`.

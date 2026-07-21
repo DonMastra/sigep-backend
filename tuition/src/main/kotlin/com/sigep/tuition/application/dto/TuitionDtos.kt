@@ -17,6 +17,7 @@ import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotNull
 import jakarta.validation.constraints.Past
+import jakarta.validation.constraints.Pattern
 import jakarta.validation.constraints.Size
 import java.math.BigDecimal
 import java.time.LocalDate
@@ -67,6 +68,7 @@ data class TuitionLevelDto(
     val name: String,
     val segment: TuitionSegment,
     val levelOrder: Int,
+    val courseLevel: String?,
     val active: Boolean,
     val createdAt: LocalDateTime,
     val updatedAt: LocalDateTime
@@ -83,6 +85,8 @@ data class CreateTuitionLevelRequest(
     val segment: TuitionSegment,
     @field:Min(1)
     val levelOrder: Int,
+    @field:Pattern(regexp = "^(BEGINNER|ELEMENTARY|PRE_INTERMEDIATE|INTERMEDIATE|UPPER_INTERMEDIATE|ADVANCED|PROFICIENCY)$")
+    val courseLevel: String? = null,
     val active: Boolean = true
 )
 
@@ -94,6 +98,8 @@ data class UpdateTuitionLevelRequest(
     val segment: TuitionSegment? = null,
     @field:Min(1)
     val levelOrder: Int? = null,
+    @field:Pattern(regexp = "^(BEGINNER|ELEMENTARY|PRE_INTERMEDIATE|INTERMEDIATE|UPPER_INTERMEDIATE|ADVANCED|PROFICIENCY)$")
+    val courseLevel: String? = null,
     val active: Boolean? = null
 )
 
@@ -230,6 +236,8 @@ data class TuitionApplicationDto(
     val feePlan: TuitionFeePlanDto,
     val enrollmentId: Long?,
     val warningMessage: String?,
+    val progressionRule: TuitionProgressionRule?,
+    val requiresAdminOverride: Boolean,
     val adminNotes: String?,
     val seatReservation: TuitionSeatReservationDto?,
     val ledgerEntries: List<TuitionLedgerEntryDto>,

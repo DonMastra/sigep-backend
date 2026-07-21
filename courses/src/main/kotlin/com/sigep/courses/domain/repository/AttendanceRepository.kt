@@ -17,6 +17,12 @@ interface AttendanceRepository : JpaRepository<Attendance, Long> {
 
     fun findByEnrollmentIdAndAttendanceDate(enrollmentId: Long, date: LocalDate): Optional<Attendance>
 
+    fun findByEnrollmentIdAndCourseSessionId(enrollmentId: Long, courseSessionId: Long): Optional<Attendance>
+
+    fun findByCourseSessionId(courseSessionId: Long): List<Attendance>
+
+    fun countByCourseSessionIdAndStatusIn(courseSessionId: Long, statuses: Collection<AttendanceStatus>): Long
+
     @Query("SELECT a FROM Attendance a WHERE a.enrollment.course.id = :courseId AND a.attendanceDate = :date")
     fun findByCourseIdAndDate(courseId: Long, date: LocalDate): List<Attendance>
 

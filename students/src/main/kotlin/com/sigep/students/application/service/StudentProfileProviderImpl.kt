@@ -58,6 +58,14 @@ class StudentProfileProviderImpl(
         return studentRepository.save(student).toInfo()
     }
 
+    override fun updateCurrentLevel(studentId: Long, currentLevel: String): StudentProfileInfo {
+        val student = studentRepository.findById(studentId)
+            .orElseThrow { ResourceNotFoundException("Student not found with id: $studentId") }
+        return studentRepository.save(
+            student.copy(currentLevel = currentLevel, updatedAt = LocalDateTime.now())
+        ).toInfo()
+    }
+
     private fun Student.toInfo() = StudentProfileInfo(
         id = id!!,
         guardianId = guardianId,

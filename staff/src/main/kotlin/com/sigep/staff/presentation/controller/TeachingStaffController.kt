@@ -15,7 +15,10 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
+import org.springframework.http.HttpHeaders
+import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
+import org.springframework.web.multipart.MultipartFile
 import org.springframework.web.bind.annotation.*
 
 @RestController
@@ -90,6 +93,26 @@ class TeachingStaffController(
     ): ResponseEntity<ApiResponse<TeachingStaffDto>> {
         val staff = teachingStaffService.updateTeachingStaff(id, request)
         return ResponseEntity.ok(ApiResponse.success(staff, "Teaching staff updated successfully"))
+    }
+
+    @PostMapping("/{id}/photo", consumes = [MediaType.MULTIPART_FORM_DATA_VALUE])
+    @RequireAdmin
+    @Operation(summary = "Upload teaching staff photo")
+    fun uploadPhoto(
+        @PathVariable id: Long,
+        @RequestPart("photo") photo: MultipartFile
+    ): ResponseEntity<ApiResponse<TeachingStaffDto>> =
+        ResponseEntity.ok(ApiResponse.success(teachingStaffService.uploadPhoto(id, photo), "Photo uploaded successfully"))
+
+    @GetMapping("/{id}/photo")
+    @RequireAdminOrTeacher
+    @Operation(summary = "Download teaching staff photo")
+    fun getPhoto(@PathVariable id: Long): ResponseEntity<ByteArray> {
+        val photo = teachingStaffService.getPhoto(id)
+        return ResponseEntity.ok()
+            .contentType(MediaType.parseMediaType(photo.contentType))
+            .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"${photo.filename ?: "teacher-$id"}\"")
+            .body(photo.data)
     }
 
     @DeleteMapping("/{id}")

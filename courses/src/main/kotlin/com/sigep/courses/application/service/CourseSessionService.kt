@@ -27,6 +27,18 @@ class CourseSessionService(
 
     private val logger = LoggerFactory.getLogger(CourseSessionService::class.java)
 
+    fun getAllSessions(page: Int, size: Int): PageResponse<CourseSessionDto> {
+        val pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "sessionDate", "startTime"))
+        val sessions = sessionRepository.findAll(pageable)
+        return PageResponse(
+            content = sessions.content.map { it.toDto() },
+            page = sessions.number,
+            size = sessions.size,
+            totalElements = sessions.totalElements,
+            totalPages = sessions.totalPages
+        )
+    }
+
     fun getSessionById(id: Long): CourseSessionDto {
         logger.info("Fetching session with id: {}", id)
         val session = sessionRepository.findById(id)
@@ -211,7 +223,7 @@ class CourseSessionService(
             .orElseThrow { ResourceNotFoundException("Session not found with id: $id") }
 
         // Check if there are attendance records
-        val attendanceRecords = attendanceRepository.findByCourseIdAndDate(session.course.id!!, session.sessionDate)
+        val attendanceRecords = attendanceRepository.findByCourseSessionId(id)
         if (attendanceRecords.isNotEmpty()) {
             throw BusinessException("Cannot delete session with existing attendance records. Cancel it instead.")
         }
@@ -255,13 +267,15 @@ class CourseSessionService(
         startTime: LocalTime,
         endTime: LocalTime,
         classroomId: Long?,
-        teacherId: Long,
+        teacherId: Long?,
         studentId: Long? = null,
         excludeSessionId: Long? = null
     ) {
         // Check teacher conflicts
-        val teacherConflicts = sessionRepository.findTeacherConflicts(teacherId, date, startTime, endTime)
-            .filter { excludeSessionId == null || it.id != excludeSessionId }
+        val teacherConflicts = teacherId?.let {
+            sessionRepository.findTeacherConflicts(it, date, startTime, endTime)
+                .filter { session -> excludeSessionId == null || session.id != excludeSessionId }
+        }.orEmpty()
 
         if (teacherConflicts.isNotEmpty()) {
             throw BusinessException("Teacher has conflicting session at ${teacherConflicts.first().startTime}")
@@ -348,7 +362,7 @@ class CourseSessionService(
         val session = sessionRepository.findById(sessionId)
             .orElseThrow { ResourceNotFoundException("Session not found with id: $sessionId") }
 
-        val attendances = attendanceRepository.findByCourseIdAndDate(session.course.id!!, session.sessionDate)
+        val attendances = attendanceRepository.findByCourseSessionId(sessionId)
         val totalEnrolled = enrollmentRepository.countActiveEnrollmentsByCourse(session.course.id!!).toInt()
 
         val present = attendances.count { it.status == AttendanceStatus.PRESENT }
@@ -396,7 +410,10 @@ class CourseSessionService(
     }
 
     private fun CourseSession.toDto(): CourseSessionDto {
-        val attendanceCount = attendanceRepository.countPresentByCourseIdAndDate(course.id!!, sessionDate).toInt()
+        val attendanceCount = attendanceRepository.countByCourseSessionIdAndStatusIn(
+            id!!,
+            listOf(AttendanceStatus.PRESENT, AttendanceStatus.LATE)
+        ).toInt()
         val expectedAttendance = enrollmentRepository.countActiveEnrollmentsByCourse(course.id!!).toInt()
 
         return CourseSessionDto(

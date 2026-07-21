@@ -16,6 +16,7 @@ data class StudentDto(
     val guardianId: Long?,
     val currentCourseId: Long?,
     val currentCourseName: String?,
+    val currentLevel: String,
     val active: Boolean,
     val photoUrl: String?,
     val phoneNumber: String,
@@ -42,6 +43,7 @@ data class StudentDetailDto(
     val medicalNotes: String?,
     val currentCourseId: Long?,
     val currentCourseName: String?,
+    val currentLevel: String,
     val active: Boolean,
     val photoUrl: String?,
     val courseHistory: List<EnrollmentSummaryDto>,  // Usar DTO de common
@@ -85,7 +87,9 @@ data class CreateStudentRequest(
 
     val guardianId: Long?,
 
-    val medicalNotes: String?
+    val medicalNotes: String?,
+
+    val currentLevel: String = "BEGINNER"
 )
 
 data class GuardianStudentRegistrationRequest(
@@ -141,6 +145,8 @@ data class UpdateStudentRequest(
 
     val medicalNotes: String? = null,
 
-    val active: Boolean? = null
+    val active: Boolean? = null,
+
+    val currentLevel: String? = null
 )
 

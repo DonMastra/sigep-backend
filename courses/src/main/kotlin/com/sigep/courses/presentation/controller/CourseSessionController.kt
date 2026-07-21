@@ -22,6 +22,15 @@ class CourseSessionController(
     private val sessionService: CourseSessionService
 ) {
 
+    @GetMapping
+    @RequireAdminOrTeacher
+    @Operation(summary = "Get all sessions")
+    fun getAllSessions(
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "20") limit: Int
+    ): ResponseEntity<ApiResponse<PageResponse<CourseSessionDto>>> =
+        ResponseEntity.ok(ApiResponse.success(sessionService.getAllSessions(page, limit)))
+
     @GetMapping("/{id}")
     @RequireAdminOrTeacher
     @Operation(summary = "Get session by ID")
