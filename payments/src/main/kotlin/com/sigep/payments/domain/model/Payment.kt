@@ -16,14 +16,16 @@ data class Payment(
     @Column(nullable = false)
     val studentId: Long,
 
-    @Column(nullable = false, precision = 10, scale = 2)
+    @Column(nullable = false, precision = 12, scale = 2)
     val amount: BigDecimal,
+
+    @Column(nullable = false, length = 3)
+    val currency: String = "ARS",
 
     @Column(nullable = false)
     val concept: String,
 
-    @Column(nullable = false)
-    val paymentDate: LocalDate,
+    val paymentDate: LocalDate? = null,
 
     @Column(nullable = false)
     val dueDate: LocalDate,
@@ -38,6 +40,25 @@ data class Payment(
     @Column(unique = true)
     val receiptNumber: String?,
 
+    @Column(unique = true, length = 150)
+    val externalReference: String? = null,
+
+    @Column(unique = true, length = 128)
+    val creationKey: String? = null,
+
+    @Column(length = 64)
+    val creationFingerprint: String? = null,
+
+    @Column(unique = true, length = 128)
+    val confirmationKey: String? = null,
+
+    @Column(length = 64)
+    val confirmationFingerprint: String? = null,
+
+    val confirmedAt: LocalDateTime? = null,
+
+    val confirmedBy: Long? = null,
+
     @Column(length = 1000)
     val notes: String?,
 
@@ -45,7 +66,10 @@ data class Payment(
     val createdAt: LocalDateTime = LocalDateTime.now(),
 
     @Column(nullable = false)
-    val updatedAt: LocalDateTime = LocalDateTime.now()
+    val updatedAt: LocalDateTime = LocalDateTime.now(),
+
+    @Version
+    val version: Long = 0
 ) : AggregateRoot
 
 enum class PaymentStatus {

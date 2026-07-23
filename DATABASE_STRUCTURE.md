@@ -3,7 +3,7 @@
 ## Estado actual de estructura de Base de Datos (SiGEP)
 
 **Fecha de relevamiento:** 2026-05-31  
-**Ultima actualizacion:** 2026-07-20 (incluye V14/V15 y compatibilidad del flujo manual)
+**Ultima actualizacion:** 2026-07-21 (incluye V17 y desglose fiscal WSFE)
 **Entorno auditado:** `sigep_db` (PostgreSQL 15), validado contra codigo Kotlin actual y migraciones SQL.
 
 ## 1) Fuente de verdad operativa
@@ -16,8 +16,8 @@ Orden de prioridad:
 
 ## 2) Snapshot estructural actual
 
-### Tablas detectadas/modeladas: 29
-`classrooms`, `course_attendance`, `course_certificates`, `course_materials`, `course_sessions`, `courses`, `enrollments`, `exam_grade_history`, `exam_submissions`, `exams`, `non_teaching_staff`, `notifications`, `payments`, `registration_requests`, `reservations`, `schedule_slots`, `session_exceptions`, `staff_attendance`, `students`, `teaching_staff`, `tuition_academic_years`, `tuition_applications`, `tuition_discounts`, `tuition_fee_plans`, `tuition_ledger_entries`, `tuition_level_progression`, `tuition_levels`, `tuition_seat_reservations`, `users`.
+### Tablas detectadas/modeladas: 36
+`billing_outbox`, `classrooms`, `course_attendance`, `course_certificates`, `course_materials`, `course_sessions`, `courses`, `enrollments`, `exam_grade_history`, `exam_submissions`, `exams`, `fiscal_invoice_attempts`, `fiscal_invoice_taxes`, `fiscal_invoice_vat_subtotals`, `fiscal_invoices`, `non_teaching_staff`, `notifications`, `payment_receipts`, `payments`, `registration_requests`, `reservations`, `schedule_slots`, `session_exceptions`, `staff_attendance`, `students`, `teaching_staff`, `tuition_academic_years`, `tuition_applications`, `tuition_discounts`, `tuition_fee_plans`, `tuition_ledger_entries`, `tuition_level_progression`, `tuition_levels`, `tuition_seat_reservations`, `users`, `voucher_sequences`.
 
 ### Cambios de V12 (Scheduling)
 - Se elimina tabla legacy `course_schedules`.
@@ -59,6 +59,28 @@ Orden de prioridad:
 - V15 solo reemplaza el hash BCrypt legacy conocido de los usuarios de prueba; no migra
   contrasenas arbitrarias.
 
+### Cambios de V16 (facturacion persistente)
+
+- `payments` conserva filas legacy y suma moneda, referencias externas, claves/fingerprints
+  idempotentes, confirmacion auditada y `@Version`; `payment_date` pasa a nullable para pagos
+  `PENDING` y el monto se normaliza a `NUMERIC(12,2)`.
+- `payment_receipts` mantiene una instantanea inmutable por pago del recibo X no fiscal, con
+  la leyenda `DOCUMENTO NO VALIDO COMO FACTURA`.
+- `fiscal_invoices` mantiene una factura por pago, preflight, datos WSFE, numero, CAE,
+  observaciones/errores sanitizados y version optimista.
+- `fiscal_invoice_attempts` audita autorizaciones y conciliaciones sin guardar XML, Token o Sign.
+- `billing_outbox` desacopla la transaccion local de la llamada fiscal y distingue resultados
+  pendientes, procesados, fallidos o en conciliacion.
+- `voucher_sequences` serializa por CUIT emisor, punto de venta y tipo de comprobante; el worker
+  usa bloqueo pesimista antes de asignar numero.
+
+### Cambios de V17 (detalle fiscal)
+
+- `fiscal_invoices.receiver_address` conserva el domicilio del receptor requerido por el PDF.
+- `fiscal_invoice_vat_subtotals` persiste codigo, base e importe por alicuota IVA.
+- `fiscal_invoice_taxes` persiste codigo, descripcion, base, alicuota e importe por tributo.
+- Ambas colecciones conservan orden, restringen valores invalidos y referencian la factura.
+
 ### PK por modulo
 - Modulos generales (`users`, `students`, `courses`, `staff`, `scheduling`, `tuition`, etc.): **BIGINT**.
 - Modulo exams (`exams`, `exam_submissions`, `exam_grade_history`): **UUID** en PK.
@@ -77,12 +99,18 @@ Orden de prioridad:
 - `tuition_ledger_entries.student_id` -> `students.id` (BIGINT, nullable)
 - `teaching_staff.linked_user_id` -> `users.id` (BIGINT, `ON DELETE SET NULL`)
 - `course_attendance.course_session_id` -> `course_sessions.id` (BIGINT, `ON DELETE RESTRICT`)
+- `payment_receipts.payment_id` -> `payments.id` (BIGINT, unico, `ON DELETE RESTRICT`)
+- `fiscal_invoices.payment_id` -> `payments.id` (BIGINT, unico, `ON DELETE RESTRICT`)
+- `fiscal_invoice_attempts.invoice_id` -> `fiscal_invoices.id` (BIGINT, `ON DELETE RESTRICT`)
+- `billing_outbox.invoice_id` -> `fiscal_invoices.id` (BIGINT, `ON DELETE RESTRICT`)
+- `fiscal_invoice_vat_subtotals.invoice_id` -> `fiscal_invoices.id` (BIGINT, `ON DELETE RESTRICT`)
+- `fiscal_invoice_taxes.invoice_id` -> `fiscal_invoices.id` (BIGINT, `ON DELETE RESTRICT`)
 
 ### FK de scheduling (V12)
 - `schedule_slots.classroom_id` -> `classrooms.id` (`ON DELETE RESTRICT`)
 - `reservations.slot_id` -> `schedule_slots.id` (`ON DELETE RESTRICT`)
 
-## 3) Cambios recientes relevantes (V10 + V11 + V12 + V13)
+## 3) Cambios recientes relevantes (V10 a V17)
 
 | Version | Archivo | Resultado |
 |---|---|---|
@@ -90,6 +118,10 @@ Orden de prioridad:
 | V11 | `scripts/migrations/V11__extend_users_profile_fields.sql` | nuevos campos de perfil en `users` |
 | V12 | `scripts/migrations/V12__create_scheduling_module.sql` | nuevo esquema de scheduling (`classrooms`, `schedule_slots`, `reservations`) y drop de `course_schedules` |
 | V13 | `scripts/migrations/V13__create_tuition_module.sql` | nuevo esquema tuition para ciclo lectivo, niveles, planes, solicitudes, reservas y ledger mock |
+| V14 | `scripts/migrations/V14__fix_first_manual_flow.sql` | compatibilidad del primer flujo manual |
+| V15 | `scripts/migrations/V15__repair_legacy_test_password_hash.sql` | reparacion acotada de hashes legacy de prueba |
+| V16 | `scripts/migrations/V16__create_billing_persistence.sql` | pagos compatibles, recibos X, facturas, intentos, outbox y secuencias |
+| V17 | `scripts/migrations/V17__add_fiscal_tax_breakdown.sql` | domicilio receptor y detalle IVA/tributos |
 
 ## 4) Validacion ejecutada en BD (2026-05-31)
 
@@ -117,6 +149,22 @@ Orden de prioridad:
 
 ### Verificacion de deprecacion legacy
 - `course_schedules_exists = false` (tabla removida correctamente).
+
+### Validacion complementaria de V16 (2026-07-21)
+
+- Se creo una base PostgreSQL 15 descartable con la tabla `payments` legacy y una fila previa.
+- V16 se aplico con `ON_ERROR_STOP=1` y se volvio a aplicar para comprobar idempotencia.
+- La fila legacy se preservo con moneda `ARS`, version `0` y su fecha original.
+- Se verifico la existencia de las cinco tablas nuevas: `payment_receipts`, `fiscal_invoices`,
+  `fiscal_invoice_attempts`, `billing_outbox` y `voucher_sequences`.
+- La aplicacion arranco contra ese esquema y expuso el controller protegido; la base descartable
+  se elimino al terminar.
+
+### Validacion complementaria de V17 (2026-07-21)
+
+- V16 y V17 se aplicaron en orden sobre PostgreSQL 15 descartable con una factura previa a V17.
+- Se verifico el backfill de `receiver_address`, la insercion de una alicuota IVA y un tributo.
+- V17 se reaplico con `ON_ERROR_STOP=1` para confirmar idempotencia; el contenedor se elimino.
 
 ## 5) Validacion complementaria de `users`
 
@@ -148,6 +196,8 @@ Orden de prioridad:
 
 - `scripts/migrations/V12__create_scheduling_module.sql` -> migracion de scheduling.
 - `scripts/migrations/V13__create_tuition_module.sql` -> migracion de tuition.
+- `scripts/migrations/V16__create_billing_persistence.sql` -> migracion de pagos/facturacion.
+- `scripts/migrations/V17__add_fiscal_tax_breakdown.sql` -> domicilio y desglose impositivo.
 - `scripts/validate-db-schema.sql` -> validacion de esquema de `users`.
 - `scripts/validate-db-schema.sh` -> validacion por consola (psql).
 
@@ -165,10 +215,13 @@ Orden de prioridad:
 4. **Datos semilla tuition**:
    - No hay seed inicial de ciclos, niveles, progresiones ni planes de cuota; deben cargarse por API admin antes de usar el flujo.
 
-5. **Aplicacion de V14/V15**:
+5. **Aplicacion de V14/V15/V16/V17**:
    - Los scripts estan versionados como artefactos operativos. Validarlos primero en una
      base descartable o en una transaccion revertida; el contenedor local existente no debe
      modificarse automaticamente durante el desarrollo.
+
+   - V16/V17 ya fueron validadas en una base descartable; aun deben incorporarse al procedimiento
+     controlado de despliegue de cada ambiente.
 
 6. **Ledger mock**:
    - Las cuotas mensuales se generan/normalizan para enero-diciembre del año de inicio del
@@ -179,6 +232,8 @@ Orden de prioridad:
 ```powershell
 Get-Content "scripts/migrations/V12__create_scheduling_module.sql" | docker exec -i sigep-postgres psql -U sigep_user -d sigep_db -v ON_ERROR_STOP=1
 Get-Content "scripts/migrations/V13__create_tuition_module.sql" | docker exec -i sigep-postgres psql -U sigep_user -d sigep_db -v ON_ERROR_STOP=1
+Get-Content "scripts/migrations/V16__create_billing_persistence.sql" | docker exec -i sigep-postgres psql -U sigep_user -d sigep_db -v ON_ERROR_STOP=1
+Get-Content "scripts/migrations/V17__add_fiscal_tax_breakdown.sql" | docker exec -i sigep-postgres psql -U sigep_user -d sigep_db -v ON_ERROR_STOP=1
 docker exec sigep-postgres psql -U sigep_user -d sigep_db -c "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' ORDER BY table_name;"
 docker exec sigep-postgres psql -U sigep_user -d sigep_db -c "SELECT tablename, indexname FROM pg_indexes WHERE schemaname='public' AND tablename IN ('classrooms','schedule_slots','reservations') ORDER BY tablename, indexname;"
 docker exec sigep-postgres psql -U sigep_user -d sigep_db -c "SELECT tablename, indexname FROM pg_indexes WHERE schemaname='public' AND tablename LIKE 'tuition_%' ORDER BY tablename, indexname;"

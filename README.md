@@ -6,9 +6,9 @@ El proyecto esta implementado como monolito modular en Kotlin y Spring Boot, con
 
 ## Estado Actual
 
-Estado del workspace inspeccionado: branch `bugfix/issues-first-flow-run`, con cambios locales
-del cierre QA y archivos de prueba manual que no deben incluirse automaticamente en commits.
-La documentacion refleja el flujo completo validado al 2026-07-20.
+Estado del workspace inspeccionado: branch `feature010-billing-flow`, basada exactamente en
+`develop`, con archivos locales de QA que no deben incluirse automaticamente en commits.
+La documentacion refleja el nucleo persistente de facturacion validado al 2026-07-21.
 
 ### Funcional
 
@@ -27,12 +27,18 @@ La documentacion refleja el flujo completo validado al 2026-07-20.
 
 ### En Desarrollo o Planificado
 
-- Pagos/facturacion: existe entidad base `Payment`, pero no hay API funcional completa. `GET /api/v1/students/{id}/payment-status` devuelve datos temporales/mock.
+- Pagos/facturacion: persiste pagos, recibos X, facturas, intentos, outbox y secuencias; ofrece
+  un flujo idempotente y una bandeja `ADMIN`. Incluye mock embebido, provider SOAP
+  `mock-service` y cliente WSAA/WSFEv1 con firma CMS, caches, circuit breaker, bulkhead,
+  metricas, CAE/consulta, parametricas, detalle IVA/tributos y PDFs con QR. El smoke SOAP local
+  paso; falta homologacion ARCA con credenciales, deuda/cuotas y configuracion fiscal validada.
+  `GET /api/v1/students/{id}/payment-status` sigue devolviendo datos temporales/mock.
 - Comunicaciones/notificaciones: existe entidad base `Notification`; falta flujo real de envio SMTP/in-app.
 - Reportes avanzados: modulo incluido, pendiente de implementacion funcional.
 - Migraciones formales: hay scripts SQL y migraciones parciales; el perfil dev usa `ddl-auto: update`.
 
-El flujo anterior es estable para QA, pero pagos/facturacion, comunicaciones y reportes siguen
+El flujo academico anterior es estable para QA. El nucleo de pagos/facturacion es un incremento
+en desarrollo y todavia no emite comprobantes ARCA reales; comunicaciones y reportes siguen
 fuera de alcance. `tuition_ledger_entries` es una vista mock operativa, no un comprobante fiscal.
 
 ## Stack
@@ -59,7 +65,7 @@ courses/         Cursos, inscripciones, sesiones, asistencia, materiales, certif
 staff/           Docentes, no docentes, asistencia de personal
 exams/           Examenes, submissions, calificaciones, performance docente
 scheduling/      Aulas, slots horarios, reservas y asignaciones
-payments/        Pagos/facturacion planificado
+payments/        Pagos/facturacion: persistencia, casos de uso, outbox y frontera fiscal
 communications/  Notificaciones planificadas
 reports/         Reportes planificados
 application/     Entry point, configuracion OpenAPI, Redis, cache, import de modulos
@@ -167,6 +173,28 @@ Valores relevantes:
 - Rate limit: 100 requests por minuto por cliente
 - Cache Redis TTL: 10 minutos
 
+Facturacion:
+
+- `BILLING_FISCAL_PROVIDER=mock` habilita el simulador solo fuera de produccion.
+- `BILLING_FISCAL_PROVIDER=mock-service` recorre WSAA/WSFE contra
+  `BILLING_MOCK_SERVICE_BASE_URL` (default `http://localhost:8091`) sin certificado y tambien
+  esta prohibido en produccion.
+- `dev` usa mock por defecto; QA/produccion quedan deshabilitados por defecto.
+- `BILLING_ISSUER_CUIT` y `BILLING_ISSUER_POINT_OF_SALE` completan el preflight del emisor;
+  sin ambos, la factura queda `DRAFT` y no se puede encolar.
+- `BILLING_ISSUER_LEGAL_NAME`, `BILLING_ISSUER_BUSINESS_ADDRESS`,
+  `BILLING_ISSUER_VAT_CONDITION`, `BILLING_ISSUER_GROSS_INCOME` y
+  `BILLING_ISSUER_ACTIVITY_START` son obligatorios para descargar la factura PDF.
+- `BILLING_OUTBOX_POLL_DELAY_MS` controla el intervalo del worker (por defecto, 1000 ms).
+- `BILLING_FISCAL_REFERENCE_DATA_CACHE_TTL`, `BILLING_FISCAL_REFERENCE_DATA_STALE_IF_ERROR`
+  y las variables `BILLING_FISCAL_*` de resiliencia controlan cache, circuit breaker y
+  bulkhead; ver `ARCA_HOMOLOGATION_RUNBOOK.md`.
+- Para homologacion real: `BILLING_FISCAL_PROVIDER=arca`,
+  `BILLING_ARCA_ENVIRONMENT=homologation`, `BILLING_ARCA_KEYSTORE_PATH`,
+  `BILLING_ARCA_KEYSTORE_PASSWORD` y, opcionalmente, `BILLING_ARCA_KEYSTORE_ALIAS`.
+- Los endpoints WSAA/WSFE y timeouts tienen variables independientes; ver
+  `ARCA_HOMOLOGATION_RUNBOOK.md`. QA/produccion siguen `disabled` por defecto.
+
 ## Comandos
 
 Windows:
@@ -220,6 +248,11 @@ Migraciones del cierre QA:
   case-insensitive, mapeo `course_level`, reglas de progresion y asistencia por sesion.
 - `V15__repair_legacy_test_password_hash.sql`: reparacion acotada del hash BCrypt de datos
   legacy de prueba.
+- `V16__create_billing_persistence.sql`: compatibilidad de `payments` legacy y tablas
+  `payment_receipts`, `fiscal_invoices`, `fiscal_invoice_attempts`, `billing_outbox` y
+  `voucher_sequences`.
+- `V17__add_fiscal_tax_breakdown.sql`: domicilio fiscal del receptor y detalle ordenado de
+  alicuotas IVA/tributos para WSFE.
 
 Validarlas en una base descartable o transaccion revertida antes de aplicarlas al contenedor
 actual; no se ejecutan automaticamente durante esta implementacion.
@@ -229,6 +262,8 @@ actual; no se ejecutan automaticamente durante esta implementacion.
 - [API_CONTRACT.md](API_CONTRACT.md): contrato para frontend.
 - [AGENTS.md](AGENTS.md): instrucciones operativas para agentes.
 - [AGENT_CONTEXT.md](AGENT_CONTEXT.md): contexto detallado de arquitectura, patrones y buenas practicas.
+- [BILLING_ARCA_IMPLEMENTATION_GUIDE.md](BILLING_ARCA_IMPLEMENTATION_GUIDE.md): decisiones y contrato fiscal.
+- [ARCA_HOMOLOGATION_RUNBOOK.md](ARCA_HOMOLOGATION_RUNBOOK.md): alta, secretos, configuracion y smoke test.
 - [ARCHITECTURE.md](ARCHITECTURE.md): arquitectura historica del sistema.
 - [DATABASE_STRUCTURE.md](DATABASE_STRUCTURE.md): estructura de base de datos.
 - [security/SECURITY.md](security/SECURITY.md): seguridad.
@@ -241,14 +276,16 @@ actual; no se ejecutan automaticamente durante esta implementacion.
 - Usar DTOs tipados para todo contrato REST.
 - Centralizar excepciones en `common`.
 - Usar providers en `common` para integracion entre dominios.
-- No implementar features sobre `payments`, `communications` o `reports` sin definir primero interfaces y contratos.
+- Extender `payments` a traves de `FiscalAuthorityPort` y sus casos de uso; no filtrar SOAP,
+  certificados ni secretos hacia controladores o Angular.
 - Mantener endpoints nuevos bajo `/api/v1`.
 - Documentar cualquier diferencia real del contrato, especialmente wrappers de respuesta y parametros de paginacion.
 - Agregar tests unitarios de servicios cuando se modifique logica de negocio.
 
 ## Roadmap
 
-- Completar modulo de pagos/facturacion para cuotas, comprobantes, estado de deuda e integracion con estudiantes.
+- Ejecutar WSAA/WSFEv1 con credenciales de homologacion; agregar cuotas, estado de deuda e
+  integracion con estudiantes.
 - Activar comunicaciones para aprobacion/rechazo de registros, avisos academicos y notificaciones operativas.
 - Consolidar reportes administrativos y academicos.
 - Normalizar `exams` para devolver wrappers consistentes.
@@ -261,4 +298,4 @@ actual; no se ejecutan automaticamente durante esta implementacion.
 - Aplicacion frontend esperada: Angular en `http://localhost:4200`
 - Proyecto privado: SiGEP, Sistema de Gestion de Ensenanza Privada
 
-Ultima actualizacion documental: 2026-07-20.
+Ultima actualizacion documental: 2026-07-21.

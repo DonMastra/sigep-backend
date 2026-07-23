@@ -1,6 +1,8 @@
 # AGENT_CONTEXT.md - Contexto para Agentes SiGEP Backend
 
-> **Estado QA (2026-07-20).** Este documento complementa las secciones historicas
+> **Estado QA (2026-07-21).** Facturacion ya tiene persistencia, casos de uso idempotentes,
+> outbox, mock embebido/externo, cliente WSAA/WSFEv1, resiliencia, metricas, parametricas,
+> detalle impositivo y PDFs; el flujo QA previo se mantiene estable. Este documento complementa las secciones historicas
 > y describe el contrato operativo que debe respetarse al cerrar el primer flujo
 > manual. Ante una discrepancia, prevalecen las entidades/DTOs y los controladores
 > actuales, seguidos por `API_CONTRACT.md` y las migraciones versionadas.
@@ -25,7 +27,7 @@ La API debe soportar una gestion academica privada:
 - Evaluaciones presenciales, notas e historial de calificaciones.
 - Gestion operativa de aulas, horarios y reservas.
 - Gestion de personal docente/no docente.
-- Facturacion/pagos planificados para cuotas, comprobantes y estado de deuda.
+- Facturacion/pagos en desarrollo para pagos, recibos X, comprobantes y estado de deuda.
 - Comunicaciones y reportes planificados para flujos administrativos.
 
 ## Arquitectura
@@ -40,7 +42,7 @@ courses/         dominio cursos e inscripciones
 staff/           dominio personal
 exams/           dominio examenes
 scheduling/      dominio horarios/reservas
-payments/        dominio facturacion/pagos planificado
+payments/        dominio facturacion/pagos con persistencia, outbox y frontera fiscal
 tuition/         dominio matriculacion y ledger mock inicial
 communications/  dominio notificaciones planificado
 reports/         dominio reportes planificado
@@ -122,6 +124,10 @@ Los controladores que necesitan actor actual leen `userId` y `userRole` desde `H
   docente, docente nullable en cursos, codigo de curso case-insensitive, `course_level`,
   reglas de progresion y asistencia por sesion). `V15__repair_legacy_test_password_hash.sql`
   solo corrige el hash conocido de los usuarios de prueba legacy.
+- `V16__create_billing_persistence.sql` amplia `payments` de forma compatible y crea recibos,
+  facturas, intentos, outbox y secuencias de comprobantes.
+- `V17__add_fiscal_tax_breakdown.sql` agrega domicilio del receptor y colecciones persistentes
+  para `Iva` y `Tributos`.
 - Las migraciones SQL se validan sobre una base descartable o dentro de una transaccion
   revertida; no se deben ejecutar automaticamente sobre el contenedor actual sin backup
   y aprobacion explicita.
@@ -136,7 +142,9 @@ La API esta bajo `/api/v1`. El frontend Angular deberia:
 - Manejar `ErrorResponse` centralmente.
 - Tratar imagenes de estudiantes como `Blob`.
 - Usar `limit` como paginacion principal salvo endpoints con `size`.
-- No asumir pagos/facturacion como completo: `tuition` solo produce un ledger mock.
+- El nucleo persistente de pagos/facturacion ya existe, pero no asumir emision ARCA real: el
+  provider de dev es mock y `tuition` continua siendo un ledger independiente.
+- Nunca consumir WSAA/WSFE desde Angular ni exponer secretos fiscales en respuestas.
 - Las fechas JSON sin hora se serializan como `YYYY-MM-DD` y las horas de sesiones/reservas
   como `HH:mm`, sin conversion UTC.
 
@@ -250,26 +258,45 @@ Contrato QA adicional:
 - El ledger mock genera la matricula y cuotas de enero a diciembre del mismo ciclo lectivo
   (maximo 12 vencimientos), y nunca debe interpretarse como factura fiscal.
 
-Limites:
+Limites de `tuition`:
 
-- No factura ni emite comprobantes fiscales.
-- No integra ARCA ni `mock-billing-service` todavia.
+- No factura ni emite comprobantes fiscales; esa responsabilidad pertenece a `payments`.
 - No almacena datos de tarjeta ni procesa pagos reales.
 - La cuenta `GUARDIAN` debe poder autenticarse para usar endpoints guardian; las cuentas `PENDING_APPROVAL` siguen sin login por regla global de auth.
 
 ### Payments/Billing
 
-Estado: planificado. `tuition` ya deja un ledger mock inicial, pero pagos/facturacion real sigue pendiente. Se espera que cubra:
+Estado: nucleo persistente implementado. `tuition` deja un ledger mock independiente y
+`payments` aporta:
 
-- Cuentas corrientes de estudiantes.
-- Cuotas.
-- Pagos.
-- Comprobantes.
-- Metodos de pago.
-- Estado de deuda.
-- Integracion con dashboards y notificaciones.
+- `FiscalAuthorityPort` como frontera anti-corrupcion.
+- Validacion de CUIT, receptor, fechas de servicio, importes y redondeo `HALF_EVEN`.
+- `MockFiscalAuthorityAdapter` determinista con idempotencia, secuencia y resultado incierto.
+- `mock-service` recorre el SOAP externo sin certificado; `arca` usa PKCS#12. Ambos proveedores
+  remotos tienen cache de parametricas, circuit breaker, bulkhead y metricas de baja cardinalidad.
+- Seleccion fail-closed: dev mock; QA/produccion disabled; ambos mocks prohibidos en produccion.
+- `GET /api/v1/billing/provider/health`, exclusivo de `ADMIN` y sin secretos.
+- Entidades y repositorios para pago, recibo X, factura, intentos, outbox y secuencia.
+- Alta/confirmacion/factura idempotentes y `POST /api/v1/payments/register` como transaccion
+  local de pocos clics.
+- Bandeja, detalle, encolado `202 Accepted` y conciliacion de resultados `UNKNOWN`.
+- Worker que serializa la numeracion por CUIT/punto de venta/tipo y no reintenta timeouts ambiguos.
+- `ArcaFiscalAuthorityAdapter`: PKCS#12/CMS, WSAA, cache anticipada del TA, `FEDummy`,
+  ultimo autorizado, `FECAESolicitar`, `FECompConsultar` y URL QR version 1.
+- `ExternalMockFiscalAuthorityAdapterSmokeTest`: smoke opt-in de WSAA, catalogos, CAE y
+  consulta contra `mock-billing-service`; se omite si `SIGEP_EXTERNAL_MOCK_SMOKE` no es `true`.
 
-No implementar consumo real sin contratos definidos.
+Siguiente alcance: ejecutar `ARCA_HOMOLOGATION_RUNBOOK.md` con credenciales reales y completar
+la configuracion fiscal validada por la institucion.
+
+Reglas:
+
+- Angular nunca consume ARCA ni el mock externo directamente.
+- Un timeout ambiguo no se reintenta: se consulta y concilia.
+- No asumir condicion IVA, alicuota, tipo de comprobante ni aplicabilidad RG 3368.
+- Las sumas de bases/IVA/tributos deben coincidir con los agregados; el preflight deja en
+  `DRAFT` cualquier desglose inconsistente.
+- Seguir `BILLING_ARCA_IMPLEMENTATION_GUIDE.md` antes de ampliar el modulo.
 
 ### Communications
 
