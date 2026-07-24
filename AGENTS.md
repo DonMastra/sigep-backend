@@ -1,5 +1,16 @@
 # AGENTS.md - SiGEP Backend
 
+## Required Skill Routing
+
+Repository skills live in `.agents/skills` and allow implicit invocation. Before analyzing, implementing, reviewing, or refactoring non-trivial code, use every applicable skill:
+
+- Use `$sigep-spring-backend` for Spring Boot, Kotlin, controllers, services, security, validation, transactions, integrations, scheduled jobs, error handling, architecture, and backend tests.
+- Also use `$sigep-rest-api` whenever work touches controllers, endpoints, DTOs, OpenAPI/API documentation, pagination, filtering, validation/error semantics, auth semantics, mock contracts, or frontend/backend coordination.
+- Also use `$sigep-database-design` whenever work touches JPA entities, repositories, migrations, PostgreSQL/H2 behavior, constraints, indexes, seed data, audit fields, idempotency records, or persistence queries.
+- Use `$sigep-angular-frontend` when a task from this workspace also changes or diagnoses the sibling `sigep` Angular repository.
+
+Read each selected `SKILL.md` completely before acting. Do not load unrelated skills merely because they are available.
+
 ## Project Overview
 
 SiGEP Backend is a modular monolith REST API for a private English-language institute. It supports the SiGEP Angular web application with authentication, academic management, staff administration, exams, scheduling, and planned billing/payment capabilities.
@@ -199,6 +210,7 @@ Until then, use explicit TODO comments and define provider interfaces/contracts 
 - Keep `README.md` as the entry guide.
 - Keep `API_CONTRACT.md` aligned with controller routes and frontend needs.
 - Keep `AGENT_CONTEXT.md` as the high-detail context file for agents.
+- Keep `.agents/skills` aligned with recurring Spring, REST, database, and cross-repository Angular practices.
 - When code and docs disagree, inspect controllers/DTOs first and document real behavior plus known risk.
 - Avoid mojibake and mixed encodings. Use UTF-8 Markdown.
 

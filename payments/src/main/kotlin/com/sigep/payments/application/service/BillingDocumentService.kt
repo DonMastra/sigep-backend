@@ -171,94 +171,89 @@ internal class BillingPdfRenderer(
         val qrUrl = requireNotNull(FiscalQrPayloadBuilder.build(invoice))
         return document { document, page, canvas ->
             val width = page.mediaBox.width
+            val left = 24f
+            val right = width - 24f
+            val contentWidth = right - left
             val voucherLetter = voucherLetter(invoice.voucherType)
-            header(
-                canvas,
-                width,
-                "FACTURA $voucherLetter",
-                if (documentWarning != null) "Ambiente de prueba" else "Comprobante electronico autorizado"
-            )
-            fill(canvas, width / 2f - 22f, 720f, 44f, 44f, Color.WHITE)
-            textCentered(canvas, voucherLetter, width / 2f, 738f, bold, 24f, BLUE)
-            textCentered(canvas, "COD. ${invoice.voucherType.toString().padStart(2, '0')}", width / 2f, 712f, bold, 6.5f, MUTED)
+            val pointOfSale = requireNotNull(invoice.pointOfSale).toString().padStart(5, '0')
+            val voucherNumber = requireNotNull(invoice.voucherNumber).toString().padStart(8, '0')
 
-            var issuerY = 678f
-            wrap(requireNotNull(settings.legalName), bold, 15f, 270f).take(2).forEach { value ->
-                text(canvas, value, 42f, issuerY, bold, 15f, INK)
-                issuerY -= 17f
-            }
-            issuerY -= 2f
-            wrap("Domicilio comercial: ${requireNotNull(settings.businessAddress)}", regular, 8.5f, 270f)
-                .take(2)
-                .forEach { value ->
-                    text(canvas, value, 42f, issuerY, regular, 8.5f, INK)
-                    issuerY -= 13f
+            officialBox(canvas, left, 24f, contentWidth, 794f)
+            officialBox(canvas, left, 682f, contentWidth, 136f)
+            line(canvas, width / 2f, 682f, width / 2f, 818f, OFFICIAL_BORDER)
+
+            fun centeredLines(value: String, center: Float, y: Float, font: PDFont, size: Float, maxWidth: Float, gap: Float) {
+                wrap(value, font, size, maxWidth).take(2).forEachIndexed { index, lineValue ->
+                    textCentered(canvas, lineValue, center, y - index * gap, font, size, OFFICIAL_INK)
                 }
-            issuerY -= 2f
-            wrap("Condicion frente al IVA: ${requireNotNull(settings.vatCondition)}", regular, 8.5f, 270f)
-                .take(2)
-                .forEach { value ->
-                    text(canvas, value, 42f, issuerY, regular, 8.5f, INK)
-                    issuerY -= 13f
-                }
-            text(canvas, "CUIT: ${invoice.issuerCuit}", 330f, 678f, bold, 9f, INK)
-            text(canvas, "Ingresos Brutos: ${safe(requireNotNull(settings.grossIncome))}", 330f, 661f, regular, 8.5f, INK)
-            text(canvas, "Inicio de actividades: ${requireNotNull(settings.activityStart).format(dateFormat)}", 330f, 645f, regular, 8.5f, INK)
-            text(canvas, "Punto de venta: ${requireNotNull(invoice.pointOfSale).toString().padStart(5, '0')}", 330f, 625f, bold, 9f, INK)
-            text(canvas, "Comprobante Nro: ${requireNotNull(invoice.voucherNumber).toString().padStart(8, '0')}", 330f, 608f, bold, 9f, INK)
-            text(canvas, "Fecha de emision: ${invoice.issueDate.format(dateFormat)}", 330f, 591f, regular, 8.5f, INK)
-
-            box(canvas, 36f, 505f, width - 72f, 66f)
-            labelValue(canvas, "Receptor", invoice.receiverName, 48f, 550f, 290f)
-            labelValue(canvas, "Domicilio", invoice.receiverAddress, 48f, 530f, 290f)
-            labelValue(canvas, "Documento", "${documentTypeLabel(invoice.receiverDocumentType)} - ${invoice.receiverDocumentNumber}", 360f, 550f, 185f)
-            labelValue(canvas, "Condicion IVA", receiverVatConditionLabel(invoice.receiverVatConditionId), 360f, 530f, 185f)
-
-            if (invoice.concept != 1) {
-                fill(canvas, 36f, 472f, width - 72f, 24f, PALE_BLUE)
-                text(canvas, "Periodo facturado: ${invoice.serviceFrom?.format(dateFormat)} al ${invoice.serviceTo?.format(dateFormat)}", 48f, 481f, regular, 8.5f, INK)
-                textRight(canvas, "Vencimiento: ${invoice.paymentDueDate?.format(dateFormat)}", width - 48f, 481f, regular, 8.5f, INK)
             }
 
-            tableHeader(canvas, 36f, 430f, width - 72f, listOf("Descripcion" to 310f, "Cant." to 55f, "Importe" to 140f))
-            val conceptLines = wrap(invoice.payment.concept, regular, 9f, 295f).take(2)
-            conceptLines.forEachIndexed { index, value -> text(canvas, value, 48f, 406f - index * 13f, regular, 9f, INK) }
-            textCentered(canvas, "1", 386f, 406f, regular, 9f, INK)
-            textRight(canvas, money(invoice.totalAmount, invoice.currency), width - 48f, 406f, bold, 10f, INK)
-            line(canvas, 36f, 370f, width - 36f, 370f, BORDER)
-
-            var taxY = 349f
-            val totals = listOf(
-                "No gravado" to invoice.nonTaxedAmount,
-                "Neto gravado" to invoice.netAmount,
-                "Exento" to invoice.exemptAmount,
-                "IVA" to invoice.vatAmount,
-                "Otros tributos" to invoice.otherTaxesAmount
-            ).filter { it.second.compareTo(BigDecimal.ZERO) != 0 }
-            totals.forEach { (label, amount) ->
-                text(canvas, label, 365f, taxY, regular, 8.5f, MUTED)
-                textRight(canvas, money(amount, invoice.currency), width - 48f, taxY, regular, 8.5f, INK)
-                taxY -= 15f
+            fun field(label: String, value: String, x: Float, y: Float, maxWidth: Float = 250f) {
+                text(canvas, "$label:", x, y, bold, 8.5f, OFFICIAL_INK)
+                val labelWidth = bold.getStringWidth(safe("$label:")) / 1000f * 8.5f
+                text(canvas, truncate(value, regular, 8.5f, maxWidth - labelWidth - 6f), x + labelWidth + 6f, y, regular, 8.5f, OFFICIAL_INK)
             }
-            fill(canvas, 350f, taxY - 28f, width - 386f, 38f, PALE_BLUE)
-            text(canvas, "TOTAL", 365f, taxY - 4f, bold, 10f, INK)
-            textRight(canvas, money(invoice.totalAmount, invoice.currency), width - 48f, taxY - 21f, bold, 16f, BLUE)
 
-            if (documentWarning != null) {
-                fill(canvas, 36f, 220f, width - 72f, 26f, LIGHT_RED)
-                textCentered(
-                    canvas,
-                    documentWarning,
-                    width / 2f,
-                    229f,
-                    bold,
-                    10f,
-                    DARK_RED
-                )
+            centeredLines(requireNotNull(settings.legalName), width / 4f, 786f, bold, 13f, 220f, 15f)
+            centeredLines(requireNotNull(settings.businessAddress), width / 4f, 754f, regular, 8.5f, 220f, 12f)
+            centeredLines(requireNotNull(settings.vatCondition), width / 4f, 726f, bold, 8.5f, 220f, 12f)
+
+            text(canvas, "FACTURA", 315f, 790f, bold, 18f, OFFICIAL_INK)
+            text(canvas, "$pointOfSale-$voucherNumber", 315f, 768f, bold, 11f, OFFICIAL_INK)
+            text(canvas, "Fecha de Emision: ${invoice.issueDate.format(dateFormat)}", 315f, 748f, regular, 8.5f, OFFICIAL_INK)
+            text(canvas, "CUIT: ${invoice.issuerCuit}", 315f, 728f, regular, 8.5f, OFFICIAL_INK)
+            text(canvas, "Ingresos Brutos: ${safe(requireNotNull(settings.grossIncome))}", 315f, 712f, regular, 8.5f, OFFICIAL_INK)
+            text(canvas, "Inicio de Actividades: ${requireNotNull(settings.activityStart).format(dateFormat)}", 315f, 696f, regular, 8.5f, OFFICIAL_INK)
+
+            officialBox(canvas, width / 2f - 19f, 774f, 38f, 44f)
+            textCentered(canvas, voucherLetter, width / 2f, 798f, bold, 22f, OFFICIAL_INK)
+            textCentered(canvas, "COD. ${invoice.voucherType.toString().padStart(2, '0')}", width / 2f, 779f, bold, 5.5f, OFFICIAL_INK)
+            textCentered(canvas, "ORIGINAL", width / 2f, 768f, regular, 5.5f, OFFICIAL_INK)
+
+            fill(canvas, left, 650f, contentWidth, 21f, MOCK_PALE_RED)
+            textCentered(canvas, documentWarning ?: "COMPROBANTE AUTORIZADO", width / 2f, 657f, bold, 8.5f, if (documentWarning != null) DARK_RED else OFFICIAL_INK)
+
+            officialBox(canvas, left, 576f, contentWidth, 62f)
+            field("Nombre", invoice.receiverName, 34f, 620f, 260f)
+            field("Domicilio", invoice.receiverAddress, 34f, 603f, 260f)
+            field("Cond. IVA", receiverVatConditionLabel(invoice.receiverVatConditionId), 34f, 586f, 260f)
+            field("Documento", "${documentTypeLabel(invoice.receiverDocumentType)} ${invoice.receiverDocumentNumber}", 310f, 620f, 250f)
+            field("Localidad", "No informado", 310f, 603f, 250f)
+            field("Provincia", "No informado", 310f, 586f, 250f)
+
+            val tableTop = 548f
+            val tableBottom = 482f
+            fill(canvas, left, tableTop, contentWidth, 22f, OFFICIAL_HEADER)
+            officialBox(canvas, left, tableBottom, contentWidth, tableTop - tableBottom)
+            val columns = listOf(60f, 270f, 65f, 75f, contentWidth - 60f - 270f - 65f - 75f)
+            var cursor = left
+            columns.dropLast(1).forEach { columnWidth ->
+                cursor += columnWidth
+                line(canvas, cursor, tableBottom, cursor, tableTop, OFFICIAL_BORDER)
             }
+            val headers = listOf("Codigo", "Descripcion", "Cantidad", "P. Unitario", "Importe")
+            cursor = left
+            headers.forEachIndexed { index, header ->
+                val columnWidth = columns[index]
+                textCentered(canvas, header, cursor + columnWidth / 2f, tableTop + 7f, bold, 7.5f, OFFICIAL_INK)
+                cursor += columnWidth
+            }
+            textCentered(canvas, "001", left + columns[0] / 2f, 520f, regular, 8f, OFFICIAL_INK)
+            centeredLines(invoice.payment.concept, left + columns[0] + columns[1] / 2f, 526f, regular, 8f, columns[1] - 12f, 11f)
+            textCentered(canvas, "1", left + columns[0] + columns[1] + columns[2] / 2f, 520f, regular, 8f, OFFICIAL_INK)
+            textRight(canvas, amountOnly(invoice.totalAmount), left + columns[0] + columns[1] + columns[2] + columns[3] - 8f, 520f, regular, 8f, OFFICIAL_INK)
+            textRight(canvas, amountOnly(invoice.totalAmount), right - 8f, 520f, regular, 8f, OFFICIAL_INK)
+
+            officialBox(canvas, left, 143f, contentWidth, 70f)
+            textRight(canvas, "Subtotal: ${amountOnly(invoice.totalAmount)}", right - 14f, 192f, regular, 8.5f, OFFICIAL_INK)
+            textRight(canvas, "Dto/Recargo: ${amountOnly(BigDecimal.ZERO)}", right - 14f, 175f, regular, 8.5f, OFFICIAL_INK)
+            textRight(canvas, "Total: ${currencyLabel(invoice.currency)} ${amountOnly(invoice.totalAmount)}", right - 14f, 154f, bold, 11f, OFFICIAL_INK)
+            officialBox(canvas, left, 116f, contentWidth, 18f)
 
             val qrImage = qrImage(document, qrUrl)
-            canvas.drawImage(qrImage, 42f, 92f, 112f, 112f)
+            canvas.drawImage(qrImage, 38f, 37f, 72f, 72f)
+            text(canvas, "ARCA", 124f, 94f, bold, 14f, OFFICIAL_INK)
+            text(canvas, "Agencia de Recaudacion y Control Aduanero", 124f, 80f, regular, 6.5f, OFFICIAL_INK)
             text(
                 canvas,
                 when {
@@ -266,16 +261,17 @@ internal class BillingPdfRenderer(
                     documentWarning != null -> "Autorizacion de homologacion ARCA"
                     else -> "Comprobante autorizado por ARCA"
                 },
-                174f,
-                183f,
+                124f,
+                66f,
                 bold,
-                10f,
-                INK
+                8f,
+                OFFICIAL_INK
             )
-            text(canvas, "CAE: ${invoice.authorizationCode}", 174f, 160f, bold, 12f, BLUE)
-            text(canvas, "Vencimiento CAE: ${invoice.authorizationExpiresOn?.format(dateFormat)}", 174f, 141f, regular, 9f, INK)
-            text(canvas, "Verificacion fiscal mediante codigo QR", 174f, 119f, regular, 8.5f, MUTED)
-            footer(canvas, width)
+            text(canvas, "CAE Nro.: ${invoice.authorizationCode}", 330f, 94f, bold, 9f, OFFICIAL_INK)
+            text(canvas, "Fecha de Vto. de CAE: ${invoice.authorizationExpiresOn?.format(dateFormat)}", 330f, 78f, regular, 8.5f, OFFICIAL_INK)
+            text(canvas, "Documento de prueba sin validez fiscal", 330f, 62f, regular, 7.5f, DARK_RED)
+            text(canvas, "Generado por SiGEP", left, 31f, regular, 7f, MUTED)
+            textRight(canvas, "Documento PDF", right, 31f, regular, 7f, MUTED)
         }
     }
 
@@ -358,6 +354,13 @@ internal class BillingPdfRenderer(
         canvas.stroke()
     }
 
+    private fun officialBox(canvas: PDPageContentStream, x: Float, y: Float, width: Float, height: Float) {
+        canvas.setStrokingColor(OFFICIAL_BORDER)
+        canvas.setLineWidth(0.8f)
+        canvas.addRect(x, y, width, height)
+        canvas.stroke()
+    }
+
     private fun line(canvas: PDPageContentStream, x1: Float, y1: Float, x2: Float, y2: Float, color: Color) {
         canvas.setStrokingColor(color)
         canvas.setLineWidth(0.8f)
@@ -406,6 +409,8 @@ internal class BillingPdfRenderer(
 
     private fun money(amount: BigDecimal, currency: String): String = "${currencyLabel(currency)} ${amountFormat.format(amount)}"
 
+    private fun amountOnly(amount: BigDecimal): String = amountFormat.format(amount)
+
     private fun currencyLabel(currency: String): String = when (currency) {
         "PES", "ARS" -> "$"
         else -> currency
@@ -449,9 +454,13 @@ internal class BillingPdfRenderer(
         val BLUE = Color(35, 73, 145)
         val PALE_BLUE = Color(236, 243, 255)
         val LIGHT_RED = Color(255, 239, 239)
+        val MOCK_PALE_RED = Color(255, 239, 239)
         val DARK_RED = Color(157, 31, 45)
         val INK = Color(31, 41, 55)
         val MUTED = Color(99, 115, 129)
         val BORDER = Color(210, 218, 230)
+        val OFFICIAL_BORDER = Color(55, 55, 55)
+        val OFFICIAL_HEADER = Color(225, 225, 225)
+        val OFFICIAL_INK = Color(20, 20, 20)
     }
 }

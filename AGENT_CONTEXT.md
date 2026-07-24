@@ -329,17 +329,29 @@ Estado: planificado. Se espera que cubra:
 - Si se modifica scheduling, validar disponibilidad, asignacion, desasignacion y conflictos.
 - Si se modifica tuition, validar estados, reserva de cupo, ledger mock, ownership de guardian y aprobacion admin.
 
-## Skills Utiles para Agentes
+## Skills Locales para Agentes
 
-Skills tecnicas que conviene aplicar en este proyecto:
+El repositorio versiona skills reutilizables en `.agents/skills`. Codex las descubre desde la
+raiz del repositorio y puede seleccionarlas implicitamente por su descripcion. `AGENTS.md`
+establece cuando su uso es obligatorio:
 
-- Exploracion de repositorio: usar `rg --files` y `rg` para encontrar controladores, DTOs y servicios.
-- Auditoria de contrato API: comparar anotaciones Spring con `API_CONTRACT.md`.
-- Refactor modular: identificar dependencias Gradle directas y reemplazar con providers en `common`.
-- Seguridad Spring: revisar `SecurityConfig`, filtros JWT y anotaciones.
-- Testing Kotlin/Spring: crear tests unitarios con JUnit 5 y MockK para servicios.
-- Documentacion tecnica: mantener README, API contract y contexto de agentes sincronizados.
-- Integracion frontend: pensar en interceptores, modelos TypeScript, paginacion, blobs y errores.
+- `$sigep-spring-backend`: Spring Boot/Kotlin, controladores, servicios, seguridad, validacion,
+  transacciones, integraciones, arquitectura modular y pruebas JUnit 5/MockK.
+- `$sigep-rest-api`: endpoints, DTOs, OpenAPI/API contract, paginacion, filtros, errores, auth,
+  mocks de integracion y coordinacion frontend/backend.
+- `$sigep-database-design`: JPA, repositorios, PostgreSQL/H2, migraciones, constraints, indices,
+  seed data, auditoria, idempotencia y consultas.
+- `$sigep-angular-frontend`: trabajo cross-repo que modifica o diagnostica el frontend `sigep`.
+
+Las cuatro incluyen `agents/openai.yaml` con invocacion implicita habilitada. Sus descripciones
+controlan el disparo automatico para evitar cargar contexto no relacionado.
+
+Al aplicarlas:
+
+- Usar `rg --files` y `rg` para localizar controladores, DTOs, servicios y migraciones.
+- Comparar contratos reales con `API_CONTRACT.md` y con los modelos TypeScript consumidores.
+- Preservar providers en `common` para comunicacion modular y no ampliar acoplamientos directos.
+- Mantener README, API contract, estructura de base de datos y contexto de agentes sincronizados.
 
 ## Comandos de Trabajo
 

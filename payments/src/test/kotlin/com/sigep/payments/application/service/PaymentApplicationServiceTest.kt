@@ -44,7 +44,7 @@ class PaymentApplicationServiceTest {
         every { paymentRepository.existsByExternalReference("transfer-1") } returns false
         every { paymentRepository.findByCreationKey("create-payment-1") } returns Optional.empty()
         every { paymentRepository.save(any()) } answers { firstArg<Payment>().copy(id = 1L) }
-        emptyDetailDependencies()
+        emptyDetailDependencies(paymentId = 1L)
 
         val result = service.create(
             "create-payment-1",
@@ -61,6 +61,27 @@ class PaymentApplicationServiceTest {
         assertEquals(null, result.payment.paymentDate)
         assertEquals("transfer-1", result.payment.externalReference)
         assertEquals(null, result.receipt)
+    }
+
+    @Test
+    fun `combined workflow can persist the collection date on the initial insert`() {
+        every { paymentRepository.existsByExternalReference(any()) } returns false
+        every { paymentRepository.findByCreationKey("workflow-create") } returns Optional.empty()
+        every { paymentRepository.save(any()) } answers { firstArg<Payment>().copy(id = 2L) }
+        emptyDetailDependencies(paymentId = 2L)
+
+        val result = service.create(
+            "workflow-create",
+            CreatePaymentRequest(
+                studentId = 20L,
+                amount = BigDecimal("1000.00"),
+                concept = "Cuota de prueba",
+                dueDate = LocalDate.of(2026, 7, 23)
+            ),
+            initialPaymentDate = LocalDate.of(2026, 7, 23)
+        )
+
+        assertEquals(LocalDate.of(2026, 7, 23), result.payment.paymentDate)
     }
 
     @Test
@@ -112,9 +133,9 @@ class PaymentApplicationServiceTest {
         verify(exactly = 1) { receiptRepository.save(any()) }
     }
 
-    private fun emptyDetailDependencies() {
-        every { receiptRepository.findByPaymentId(1L) } returns Optional.empty()
-        every { invoiceRepository.findByPaymentId(1L) } returns Optional.empty()
+    private fun emptyDetailDependencies(paymentId: Long) {
+        every { receiptRepository.findByPaymentId(paymentId) } returns Optional.empty()
+        every { invoiceRepository.findByPaymentId(paymentId) } returns Optional.empty()
         every {
             outboxRepository.findByInvoiceIdAndEventType(any(), BillingOutboxEventType.AUTHORIZE_INVOICE)
         } returns Optional.empty()

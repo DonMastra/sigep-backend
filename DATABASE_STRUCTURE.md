@@ -220,8 +220,12 @@ Orden de prioridad:
      base descartable o en una transaccion revertida; el contenedor local existente no debe
      modificarse automaticamente durante el desarrollo.
 
-   - V16/V17 ya fueron validadas en una base descartable; aun deben incorporarse al procedimiento
-     controlado de despliegue de cada ambiente.
+    - V16/V17 ya fueron validadas en una base descartable; aun deben incorporarse al procedimiento
+      controlado de despliegue de cada ambiente.
+
+    - En bases legacy con filas existentes, V16 agrega `currency` y `version` como columnas
+      rellenables, aplica `ARS`/`0` y recien despues las fija como `NOT NULL`. El mapeo JPA conserva
+      esos defaults como salvaguarda adicional cuando `ddl-auto=update` esta activo en `dev`.
 
 6. **Ledger mock**:
    - Las cuotas mensuales se generan/normalizan para enero-diciembre del año de inicio del

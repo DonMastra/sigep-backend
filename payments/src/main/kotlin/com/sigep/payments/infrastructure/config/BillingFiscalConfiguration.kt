@@ -69,7 +69,7 @@ class BillingFiscalConfiguration {
             DISABLED_PROVIDER -> DisabledFiscalAuthorityAdapter(
                 providerName = DISABLED_PROVIDER,
                 fiscalEnvironment = configuredEnvironment,
-                reason = "Fiscal authority provider is disabled; set BILLING_FISCAL_PROVIDER=mock in local development"
+                reason = "Fiscal authority provider is disabled; set BILLING_FISCAL_PROVIDER=mock-service and start mock-billing-service for local development"
             )
             else -> error("Unsupported billing.fiscal.provider '$provider'")
         }
@@ -263,8 +263,10 @@ class BillingFiscalConfiguration {
     )
 
     private fun defaultWsaaEndpoint(environment: FiscalEnvironment): String = when (environment) {
-        FiscalEnvironment.HOMOLOGATION -> "https://wsaahomo.arca.gov.ar/ws/services/LoginCms"
-        FiscalEnvironment.PRODUCTION -> "https://wsaa.arca.gov.ar/ws/services/LoginCms"
+        // The current official WSAA page publishes the afip.gov.ar aliases;
+        // keep the URL configurable because ARCA is migrating service names.
+        FiscalEnvironment.HOMOLOGATION -> "https://wsaahomo.afip.gov.ar/ws/services/LoginCms"
+        FiscalEnvironment.PRODUCTION -> "https://wsaa.afip.gov.ar/ws/services/LoginCms"
         FiscalEnvironment.MOCK -> error("ARCA cannot use the mock environment")
     }
 

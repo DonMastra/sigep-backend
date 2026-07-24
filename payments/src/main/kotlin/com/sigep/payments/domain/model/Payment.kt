@@ -19,7 +19,10 @@ data class Payment(
     @Column(nullable = false, precision = 12, scale = 2)
     val amount: BigDecimal,
 
-    @Column(nullable = false, length = 3)
+    // Keep Hibernate's development-time schema update safe for legacy rows.
+    // V16 remains the authoritative migration and performs the same backfill
+    // explicitly in QA/production databases.
+    @Column(nullable = false, length = 3, columnDefinition = "varchar(3) default 'ARS'")
     val currency: String = "ARS",
 
     @Column(nullable = false)
@@ -68,7 +71,10 @@ data class Payment(
     @Column(nullable = false)
     val updatedAt: LocalDateTime = LocalDateTime.now(),
 
+    // PostgreSQL cannot add a NOT NULL version column to a populated table
+    // unless existing rows receive the optimistic-lock baseline.
     @Version
+    @Column(nullable = false, columnDefinition = "bigint default 0")
     val version: Long = 0
 ) : AggregateRoot
 

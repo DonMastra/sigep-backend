@@ -67,7 +67,7 @@ class Pkcs12ArcaCmsSignerTest {
     private fun settings(path: Path, password: CharArray) = ArcaFiscalSettings(
         environment = FiscalEnvironment.HOMOLOGATION,
         issuerCuit = "30712345678",
-        wsaaEndpoint = URI("https://wsaahomo.arca.gov.ar/ws/services/LoginCms"),
+        wsaaEndpoint = URI("https://wsaahomo.afip.gov.ar/ws/services/LoginCms"),
         wsfeEndpoint = URI("https://wswhomo.afip.gov.ar/wsfev1/service.asmx"),
         keyStorePath = path,
         keyStorePassword = password,

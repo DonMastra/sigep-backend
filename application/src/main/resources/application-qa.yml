@@ -96,7 +96,7 @@ billing:
     activity-start: ${BILLING_ISSUER_ACTIVITY_START:}
   arca:
     environment: ${BILLING_ARCA_ENVIRONMENT:homologation}
-    wsaa-url: ${BILLING_ARCA_WSAA_URL:https://wsaahomo.arca.gov.ar/ws/services/LoginCms}
+    wsaa-url: ${BILLING_ARCA_WSAA_URL:https://wsaahomo.afip.gov.ar/ws/services/LoginCms}
     wsfe-url: ${BILLING_ARCA_WSFE_URL:https://wswhomo.afip.gov.ar/wsfev1/service.asmx}
     keystore:
       path: ${BILLING_ARCA_KEYSTORE_PATH:}

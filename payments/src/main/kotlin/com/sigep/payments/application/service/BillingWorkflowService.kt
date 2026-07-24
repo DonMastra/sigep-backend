@@ -22,7 +22,11 @@ class BillingWorkflowService(
             throw ValidationException("Idempotency-Key is required and must have at most $ROOT_KEY_MAX_LENGTH characters")
         }
 
-        val created = paymentService.create("$idempotencyKey:create", request.payment)
+        val created = paymentService.create(
+            "$idempotencyKey:create",
+            request.payment,
+            request.confirmation.paymentDate
+        )
         val paymentId = created.payment.id
         val confirmed = paymentService.confirm(
             paymentId,

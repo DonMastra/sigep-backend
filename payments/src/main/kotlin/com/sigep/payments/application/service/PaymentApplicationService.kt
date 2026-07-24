@@ -21,6 +21,7 @@ import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.time.LocalDate
 import java.time.LocalDateTime
 
 @Service
@@ -32,7 +33,11 @@ class PaymentApplicationService(
     private val outboxRepository: BillingOutboxRepository
 ) {
 
-    fun create(idempotencyKey: String, request: CreatePaymentRequest): PaymentDetailDto {
+    fun create(
+        idempotencyKey: String,
+        request: CreatePaymentRequest,
+        initialPaymentDate: LocalDate? = null
+    ): PaymentDetailDto {
         validateIdempotencyKey(idempotencyKey)
         val fingerprint = BillingFingerprint.payment(request)
         paymentRepository.findByCreationKey(idempotencyKey).orElse(null)?.let { existing ->
@@ -53,7 +58,11 @@ class PaymentApplicationService(
                 amount = request.amount,
                 currency = request.currency,
                 concept = request.concept.trim(),
-                paymentDate = null,
+                // The combined register workflow already has the collection date.
+                // Persist it on the first insert so legacy databases that still
+                // have payment_date NOT NULL can accept the request; confirm()
+                // writes the same value again as the authoritative transition.
+                paymentDate = initialPaymentDate,
                 dueDate = request.dueDate,
                 status = PaymentStatus.PENDING,
                 paymentMethod = null,

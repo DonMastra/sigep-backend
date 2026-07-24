@@ -30,7 +30,13 @@ class BillingWorkflowServiceTest {
         val confirmed = paymentDetail(PaymentStatus.PAID)
         val invoice = mockk<FiscalInvoiceDetailDto>()
 
-        every { paymentService.create("workflow-1:create", request.payment) } returns created
+        every {
+            paymentService.create(
+                "workflow-1:create",
+                request.payment,
+                request.confirmation.paymentDate
+            )
+        } returns created
         every {
             paymentService.confirm(1L, "workflow-1:confirm", request.confirmation, 99L)
         } returns confirmed
@@ -40,7 +46,13 @@ class BillingWorkflowServiceTest {
             .registerPaymentAndInvoice("workflow-1", request, 99L)
 
         assertEquals(PaymentStatus.PAID, result.payment.payment.status)
-        verify(exactly = 1) { paymentService.create("workflow-1:create", request.payment) }
+        verify(exactly = 1) {
+            paymentService.create(
+                "workflow-1:create",
+                request.payment,
+                request.confirmation.paymentDate
+            )
+        }
         verify(exactly = 1) { billingService.createInvoice(1L, "workflow-1:invoice", request.invoice) }
     }
 

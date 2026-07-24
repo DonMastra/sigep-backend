@@ -73,8 +73,9 @@ class BillingPdfRendererTest {
         val text = extractText(pdf)
 
         assertTrue(pdf.copyOfRange(0, 4).contentEquals("%PDF".toByteArray()))
-        assertContains(text, "FACTURA B")
-        assertContains(text, "CAE: 71234567890123")
+        assertContains(text, "FACTURA")
+        assertContains(text, "COD. 06")
+        assertContains(text, "CAE Nro.: 71234567890123")
         assertContains(text, "Autorizacion simulada por adapter mock")
         assertContains(text, "AMBIENTE MOCK - DOCUMENTO SIN VALIDEZ FISCAL")
         writeSample("factura-sigep-muestra.pdf", pdf)

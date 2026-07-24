@@ -51,7 +51,10 @@ logging:
 
 billing:
   fiscal:
-    provider: ${BILLING_FISCAL_PROVIDER:mock}
+    # Local development must exercise the same SOAP boundary that will be used
+    # with ARCA. The in-process mock remains available only as a fast unit-test
+    # adapter; the default local provider is the standalone mock-billing-service.
+    provider: ${BILLING_FISCAL_PROVIDER:mock-service}
     reference-data-cache-ttl: ${BILLING_FISCAL_REFERENCE_DATA_CACHE_TTL:6h}
     reference-data-stale-if-error: ${BILLING_FISCAL_REFERENCE_DATA_STALE_IF_ERROR:24h}
     resilience:
@@ -63,16 +66,21 @@ billing:
       permitted-calls-in-half-open-state: ${BILLING_FISCAL_HALF_OPEN_CALLS:2}
       open-state-duration: ${BILLING_FISCAL_OPEN_STATE_DURATION:30s}
   issuer:
-    cuit: ${BILLING_ISSUER_CUIT:}
-    point-of-sale: ${BILLING_ISSUER_POINT_OF_SALE:}
-    legal-name: ${BILLING_ISSUER_LEGAL_NAME:}
-    business-address: ${BILLING_ISSUER_BUSINESS_ADDRESS:}
-    vat-condition: ${BILLING_ISSUER_VAT_CONDITION:}
-    gross-income: ${BILLING_ISSUER_GROSS_INCOME:}
-    activity-start: ${BILLING_ISSUER_ACTIVITY_START:}
+    # These values belong to the local mock only. Override them with the
+    # institution's real values when switching to homologation.
+    cuit: ${BILLING_ISSUER_CUIT:30712345678}
+    point-of-sale: ${BILLING_ISSUER_POINT_OF_SALE:1}
+    # Safe local-only values so the PDF can be downloaded immediately when
+    # exercising the standalone mock. Override every value before homologation
+    # or production; these values must never be used as fiscal identity data.
+    legal-name: ${BILLING_ISSUER_LEGAL_NAME:SiGEP - Ambiente Mock}
+    business-address: ${BILLING_ISSUER_BUSINESS_ADDRESS:Domicilio de prueba - Ambiente Mock}
+    vat-condition: ${BILLING_ISSUER_VAT_CONDITION:Responsable Inscripto - Mock}
+    gross-income: ${BILLING_ISSUER_GROSS_INCOME:EXENTO - AMBIENTE MOCK}
+    activity-start: ${BILLING_ISSUER_ACTIVITY_START:2020-01-01}
   arca:
     environment: ${BILLING_ARCA_ENVIRONMENT:homologation}
-    wsaa-url: ${BILLING_ARCA_WSAA_URL:https://wsaahomo.arca.gov.ar/ws/services/LoginCms}
+    wsaa-url: ${BILLING_ARCA_WSAA_URL:https://wsaahomo.afip.gov.ar/ws/services/LoginCms}
     wsfe-url: ${BILLING_ARCA_WSFE_URL:https://wswhomo.afip.gov.ar/wsfev1/service.asmx}
     keystore:
       path: ${BILLING_ARCA_KEYSTORE_PATH:}

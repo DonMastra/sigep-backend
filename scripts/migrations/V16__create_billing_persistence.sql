@@ -33,7 +33,10 @@ CREATE TABLE IF NOT EXISTS payments (
 
 ALTER TABLE payments ALTER COLUMN payment_date DROP NOT NULL;
 ALTER TABLE payments ALTER COLUMN amount TYPE NUMERIC(12, 2);
-ALTER TABLE payments ADD COLUMN IF NOT EXISTS currency VARCHAR(3) NOT NULL DEFAULT 'ARS';
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS currency VARCHAR(3);
+UPDATE payments SET currency = 'ARS' WHERE currency IS NULL;
+ALTER TABLE payments ALTER COLUMN currency SET DEFAULT 'ARS';
+ALTER TABLE payments ALTER COLUMN currency SET NOT NULL;
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS external_reference VARCHAR(150);
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS creation_key VARCHAR(128);
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS creation_fingerprint VARCHAR(64);
@@ -41,7 +44,10 @@ ALTER TABLE payments ADD COLUMN IF NOT EXISTS confirmation_key VARCHAR(128);
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS confirmation_fingerprint VARCHAR(64);
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS confirmed_at TIMESTAMP;
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS confirmed_by BIGINT;
-ALTER TABLE payments ADD COLUMN IF NOT EXISTS version BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS version BIGINT;
+UPDATE payments SET version = 0 WHERE version IS NULL;
+ALTER TABLE payments ALTER COLUMN version SET DEFAULT 0;
+ALTER TABLE payments ALTER COLUMN version SET NOT NULL;
 
 CREATE UNIQUE INDEX IF NOT EXISTS uk_payments_receipt_number ON payments(receipt_number) WHERE receipt_number IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS uk_payments_external_reference ON payments(external_reference) WHERE external_reference IS NOT NULL;

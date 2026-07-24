@@ -1,0 +1,7 @@
+interface:
+  display_name: "SiGEP Spring Backend"
+  short_description: "Spring backend workflow for SiGEP services"
+  default_prompt: "Use $sigep-spring-backend to implement a robust SiGEP backend service change."
+
+policy:
+  allow_implicit_invocation: true

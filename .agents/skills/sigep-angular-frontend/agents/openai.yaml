@@ -1,0 +1,7 @@
+interface:
+  display_name: "SiGEP Angular Frontend"
+  short_description: "Angular frontend workflow for SiGEP apps"
+  default_prompt: "Use $sigep-angular-frontend to implement a production-quality SiGEP Angular UI change."
+
+policy:
+  allow_implicit_invocation: true

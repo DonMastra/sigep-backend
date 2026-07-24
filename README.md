@@ -179,12 +179,16 @@ Facturacion:
 - `BILLING_FISCAL_PROVIDER=mock-service` recorre WSAA/WSFE contra
   `BILLING_MOCK_SERVICE_BASE_URL` (default `http://localhost:8091`) sin certificado y tambien
   esta prohibido en produccion.
-- `dev` usa mock por defecto; QA/produccion quedan deshabilitados por defecto.
+- `dev` usa `mock-service` por defecto; el adapter `mock` queda disponible para unitarias.
+  QA/produccion quedan deshabilitados por defecto.
 - `BILLING_ISSUER_CUIT` y `BILLING_ISSUER_POINT_OF_SALE` completan el preflight del emisor;
   sin ambos, la factura queda `DRAFT` y no se puede encolar.
 - `BILLING_ISSUER_LEGAL_NAME`, `BILLING_ISSUER_BUSINESS_ADDRESS`,
   `BILLING_ISSUER_VAT_CONDITION`, `BILLING_ISSUER_GROSS_INCOME` y
   `BILLING_ISSUER_ACTIVITY_START` son obligatorios para descargar la factura PDF.
+  En el perfil `dev` tienen valores locales explícitos de ambiente mock para que
+  la descarga funcione sin configuración adicional; deben reemplazarse antes de
+  homologación o producción.
 - `BILLING_OUTBOX_POLL_DELAY_MS` controla el intervalo del worker (por defecto, 1000 ms).
 - `BILLING_FISCAL_REFERENCE_DATA_CACHE_TTL`, `BILLING_FISCAL_REFERENCE_DATA_STALE_IF_ERROR`
   y las variables `BILLING_FISCAL_*` de resiliencia controlan cache, circuit breaker y
