@@ -48,3 +48,50 @@ logging:
     org.springframework.security: DEBUG
     org.hibernate.SQL: OFF
     org.hibernate.type.descriptor.sql.BasicBinder: OFF
+
+billing:
+  fiscal:
+    # Local development must exercise the same SOAP boundary that will be used
+    # with ARCA. The in-process mock remains available only as a fast unit-test
+    # adapter; the default local provider is the standalone mock-billing-service.
+    provider: ${BILLING_FISCAL_PROVIDER:mock-service}
+    reference-data-cache-ttl: ${BILLING_FISCAL_REFERENCE_DATA_CACHE_TTL:6h}
+    reference-data-stale-if-error: ${BILLING_FISCAL_REFERENCE_DATA_STALE_IF_ERROR:24h}
+    resilience:
+      max-concurrent-calls: ${BILLING_FISCAL_MAX_CONCURRENT_CALLS:4}
+      max-wait-duration: ${BILLING_FISCAL_MAX_WAIT_DURATION:0s}
+      failure-rate-threshold: ${BILLING_FISCAL_FAILURE_RATE_THRESHOLD:50}
+      minimum-number-of-calls: ${BILLING_FISCAL_MINIMUM_NUMBER_OF_CALLS:5}
+      sliding-window-size: ${BILLING_FISCAL_SLIDING_WINDOW_SIZE:10}
+      permitted-calls-in-half-open-state: ${BILLING_FISCAL_HALF_OPEN_CALLS:2}
+      open-state-duration: ${BILLING_FISCAL_OPEN_STATE_DURATION:30s}
+  issuer:
+    # These values belong to the local mock only. Override them with the
+    # institution's real values when switching to homologation.
+    cuit: ${BILLING_ISSUER_CUIT:30712345678}
+    point-of-sale: ${BILLING_ISSUER_POINT_OF_SALE:1}
+    # Safe local-only values so the PDF can be downloaded immediately when
+    # exercising the standalone mock. Override every value before homologation
+    # or production; these values must never be used as fiscal identity data.
+    legal-name: ${BILLING_ISSUER_LEGAL_NAME:SiGEP - Ambiente Mock}
+    business-address: ${BILLING_ISSUER_BUSINESS_ADDRESS:Domicilio de prueba - Ambiente Mock}
+    vat-condition: ${BILLING_ISSUER_VAT_CONDITION:Responsable Inscripto - Mock}
+    gross-income: ${BILLING_ISSUER_GROSS_INCOME:EXENTO - AMBIENTE MOCK}
+    activity-start: ${BILLING_ISSUER_ACTIVITY_START:2020-01-01}
+  arca:
+    environment: ${BILLING_ARCA_ENVIRONMENT:homologation}
+    wsaa-url: ${BILLING_ARCA_WSAA_URL:https://wsaahomo.afip.gov.ar/ws/services/LoginCms}
+    wsfe-url: ${BILLING_ARCA_WSFE_URL:https://wswhomo.afip.gov.ar/wsfev1/service.asmx}
+    keystore:
+      path: ${BILLING_ARCA_KEYSTORE_PATH:}
+      password: ${BILLING_ARCA_KEYSTORE_PASSWORD:}
+      alias: ${BILLING_ARCA_KEYSTORE_ALIAS:}
+    connect-timeout: ${BILLING_ARCA_CONNECT_TIMEOUT:5s}
+    request-timeout: ${BILLING_ARCA_REQUEST_TIMEOUT:20s}
+    ticket-refresh-skew: ${BILLING_ARCA_TICKET_REFRESH_SKEW:5m}
+  mock-service:
+    base-url: ${BILLING_MOCK_SERVICE_BASE_URL:http://localhost:8091}
+    connect-timeout: ${BILLING_MOCK_SERVICE_CONNECT_TIMEOUT:2s}
+    request-timeout: ${BILLING_MOCK_SERVICE_REQUEST_TIMEOUT:5s}
+  outbox:
+    poll-delay-ms: ${BILLING_OUTBOX_POLL_DELAY_MS:1000}

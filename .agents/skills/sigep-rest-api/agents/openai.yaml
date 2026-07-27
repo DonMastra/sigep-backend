@@ -1,0 +1,7 @@
+interface:
+  display_name: "SiGEP REST API"
+  short_description: "REST contract design for SiGEP integrations"
+  default_prompt: "Use $sigep-rest-api to design or change a typed SiGEP REST API contract."
+
+policy:
+  allow_implicit_invocation: true

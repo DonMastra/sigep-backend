@@ -1,0 +1,7 @@
+interface:
+  display_name: "SiGEP Database Design"
+  short_description: "Database and migration workflow for SiGEP"
+  default_prompt: "Use $sigep-database-design to design or modify a SiGEP database model or migration."
+
+policy:
+  allow_implicit_invocation: true

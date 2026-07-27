@@ -1,6 +1,6 @@
 # API Contract - SiGEP Backend
 
-Contrato REST para integracion del frontend Angular SiGEP con el backend. Este documento refleja el estado QA del workspace al 2026-07-20.
+Contrato REST para integracion del frontend Angular SiGEP con el backend. Este documento refleja el estado del workspace al 2026-07-21.
 
 ## Informacion General
 
@@ -119,7 +119,8 @@ Nota: algunos endpoints aceptan `limit` y `size`; si ambos existen, el backend s
 
 - `exams` y `exam-submissions` actualmente devuelven varios DTOs o `PageResponse<T>` directamente, sin `ApiResponse<T>`.
 - `DELETE /api/v1/exams/{id}` devuelve `204 NO_CONTENT`; la mayoria de otros DELETE devuelve `200 OK` con wrapper.
-- `payments`, `communications` y `reports` no exponen API funcional completa.
+- `payments` solo expone el diagnostico fiscal inicial; no persiste ni autoriza facturas.
+  `communications` y `reports` no exponen API funcional completa.
 - `tuition` expone ledger mock para matriculacion; no factura, no emite CAE y no procesa pagos reales.
 - `GET /api/v1/students/{id}/payment-status` devuelve estado temporal/mock hasta completar facturacion/pagos.
 - `GET /api/v1/students/{id}/photo` devuelve binario de imagen, no `ApiResponse`.
@@ -758,14 +759,144 @@ Base: `/api/v1/admin/cache`
 
 ### Payments
 
-Estado: planificado/en desarrollo. Existe entidad `Payment`, pero no hay controlador REST funcional completo. `tuition` genera ledger mock inicial y cuotas mock, pero no reemplaza el modulo real de pagos/facturacion.
+Estado: nucleo persistente en desarrollo. Pago, recibo X, factura, intentos, outbox y secuencia
+estan implementados. Dev usa mock; el cliente WSAA/WSFEv1, catalogos, detalle impositivo, URL QR
+y PDFs tambien existen, pero aun falta probarlos con credenciales reales de homologacion. `tuition` mantiene
+un ledger mock independiente y no reemplaza este modulo.
 
-Capacidades esperadas:
+Todas las operaciones requieren `ADMIN`. Las escrituras indicadas exigen el header
+`Idempotency-Key`; repetir la misma key y payload devuelve el recurso existente, mientras que
+reutilizar la key con otro payload es un conflicto.
 
-- Estado de cuenta de estudiante.
-- Cuotas, pagos, comprobantes y metodos de pago.
-- Integracion con facturacion/recibos.
-- Exposicion de deuda para dashboards y alertas.
+Base de pagos: `/api/v1/payments`
+
+| Metodo | Ruta | Idempotency-Key | Respuesta | Descripcion |
+|---|---|---|---|---|
+| POST | `/register` | Si | `201 ApiResponse<BillingWorkflowDto>` | Crea pago confirmado, recibo X y borrador fiscal en una transaccion local. |
+| POST | `/` | Si | `201 ApiResponse<PaymentDetailDto>` | Crea un pago `PENDING`. |
+| GET | `/` | No | `ApiResponse<PageResponse<PaymentDto>>` | Lista por `page` y `limit`. |
+| GET | `/{id}` | No | `ApiResponse<PaymentDetailDto>` | Devuelve pago, recibo y factura vinculada. |
+| POST | `/{id}/confirm` | Si | `ApiResponse<PaymentDetailDto>` | Marca `PAID` y emite los datos del recibo X. |
+| GET | `/{id}/receipt` | No | `ApiResponse<PaymentReceiptDto>` | Devuelve los datos estructurados del recibo. |
+| GET | `/{id}/receipt/document` | No | `application/pdf` | Descarga el recibo X no fiscal. |
+| POST | `/{id}/fiscal-invoice` | Si | `201 ApiResponse<FiscalInvoiceDetailDto>` | Crea el borrador fiscal de un pago confirmado. |
+
+Requests principales:
+
+```ts
+type PaymentMethod = 'CASH' | 'CREDIT_CARD' | 'DEBIT_CARD' | 'BANK_TRANSFER' | 'CHECK';
+
+interface CreatePaymentRequest {
+  studentId: number;
+  amount: number;
+  currency: string; // ISO 4217, por defecto ARS
+  concept: string;
+  dueDate: string;
+  externalReference?: string | null;
+  notes?: string | null;
+}
+
+interface ConfirmPaymentRequest {
+  paymentDate: string;
+  paymentMethod: PaymentMethod;
+  payerName: string;
+}
+
+interface CreateFiscalInvoiceRequest {
+  voucherType: number;
+  concept: 1 | 2 | 3;
+  receiverName: string;
+  receiverAddress: string;
+  receiverDocumentType: number;
+  receiverDocumentNumber: string;
+  receiverVatConditionId: number;
+  issueDate: string;
+  serviceFrom?: string | null;
+  serviceTo?: string | null;
+  paymentDueDate?: string | null;
+  currency: string; // codigo WSFE, por defecto PES
+  exchangeRate: number;
+  nonTaxedAmount: number;
+  netAmount: number;
+  exemptAmount: number;
+  vatAmount: number;
+  otherTaxesAmount: number;
+  vatSubtotals: FiscalVatSubtotalRequest[];
+  taxes: FiscalOtherTaxRequest[];
+}
+
+interface FiscalVatSubtotalRequest {
+  id: number;
+  baseAmount: number;
+  amount: number;
+}
+
+interface FiscalOtherTaxRequest {
+  id: number;
+  description: string;
+  baseAmount: number;
+  rate: number;
+  amount: number;
+}
+
+interface RegisterPaymentAndInvoiceRequest {
+  payment: CreatePaymentRequest;
+  confirmation: ConfirmPaymentRequest;
+  invoice: CreateFiscalInvoiceRequest;
+}
+```
+
+El total fiscal (`nonTaxedAmount + netAmount + exemptAmount + vatAmount + otherTaxesAmount`)
+debe coincidir con el monto del pago a dos decimales con redondeo `HALF_EVEN`. Las sumas de
+`vatSubtotals`/`taxes` deben coincidir con neto, IVA y tributos agregados. Para conceptos
+2/3 se requieren las tres fechas de servicio. CUIT emisor y punto de venta provienen de
+configuracion segura del backend, no del request.
+
+Base de facturas: `/api/v1/billing/invoices`
+
+| Metodo | Ruta | Idempotency-Key | Respuesta | Descripcion |
+|---|---|---|---|---|
+| GET | `/` | No | `ApiResponse<PageResponse<FiscalInvoiceDto>>` | Bandeja filtrable por `status`, `page` y `limit`. |
+| GET | `/{id}` | No | `ApiResponse<FiscalInvoiceDetailDto>` | Factura e intentos sanitizados. |
+| GET | `/{id}/document` | No | `application/pdf` | Descarga factura `AUTHORIZED*`; exige CAE/QR y datos legales completos. |
+| POST | `/{id}/authorize` | Si | `202 ApiResponse<FiscalInvoiceDetailDto>` | Encola una factura `READY`; el worker la procesa. |
+| POST | `/{id}/reconcile` | No | `ApiResponse<FiscalInvoiceDetailDto>` | Consulta una factura `UNKNOWN`; nunca la reemite. |
+
+Estados de factura:
+
+```ts
+type FiscalInvoiceStatus =
+  | 'DRAFT' | 'READY' | 'QUEUED' | 'AUTHORIZING'
+  | 'AUTHORIZED' | 'AUTHORIZED_WITH_OBSERVATIONS'
+  | 'REJECTED' | 'UNKNOWN';
+```
+
+`DRAFT` incluye `preflightErrors`; `AUTHORIZED*` incluye numero, CAE, vencimiento y `qrUrl`;
+`FiscalInvoiceDetailDto.attempts` conserva intentos de autorizacion/consulta sin XML ni secretos.
+
+Base de diagnostico: `/api/v1/billing/provider`
+
+| Metodo | Ruta | Roles | Descripcion |
+|---|---|---|---|
+| GET | `/health` | ADMIN | Estado sanitizado del proveedor fiscal configurado. |
+| GET | `/reference-data` | ADMIN | Catalogos de comprobantes, documentos, condiciones IVA y monedas. |
+
+Respuesta `data`:
+
+```ts
+interface FiscalProviderHealthDto {
+  provider: string;
+  environment: 'MOCK' | 'HOMOLOGATION' | 'PRODUCTION';
+  configured: boolean;
+  available: boolean;
+  checkedAt: string;
+  message?: string | null;
+}
+```
+
+No incluye certificado, Token, Sign, CUIT ni endpoints internos. Estado de cuenta, cuotas,
+deuda y el smoke WSAA/WSFE con credenciales reales siguen pendientes. Los PDFs de mock y
+homologacion incluyen marcas visibles que los identifican sin validez fiscal.
 
 ### Communications
 
