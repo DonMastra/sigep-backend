@@ -72,18 +72,6 @@ class TuitionApplicationController(
         return ResponseEntity.ok(ApiResponse.success(application, "Seat reserved"))
     }
 
-    @PostMapping("/applications/{id}/mock-payment")
-    @RequireGuardian
-    @Operation(summary = "Mark mock payment", description = "Marks the initial tuition enrollment fee as mock-paid")
-    fun mockPayment(
-        @PathVariable id: Long,
-        httpRequest: HttpServletRequest
-    ): ResponseEntity<ApiResponse<TuitionApplicationDto>> {
-        val guardianId = httpRequest.requireUserId()
-        val application = tuitionApplicationService.markMockPayment(id, guardianId)
-        return ResponseEntity.ok(ApiResponse.success(application, "Mock payment registered"))
-    }
-
     @GetMapping("/applications")
     @RequireAdmin
     @Operation(summary = "List tuition applications", description = "Admin list with optional status and academic year filters")

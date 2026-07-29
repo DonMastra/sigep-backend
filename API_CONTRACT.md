@@ -1,6 +1,6 @@
 # API Contract - SiGEP Backend
 
-Contrato REST para integracion del frontend Angular SiGEP con el backend. Este documento refleja el estado del workspace al 2026-07-21.
+Contrato REST para integracion del frontend Angular SiGEP con el backend. Este documento refleja el estado del workspace al 2026-07-28.
 
 ## Informacion General
 
@@ -119,9 +119,11 @@ Nota: algunos endpoints aceptan `limit` y `size`; si ambos existen, el backend s
 
 - `exams` y `exam-submissions` actualmente devuelven varios DTOs o `PageResponse<T>` directamente, sin `ApiResponse<T>`.
 - `DELETE /api/v1/exams/{id}` devuelve `204 NO_CONTENT`; la mayoria de otros DELETE devuelve `200 OK` con wrapper.
-- `payments` solo expone el diagnostico fiscal inicial; no persiste ni autoriza facturas.
+- `payments` persiste pagos, recibos X, cargos, perfiles reutilizables, ejecuciones de
+  preparacion y facturas; la autorizacion fiscal continua siendo individual y asincrona.
   `communications` y `reports` no exponen API funcional completa.
-- `tuition` expone ledger mock para matriculacion; no factura, no emite CAE y no procesa pagos reales.
+- `tuition` conserva su ledger academico y sincroniza cada deuda con un cargo de `payments`;
+  no emite CAE ni almacena medios de pago.
 - `GET /api/v1/students/{id}/payment-status` devuelve estado temporal/mock hasta completar facturacion/pagos.
 - `GET /api/v1/students/{id}/photo` devuelve binario de imagen, no `ApiResponse`.
 
@@ -346,7 +348,9 @@ Base: `/api/v1/enrollments`
 
 Base: `/api/v1/tuition`
 
-Tuition gestiona matriculacion como proceso previo a la inscripcion academica final. `Enrollment` se crea solo cuando admin aprueba una solicitud `READY_FOR_ADMIN_APPROVAL`.
+Tuition gestiona matriculacion como proceso previo a la inscripcion academica final. `Enrollment`
+se crea solo cuando admin aprueba una solicitud `READY_FOR_ADMIN_APPROVAL`. Los movimientos
+economicos se sincronizan con cargos persistentes del modulo `payments`.
 
 ### Guardian flow
 
@@ -354,16 +358,15 @@ Tuition gestiona matriculacion como proceso previo a la inscripcion academica fi
 |---|---|---|---|
 | POST | `/applications` | GUARDIAN | Crea solicitud `SUBMITTED` para alumno nuevo, adicional o regular. |
 | GET | `/my-applications` | GUARDIAN | Lista solicitudes del guardian autenticado. |
-| POST | `/applications/{id}/reserve-seat` | GUARDIAN | Reserva una vacante y genera ledger mock de matricula inicial. |
-| POST | `/applications/{id}/mock-payment` | GUARDIAN | Marca la matricula inicial como `MOCK_PAID`; no factura. |
+| POST | `/applications/{id}/reserve-seat` | GUARDIAN | Reserva una vacante, genera el ledger de matricula y crea/idempotentemente actualiza el cargo de facturacion. |
 
 ### Admin flow
 
 | Metodo | Ruta | Roles | Descripcion |
 |---|---|---|---|
 | GET | `/applications?status=&academicYearId=` | ADMIN | Lista solicitudes con filtros. |
-| PUT | `/applications/{id}/approve` | ADMIN | Confirma reserva, activa guardian si corresponde, crea estudiante/enrollment y cuotas mock. |
-| PUT | `/applications/{id}/reject` | ADMIN | Rechaza solicitud, libera cupo y cancela ledger. |
+| PUT | `/applications/{id}/approve` | ADMIN | Exige matricula `PAID`; confirma reserva, activa guardian, crea estudiante/enrollment y cargos de cuotas. |
+| PUT | `/applications/{id}/reject` | ADMIN | Rechaza solicitud, libera cupo y cancela ledger/cargos abiertos. |
 
 ### Admin catalogs
 
@@ -400,7 +403,7 @@ type TuitionApplicationStatus =
   | 'CANCELLED'
   | 'EXPIRED';
 type TuitionLedgerConcept = 'TUITION_ENROLLMENT' | 'MONTHLY_FEE';
-type TuitionLedgerStatus = 'MOCK_PENDING' | 'MOCK_PAID' | 'CANCELLED';
+type TuitionLedgerStatus = 'PENDING' | 'PAID' | 'CANCELLED';
 
 type TuitionProgressionRule = 'PASS_PREVIOUS_LEVEL' | 'ADMIN_APPROVAL';
 ```
@@ -435,7 +438,9 @@ Notas:
   Como compatibilidad, el backend resuelve `A1 -> BEGINNER` y `A2 -> ELEMENTARY`, y usa
   `requestedLevel.code` como respaldo si el catalogo legacy aun no tiene `courseLevel`.
 - La reserva descuenta cupos solo dentro de `tuition`; `Enrollment` real se crea al aprobar.
-- El mock payment solo genera referencias internas `MOCK-TUITION-{applicationId}-{ledgerId}`.
+- El pago se registra por `POST /api/v1/billing/charges/{chargeId}/payments`. La imputacion
+  actualiza el ledger a `PAID`, guarda `billingReference=PAYMENT-{paymentId}` y lleva la
+  solicitud a `READY_FOR_ADMIN_APPROVAL` cuando corresponde a la matricula inicial.
 - `PASS_PREVIOUS_LEVEL` bloquea si el estudiante regular no aprobo el nivel de origen o
   solicita un destino diferente. `ADMIN_APPROVAL` deja `requiresAdminOverride=true` y el
   endpoint de aprobacion exige `adminNotes` no vacio.
@@ -759,10 +764,10 @@ Base: `/api/v1/admin/cache`
 
 ### Payments
 
-Estado: nucleo persistente en desarrollo. Pago, recibo X, factura, intentos, outbox y secuencia
-estan implementados. Dev usa mock; el cliente WSAA/WSFEv1, catalogos, detalle impositivo, URL QR
-y PDFs tambien existen, pero aun falta probarlos con credenciales reales de homologacion. `tuition` mantiene
-un ledger mock independiente y no reemplaza este modulo.
+Estado: nucleo persistente en desarrollo. Pago, recibo X, perfiles reutilizables, cargos,
+imputaciones, ejecuciones manuales, factura, intentos, outbox y secuencia estan implementados.
+Dev usa mock; el cliente WSAA/WSFEv1, catalogos, detalle impositivo, URL QR y PDFs tambien existen,
+pero aun falta probarlos con credenciales reales de homologacion.
 
 Todas las operaciones requieren `ADMIN`. Las escrituras indicadas exigen el header
 `Idempotency-Key`; repetir la misma key y payload devuelve el recurso existente, mientras que
@@ -787,7 +792,7 @@ Requests principales:
 type PaymentMethod = 'CASH' | 'CREDIT_CARD' | 'DEBIT_CARD' | 'BANK_TRANSFER' | 'CHECK';
 
 interface CreatePaymentRequest {
-  studentId: number;
+  studentId: number | null; // nullable durante la matriculacion previa al alta del estudiante
   amount: number;
   currency: string; // ISO 4217, por defecto ARS
   concept: string;
@@ -874,6 +879,43 @@ type FiscalInvoiceStatus =
 `DRAFT` incluye `preflightErrors`; `AUTHORIZED*` incluye numero, CAE, vencimiento y `qrUrl`;
 `FiscalInvoiceDetailDto.attempts` conserva intentos de autorizacion/consulta sin XML ni secretos.
 
+Base operativa: `/api/v1/billing`
+
+| Metodo | Ruta | Idempotency-Key | Respuesta | Descripcion |
+|---|---|---|---|---|
+| GET | `/charges` | No | `ApiResponse<PageResponse<BillingChargeDto>>` | Lista cargos por `status`, `studentId`, `profileStatus`, `page` y `limit`. |
+| GET | `/accounts/{accountId}/profile` | No | `ApiResponse<BillingProfileDto>` | Perfil fiscal reutilizable y campos faltantes. |
+| PUT | `/accounts/{accountId}/profile` | No | `ApiResponse<BillingProfileDto>` | Valida y completa receptor, documento, IVA, comprobante, concepto y moneda. |
+| POST | `/charges/{chargeId}/payments` | Si | `201 ApiResponse<ChargePaymentResultDto>` | Imputa el total del cargo, confirma pago y genera recibo X. |
+| POST | `/runs/preview` | No | `ApiResponse<BillingRunPreviewDto>` | Resuelve seleccion individual, explicita o filtrada sin escribir. |
+| POST | `/runs` | Si | `201 ApiResponse<BillingRunDto>` | Crea en servidor las facturas del conjunto validado y audita la ejecucion. |
+| GET | `/runs/{runId}` | No | `ApiResponse<BillingRunDto>` | Devuelve ejecucion e items creados. |
+
+```ts
+type BillingSelectionMode = 'INDIVIDUAL' | 'SELECTED' | 'FILTERED';
+type BillingChargeStatus = 'OPEN' | 'PAID' | 'CANCELLED';
+type BillingProfileStatus = 'INCOMPLETE' | 'READY';
+type FiscalAmountTreatment = 'NON_TAXED' | 'EXEMPT';
+
+interface PrepareBillingRunRequest {
+  selectionMode: BillingSelectionMode;
+  chargeIds: number[]; // uno para INDIVIDUAL; uno o mas para SELECTED
+  filters: {
+    status?: BillingChargeStatus | null;
+    studentId?: number | null;
+    profileStatus?: BillingProfileStatus | null;
+  };
+  issueDate: string;
+  amountTreatment: FiscalAmountTreatment;
+}
+```
+
+`FILTERED` se resuelve completamente en backend (maximo 1000 cargos); Angular no itera creando
+facturas una por una. El preview bloquea perfiles incompletos, cargos cancelados, montos no
+positivos y cargos que ya tienen factura. La ejecucion crea `DRAFT` o `READY` segun el preflight,
+pero no encola autorizacion fiscal. Para el primer cliente `rg5866Applicable` es siempre `false`,
+la restriccion esta persistida y no se recopilan ni envian datos de RG 5866.
+
 Base de diagnostico: `/api/v1/billing/provider`
 
 | Metodo | Ruta | Roles | Descripcion |
@@ -894,8 +936,8 @@ interface FiscalProviderHealthDto {
 }
 ```
 
-No incluye certificado, Token, Sign, CUIT ni endpoints internos. Estado de cuenta, cuotas,
-deuda y el smoke WSAA/WSFE con credenciales reales siguen pendientes. Los PDFs de mock y
+No incluye certificado, Token, Sign, CUIT ni endpoints internos. El smoke WSAA/WSFE con
+credenciales reales sigue pendiente. Los PDFs de mock y
 homologacion incluyen marcas visibles que los identifican sin validez fiscal.
 
 ### Communications
@@ -925,8 +967,10 @@ Capacidades esperadas:
 - Centralizar manejo de `ErrorResponse`.
 - Usar `limit` como parametro principal de paginacion salvo endpoints de `exams`, donde `size` es el parametro documentado.
 - Tratar `GET /students/{id}/photo` como blob.
-- No depender de pagos/facturacion como modulo listo; usar `payment-status` solo como placeholder visible.
-- Para matriculacion, consumir `tuition` como flujo independiente y tratar `ledgerEntries` como mock hasta que exista pagos/facturacion.
+- Usar `/billing/charges` y `/billing/runs` para cobranza/preparacion; no generar lotes con
+  bucles de requests desde Angular.
+- En matriculacion, mostrar `ledgerEntries` como estado del cargo sincronizado. El tutor no
+  marca pagos; ADMIN los registra desde facturacion.
 - Consumir `GET /courses/published` para catalogos publicos sin autenticacion.
 - Usar `/scheduling/reservations/available` para combos de asignacion horaria.
 

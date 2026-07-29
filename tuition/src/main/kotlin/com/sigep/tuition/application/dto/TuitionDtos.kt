@@ -293,7 +293,7 @@ data class TuitionLedgerEntryDto(
     val netAmount: BigDecimal,
     val dueDate: LocalDate,
     val status: TuitionLedgerStatus,
-    val mockReference: String?,
+    val billingReference: String?,
     val createdAt: LocalDateTime,
     val updatedAt: LocalDateTime
 )

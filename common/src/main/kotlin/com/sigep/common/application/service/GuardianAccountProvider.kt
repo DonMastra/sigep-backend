@@ -11,6 +11,8 @@ data class GuardianAccountInfo(
     val email: String,
     val firstName: String,
     val lastName: String,
+    val address: String? = null,
+    val documentNumber: String? = null,
     val status: String,
     val active: Boolean
 )
