@@ -64,8 +64,8 @@ class FiscalInvoicePreflightService {
         if (money(invoice.totalAmount).compareTo(components) != 0) {
             add("El total debe coincidir con no gravado + neto + exento + IVA + tributos")
         }
-        if (money(invoice.totalAmount).compareTo(money(invoice.payment.amount)) != 0) {
-            add("El total fiscal debe coincidir con el monto del pago")
+        if (money(invoice.totalAmount).compareTo(money(invoice.sourceAmount())) != 0) {
+            add("El total fiscal debe coincidir con el monto de origen")
         }
         if (money(invoice.totalAmount) <= BigDecimal.ZERO) {
             add("El total fiscal debe ser positivo")
@@ -118,6 +118,15 @@ class FiscalInvoicePreflightService {
     }
 }
 
+internal fun FiscalInvoice.sourceAmount(): BigDecimal =
+    payment?.amount ?: charge?.amount ?: BigDecimal.ZERO
+
+internal fun FiscalInvoice.sourceDescription(): String =
+    charge?.description ?: payment?.concept ?: "Concepto no informado"
+
+internal fun FiscalInvoice.sourceStudentId(): Long? =
+    charge?.studentId ?: payment?.studentId
+
 internal object BillingFingerprint {
     fun payment(request: com.sigep.payments.application.dto.CreatePaymentRequest): String = sha256(
         listOf(
@@ -169,6 +178,14 @@ internal object BillingFingerprint {
                 }
         ).joinToString("|")
     )
+
+    fun chargeInvoice(
+        chargeId: Long,
+        profileId: Long,
+        issueDate: java.time.LocalDate,
+        amountTreatment: com.sigep.payments.domain.model.FiscalAmountTreatment,
+        profileVersion: Long
+    ): String = sha256("$chargeId|$profileId|$issueDate|$amountTreatment|$profileVersion")
 
     private fun sha256(value: String): String = MessageDigest.getInstance("SHA-256")
         .digest(value.toByteArray(StandardCharsets.UTF_8))

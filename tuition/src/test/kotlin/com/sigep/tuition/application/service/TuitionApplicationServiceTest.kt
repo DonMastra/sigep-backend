@@ -1,6 +1,7 @@
 package com.sigep.tuition.application.service
 
 import com.sigep.common.application.service.CourseEnrollmentCommandProvider
+import com.sigep.common.application.service.BillingChargeProvider
 import com.sigep.common.application.service.CourseEnrollmentResult
 import com.sigep.common.application.service.CourseSeatAvailability
 import com.sigep.common.application.service.GuardianAccountInfo
@@ -56,6 +57,7 @@ class TuitionApplicationServiceTest {
     private lateinit var studentProfileProvider: StudentProfileProvider
     private lateinit var courseEnrollmentCommandProvider: CourseEnrollmentCommandProvider
     private lateinit var guardianAccountProvider: GuardianAccountProvider
+    private lateinit var billingChargeProvider: BillingChargeProvider
     private lateinit var service: TuitionApplicationService
 
     private val academicYear = TuitionAcademicYear(
@@ -102,6 +104,9 @@ class TuitionApplicationServiceTest {
         studentProfileProvider = mockk()
         courseEnrollmentCommandProvider = mockk()
         guardianAccountProvider = mockk()
+        billingChargeProvider = mockk(relaxed = true)
+        every { guardianAccountProvider.getGuardianAccount(any()) } returns guardianInfo()
+        every { studentProfileProvider.getStudentProfile(any()) } answers { studentInfo(firstArg()) }
 
         service = TuitionApplicationService(
             applicationRepository,
@@ -114,7 +119,8 @@ class TuitionApplicationServiceTest {
             ledgerEntryRepository,
             studentProfileProvider,
             courseEnrollmentCommandProvider,
-            guardianAccountProvider
+            guardianAccountProvider,
+            billingChargeProvider
         )
     }
 
@@ -205,7 +211,7 @@ class TuitionApplicationServiceTest {
         assertEquals(TuitionSeatReservationStatus.ACTIVE, response.seatReservation!!.status)
         assertEquals(1, response.ledgerEntries.size)
         assertEquals(TuitionLedgerConcept.TUITION_ENROLLMENT, response.ledgerEntries.first().concept)
-        assertEquals(TuitionLedgerStatus.MOCK_PENDING, response.ledgerEntries.first().status)
+        assertEquals(TuitionLedgerStatus.PENDING, response.ledgerEntries.first().status)
         assertEquals(BigDecimal("10000.00"), response.ledgerEntries.first().netAmount)
     }
 
@@ -226,8 +232,8 @@ class TuitionApplicationServiceTest {
             grossAmount = BigDecimal("10000.00"),
             netAmount = BigDecimal("10000.00"),
             dueDate = LocalDate.now(),
-            status = TuitionLedgerStatus.MOCK_PAID,
-            mockReference = "MOCK-TUITION-123-55"
+            status = TuitionLedgerStatus.PAID,
+            billingReference = "PAYMENT-55"
         )
         var confirmedReservation: TuitionSeatReservation? = null
         var savedMonthlyEntries: List<TuitionLedgerEntry> = emptyList()
@@ -238,7 +244,7 @@ class TuitionApplicationServiceTest {
             ledgerEntryRepository.existsByApplicationIdAndConceptAndStatus(
                 123L,
                 TuitionLedgerConcept.TUITION_ENROLLMENT,
-                TuitionLedgerStatus.MOCK_PAID
+                TuitionLedgerStatus.PAID
             )
         } returns true
         every { guardianAccountProvider.activateGuardianForTuition(10L, 1L, "ok") } returns guardianInfo()

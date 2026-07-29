@@ -8,7 +8,7 @@ El proyecto esta implementado como monolito modular en Kotlin y Spring Boot, con
 
 Estado del workspace inspeccionado: branch `feature010-billing-flow`, basada exactamente en
 `develop`, con archivos locales de QA que no deben incluirse automaticamente en commits.
-La documentacion refleja el nucleo persistente de facturacion validado al 2026-07-21.
+La documentacion refleja la base de cargos y preparacion manual de facturacion al 2026-07-28.
 
 ### Funcional
 
@@ -19,7 +19,7 @@ La documentacion refleja el nucleo persistente de facturacion validado al 2026-0
 - Examenes presenciales, submissions, calificaciones, historial de cambios y analitica de docentes.
 - Scheduling operativo para aulas, slots y reservas.
 - Flujo QA de matriculacion para `GUARDIAN` y `ADMIN`: catalogos, cursos publicados, reserva de
-  vacante, pago mock, aprobacion y ledger de enero a diciembre del ciclo.
+  vacante, cargo/pago inicial, aprobacion y ledger de enero a diciembre del ciclo.
 - Alta/edicion de docentes con cuenta `TEACHER` enlazada, asignacion exacta de cursos y foto
   multipart persistida en PostgreSQL.
 - Asistencia por sesion real con nombres de estudiantes y payload bulk idempotente.
@@ -27,11 +27,12 @@ La documentacion refleja el nucleo persistente de facturacion validado al 2026-0
 
 ### En Desarrollo o Planificado
 
-- Pagos/facturacion: persiste pagos, recibos X, facturas, intentos, outbox y secuencias; ofrece
+- Pagos/facturacion: persiste cuentas, perfiles reutilizables, cargos, imputaciones,
+  ejecuciones manuales, pagos, recibos X, facturas, intentos, outbox y secuencias; ofrece
   un flujo idempotente y una bandeja `ADMIN`. Incluye mock embebido, provider SOAP
   `mock-service` y cliente WSAA/WSFEv1 con firma CMS, caches, circuit breaker, bulkhead,
   metricas, CAE/consulta, parametricas, detalle IVA/tributos y PDFs con QR. El smoke SOAP local
-  paso; falta homologacion ARCA con credenciales, deuda/cuotas y configuracion fiscal validada.
+  paso; falta homologacion ARCA con credenciales y configuracion fiscal validada.
   `GET /api/v1/students/{id}/payment-status` sigue devolviendo datos temporales/mock.
 - Comunicaciones/notificaciones: existe entidad base `Notification`; falta flujo real de envio SMTP/in-app.
 - Reportes avanzados: modulo incluido, pendiente de implementacion funcional.
@@ -39,7 +40,8 @@ La documentacion refleja el nucleo persistente de facturacion validado al 2026-0
 
 El flujo academico anterior es estable para QA. El nucleo de pagos/facturacion es un incremento
 en desarrollo y todavia no emite comprobantes ARCA reales; comunicaciones y reportes siguen
-fuera de alcance. `tuition_ledger_entries` es una vista mock operativa, no un comprobante fiscal.
+fuera de alcance. `tuition_ledger_entries` es un ledger academico sincronizado con cargos,
+no un comprobante fiscal.
 
 ## Stack
 

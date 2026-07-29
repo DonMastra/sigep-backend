@@ -7,6 +7,8 @@ import com.sigep.common.application.exception.ResourceConflictException
 import com.sigep.common.application.exception.ResourceNotFoundException
 import com.sigep.common.application.exception.ValidationException
 import com.sigep.common.application.service.CourseEnrollmentCommandProvider
+import com.sigep.common.application.service.BillingChargeCommand
+import com.sigep.common.application.service.BillingChargeProvider
 import com.sigep.common.application.service.GuardianAccountProvider
 import com.sigep.common.application.service.StudentProfileCreateRequest
 import com.sigep.common.application.service.StudentProfileProvider
@@ -52,6 +54,7 @@ import java.math.BigDecimal
 import java.math.RoundingMode
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.YearMonth
 
 @Service
 @Transactional
@@ -66,7 +69,8 @@ class TuitionApplicationService(
     private val ledgerEntryRepository: TuitionLedgerEntryRepository,
     private val studentProfileProvider: StudentProfileProvider,
     private val courseEnrollmentCommandProvider: CourseEnrollmentCommandProvider,
-    private val guardianAccountProvider: GuardianAccountProvider
+    private val guardianAccountProvider: GuardianAccountProvider,
+    private val billingChargeProvider: BillingChargeProvider
 ) {
 
     private val logger = LoggerFactory.getLogger(TuitionApplicationService::class.java)
@@ -191,33 +195,6 @@ class TuitionApplicationService(
         return updatedApplication.toDto()
     }
 
-    fun markMockPayment(applicationId: Long, guardianUserId: Long): TuitionApplicationDto {
-        val application = getOwnedApplication(applicationId, guardianUserId)
-        if (application.status !in setOf(TuitionApplicationStatus.PAYMENT_PENDING, TuitionApplicationStatus.SEAT_RESERVED)) {
-            throw BusinessException("Tuition application cannot be paid from status ${application.status}")
-        }
-
-        val ledger = ensureEnrollmentLedger(application)
-        if (ledger.status == TuitionLedgerStatus.MOCK_PENDING) {
-            ledgerEntryRepository.save(
-                ledger.copy(
-                    status = TuitionLedgerStatus.MOCK_PAID,
-                    mockReference = "MOCK-TUITION-${application.id}-${ledger.id}",
-                    updatedAt = LocalDateTime.now()
-                )
-            )
-        }
-
-        val updated = applicationRepository.save(
-            application.copy(
-                status = TuitionApplicationStatus.READY_FOR_ADMIN_APPROVAL,
-                updatedAt = LocalDateTime.now()
-            )
-        )
-        logger.info("Mock payment marked for tuition application {}", applicationId)
-        return updated.toDto()
-    }
-
     fun approveApplication(applicationId: Long, adminUserId: Long, request: TuitionDecisionRequest): TuitionApplicationDto {
         val application = getApplication(applicationId)
         if (application.status != TuitionApplicationStatus.READY_FOR_ADMIN_APPROVAL) {
@@ -233,10 +210,10 @@ class TuitionApplicationService(
         val enrollmentFeePaid = ledgerEntryRepository.existsByApplicationIdAndConceptAndStatus(
             applicationId,
             TuitionLedgerConcept.TUITION_ENROLLMENT,
-            TuitionLedgerStatus.MOCK_PAID
+            TuitionLedgerStatus.PAID
         )
         if (!enrollmentFeePaid) {
-            throw BusinessException("Initial tuition enrollment fee must be mock-paid before approval")
+            throw BusinessException("Initial tuition enrollment fee must be paid before approval")
         }
         if (application.requiresAdminOverride && request.adminNotes.isNullOrBlank()) {
             throw ValidationException(
@@ -269,7 +246,10 @@ class TuitionApplicationService(
 
         ledgerEntryRepository.findByApplicationId(applicationId)
             .filter { it.studentId == null }
-            .forEach { ledgerEntryRepository.save(it.copy(studentId = studentId, updatedAt = now)) }
+            .forEach {
+                val updatedEntry = ledgerEntryRepository.save(it.copy(studentId = studentId, updatedAt = now))
+                syncBillingCharge(approvedApplication, updatedEntry, studentId)
+            }
         ensureMonthlyLedgers(approvedApplication, studentId)
         seatReservationRepository.save(
             reservation.copy(
@@ -297,6 +277,7 @@ class TuitionApplicationService(
         }
         ledgerEntryRepository.findByApplicationId(applicationId).forEach { entry ->
             ledgerEntryRepository.save(entry.copy(status = TuitionLedgerStatus.CANCELLED, updatedAt = now))
+            billingChargeProvider.cancelCharge(BILLING_SOURCE_TYPE, requireNotNull(entry.id))
         }
 
         val rejected = applicationRepository.save(
@@ -328,6 +309,7 @@ class TuitionApplicationService(
                     seatReservationRepository.save(reservation.copy(status = TuitionSeatReservationStatus.EXPIRED, updatedAt = now))
                     ledgerEntryRepository.findByApplicationId(application.id!!).forEach { entry ->
                         ledgerEntryRepository.save(entry.copy(status = TuitionLedgerStatus.CANCELLED, updatedAt = now))
+                        billingChargeProvider.cancelCharge(BILLING_SOURCE_TYPE, requireNotNull(entry.id))
                     }
                     applicationRepository.save(application.copy(status = TuitionApplicationStatus.EXPIRED, updatedAt = now))
                     logger.info("Expired tuition application {} due to unpaid reservation", application.id)
@@ -527,6 +509,7 @@ class TuitionApplicationService(
         val existing = ledgerEntryRepository.findByApplicationIdAndConcept(application.id!!, TuitionLedgerConcept.TUITION_ENROLLMENT)
             .firstOrNull()
         if (existing != null) {
+            syncBillingCharge(application, existing)
             return existing
         }
 
@@ -536,7 +519,7 @@ class TuitionApplicationService(
             requestedLevel = application.requestedLevel
         )
         val now = LocalDateTime.now()
-        return ledgerEntryRepository.save(
+        val saved = ledgerEntryRepository.save(
             TuitionLedgerEntry(
                 application = application,
                 studentId = application.studentId,
@@ -546,16 +529,19 @@ class TuitionApplicationService(
                 discountAmount = appliedDiscount.amount,
                 netAmount = (application.feePlan.enrollmentFee - appliedDiscount.amount).normalizeMoney(),
                 dueDate = LocalDate.now().plusDays(3),
-                status = TuitionLedgerStatus.MOCK_PENDING,
+                status = TuitionLedgerStatus.PENDING,
                 createdAt = now,
                 updatedAt = now
             )
         )
+        syncBillingCharge(application, saved)
+        return saved
     }
 
     private fun ensureMonthlyLedgers(application: TuitionApplication, studentId: Long) {
         val existingMonthly = ledgerEntryRepository.findByApplicationIdAndConcept(application.id!!, TuitionLedgerConcept.MONTHLY_FEE)
         if (existingMonthly.isNotEmpty()) {
+            existingMonthly.forEach { syncBillingCharge(application, it, studentId) }
             return
         }
 
@@ -577,12 +563,60 @@ class TuitionApplicationService(
                 discountAmount = appliedDiscount.amount,
                 netAmount = (application.feePlan.monthlyFee - appliedDiscount.amount).normalizeMoney(),
                 dueDate = LocalDate.of(academicYear, index + 1, 20),
-                status = TuitionLedgerStatus.MOCK_PENDING,
+                status = TuitionLedgerStatus.PENDING,
                 createdAt = now,
                 updatedAt = now
             )
         }
-        ledgerEntryRepository.saveAll(entries)
+        ledgerEntryRepository.saveAll(entries).forEach { syncBillingCharge(application, it, studentId) }
+    }
+
+    private fun syncBillingCharge(
+        application: TuitionApplication,
+        entry: TuitionLedgerEntry,
+        resolvedStudentId: Long? = entry.studentId
+    ) {
+        val guardian = guardianAccountProvider.getGuardianAccount(application.guardianUserId)
+            ?: throw ResourceNotFoundException("Guardian account ${application.guardianUserId} not found")
+        val student = resolvedStudentId?.let(studentProfileProvider::getStudentProfile)
+        val studentName = listOfNotNull(
+            student?.firstName ?: application.studentFirstName,
+            student?.lastName ?: application.studentLastName
+        ).joinToString(" ").trim().ifEmpty { "Estudiante solicitud ${application.id}" }
+        val monthlyPeriod = YearMonth.from(entry.dueDate)
+        val description = when (entry.concept) {
+            TuitionLedgerConcept.TUITION_ENROLLMENT ->
+                "Matricula ${application.academicYear.name} - $studentName"
+            TuitionLedgerConcept.MONTHLY_FEE ->
+                "Cuota ${entry.dueDate.monthValue}/${entry.dueDate.year} - $studentName"
+        }
+        billingChargeProvider.upsertCharge(
+            BillingChargeCommand(
+                guardianUserId = application.guardianUserId,
+                studentId = resolvedStudentId,
+                studentName = studentName,
+                sourceType = BILLING_SOURCE_TYPE,
+                sourceId = requireNotNull(entry.id),
+                concept = entry.concept.name,
+                description = description,
+                amount = entry.netAmount,
+                currency = application.feePlan.currency,
+                dueDate = entry.dueDate,
+                serviceFrom = if (entry.concept == TuitionLedgerConcept.MONTHLY_FEE) {
+                    monthlyPeriod.atDay(1)
+                } else {
+                    entry.dueDate
+                },
+                serviceTo = if (entry.concept == TuitionLedgerConcept.MONTHLY_FEE) {
+                    monthlyPeriod.atEndOfMonth()
+                } else {
+                    entry.dueDate
+                },
+                receiverName = "${guardian.firstName} ${guardian.lastName}".trim(),
+                receiverAddress = guardian.address,
+                receiverDocumentNumber = guardian.documentNumber
+            )
+        )
     }
 
     private fun calculateDiscount(
@@ -736,7 +770,7 @@ class TuitionApplicationService(
         netAmount = netAmount,
         dueDate = dueDate,
         status = status,
-        mockReference = mockReference,
+        billingReference = billingReference,
         createdAt = createdAt,
         updatedAt = updatedAt
     )
@@ -762,4 +796,8 @@ class TuitionApplicationService(
         val requiresAdminOverride: Boolean = false,
         val warning: String? = null
     )
+
+    private companion object {
+        const val BILLING_SOURCE_TYPE = "TUITION_LEDGER"
+    }
 }

@@ -1821,35 +1821,6 @@
               }
             },
             {
-              "name": "11 - Mock Payment",
-              "event": [
-                {
-                  "listen": "test",
-                  "script": {
-                    "type": "text/javascript",
-                    "exec": [
-                      "const json = pm.response.json();",
-                      "if (json?.data?.id) pm.collectionVariables.set('tuitionApplicationId', String(json.data.id));"
-                    ]
-                  }
-                }
-              ],
-              "request": {
-                "method": "POST",
-                "url": "{{baseUrl}}/api/v1/tuition/applications/{{tuitionApplicationId}}/mock-payment",
-                "auth": {
-                  "type": "bearer",
-                  "bearer": [
-                    {
-                      "key": "token",
-                      "value": "{{guardianToken}}",
-                      "type": "string"
-                    }
-                  ]
-                }
-              }
-            },
-            {
               "name": "12 - My Applications",
               "request": {
                 "method": "GET",

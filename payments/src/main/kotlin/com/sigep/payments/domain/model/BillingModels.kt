@@ -81,9 +81,13 @@ data class FiscalInvoice(
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     val id: Long? = null,
 
-    @OneToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "payment_id", nullable = false, unique = true)
-    val payment: Payment,
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "payment_id", unique = true)
+    val payment: Payment? = null,
+
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "charge_id", unique = true)
+    val charge: BillingCharge? = null,
 
     @Column(name = "creation_key", nullable = false, unique = true, length = 128)
     val creationKey: String,
