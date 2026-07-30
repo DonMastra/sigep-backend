@@ -4,12 +4,19 @@ import com.sigep.payments.application.service.BillingOutboxProcessor
 import com.sigep.payments.domain.model.BillingOutboxStatus
 import com.sigep.payments.domain.repository.BillingOutboxRepository
 import org.slf4j.LoggerFactory
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.data.domain.PageRequest
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import java.time.LocalDateTime
 
 @Component
+@ConditionalOnProperty(
+    prefix = "billing.outbox",
+    name = ["enabled"],
+    havingValue = "true",
+    matchIfMissing = true
+)
 class BillingOutboxScheduler(
     private val outboxRepository: BillingOutboxRepository,
     private val processor: BillingOutboxProcessor
