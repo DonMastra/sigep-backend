@@ -10,7 +10,7 @@ WORKDIR /app
 COPY --from=build /workspace/application/build/libs/sigep-backend.jar /app/sigep-backend.jar
 
 ENV SPRING_PROFILES_ACTIVE=qa
-ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75.0"
+ENV JAVA_TOOL_OPTIONS="-Xms64m -Xmx256m -XX:+UseSerialGC -Xss512k"
 EXPOSE 8080
 
 ENTRYPOINT ["java", "-jar", "/app/sigep-backend.jar"]
