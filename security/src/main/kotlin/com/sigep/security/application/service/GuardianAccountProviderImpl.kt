@@ -65,6 +65,8 @@ class GuardianAccountProviderImpl(
         email = email,
         firstName = firstName,
         lastName = lastName,
+        address = address,
+        documentNumber = documentNumber,
         status = status.name,
         active = active
     )

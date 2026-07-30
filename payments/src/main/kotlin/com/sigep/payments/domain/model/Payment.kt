@@ -13,8 +13,8 @@ data class Payment(
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     val id: Long? = null,
 
-    @Column(nullable = false)
-    val studentId: Long,
+    @Column
+    val studentId: Long?,
 
     @Column(nullable = false, precision = 12, scale = 2)
     val amount: BigDecimal,

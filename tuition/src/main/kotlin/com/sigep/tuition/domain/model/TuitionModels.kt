@@ -439,10 +439,10 @@ data class TuitionLedgerEntry(
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
-    val status: TuitionLedgerStatus = TuitionLedgerStatus.MOCK_PENDING,
+    val status: TuitionLedgerStatus = TuitionLedgerStatus.PENDING,
 
-    @Column(name = "mock_reference", unique = true, length = 100)
-    val mockReference: String? = null,
+    @Column(name = "billing_reference", unique = true, length = 100)
+    val billingReference: String? = null,
 
     @Column(name = "created_at", nullable = false)
     val createdAt: LocalDateTime = LocalDateTime.now(),
@@ -470,4 +470,4 @@ enum class TuitionApplicationStatus {
 }
 enum class TuitionSeatReservationStatus { ACTIVE, CONFIRMED, RELEASED, EXPIRED }
 enum class TuitionLedgerConcept { TUITION_ENROLLMENT, MONTHLY_FEE }
-enum class TuitionLedgerStatus { MOCK_PENDING, MOCK_PAID, CANCELLED }
+enum class TuitionLedgerStatus { PENDING, PAID, CANCELLED }

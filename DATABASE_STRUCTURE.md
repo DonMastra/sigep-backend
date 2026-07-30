@@ -3,7 +3,7 @@
 ## Estado actual de estructura de Base de Datos (SiGEP)
 
 **Fecha de relevamiento:** 2026-05-31  
-**Ultima actualizacion:** 2026-07-21 (incluye V17 y desglose fiscal WSFE)
+**Ultima actualizacion:** 2026-07-28 (incluye alcance V18 de cargos y ejecuciones manuales)
 **Entorno auditado:** `sigep_db` (PostgreSQL 15), validado contra codigo Kotlin actual y migraciones SQL.
 
 ## 1) Fuente de verdad operativa
@@ -16,8 +16,17 @@ Orden de prioridad:
 
 ## 2) Snapshot estructural actual
 
-### Tablas detectadas/modeladas: 36
-`billing_outbox`, `classrooms`, `course_attendance`, `course_certificates`, `course_materials`, `course_sessions`, `courses`, `enrollments`, `exam_grade_history`, `exam_submissions`, `exams`, `fiscal_invoice_attempts`, `fiscal_invoice_taxes`, `fiscal_invoice_vat_subtotals`, `fiscal_invoices`, `non_teaching_staff`, `notifications`, `payment_receipts`, `payments`, `registration_requests`, `reservations`, `schedule_slots`, `session_exceptions`, `staff_attendance`, `students`, `teaching_staff`, `tuition_academic_years`, `tuition_applications`, `tuition_discounts`, `tuition_fee_plans`, `tuition_ledger_entries`, `tuition_level_progression`, `tuition_levels`, `tuition_seat_reservations`, `users`, `voucher_sequences`.
+### Tablas detectadas/modeladas: 42
+`billing_accounts`, `billing_charges`, `billing_outbox`, `billing_profiles`, `billing_run_items`,
+`billing_runs`, `classrooms`, `course_attendance`, `course_certificates`, `course_materials`,
+`course_sessions`, `courses`, `enrollments`, `exam_grade_history`, `exam_submissions`, `exams`,
+`fiscal_invoice_attempts`, `fiscal_invoice_taxes`, `fiscal_invoice_vat_subtotals`,
+`fiscal_invoices`, `non_teaching_staff`, `notifications`, `payment_allocations`,
+`payment_receipts`, `payments`, `registration_requests`, `reservations`, `schedule_slots`,
+`session_exceptions`, `staff_attendance`, `students`, `teaching_staff`,
+`tuition_academic_years`, `tuition_applications`, `tuition_discounts`, `tuition_fee_plans`,
+`tuition_ledger_entries`, `tuition_level_progression`, `tuition_levels`,
+`tuition_seat_reservations`, `users`, `voucher_sequences`.
 
 ### Cambios de V12 (Scheduling)
 - Se elimina tabla legacy `course_schedules`.
@@ -40,7 +49,8 @@ Orden de prioridad:
   - `tuition_ledger_entries`
 - `tuition_level_progression` usa indice unico parcial `uq_tuition_progression_active_from` para permitir una sola progresion activa por nivel origen.
 - `tuition_seat_reservations` reserva una vacante por solicitud antes de crear `enrollments`.
-- `tuition_ledger_entries` modela deuda mock; no factura, no emite CAE y no almacena datos de tarjeta.
+- `tuition_ledger_entries` modela deuda academica; V18 sincroniza cada entrada con un
+  `billing_charge`. Tuition no emite CAE ni almacena datos de tarjeta.
 
 ### Cambios de V14/V15 (primer flujo manual)
 
@@ -81,6 +91,18 @@ Orden de prioridad:
 - `fiscal_invoice_taxes` persiste codigo, descripcion, base, alicuota e importe por tributo.
 - Ambas colecciones conservan orden, restringen valores invalidos y referencian la factura.
 
+### Cambios de V18 (cuentas, cargos y ejecuciones manuales)
+
+- `billing_accounts` agrupa al responsable de pago y `billing_profiles` conserva sus datos
+  fiscales reutilizables, con estado `INCOMPLETE` o `READY`.
+- `billing_charges` representa deudas originadas por matricula o cuota y evita duplicados por
+  `(source_type, source_id)`.
+- `payment_allocations` registra la imputacion de un pago al cargo que liquida.
+- `billing_runs` y `billing_run_items` auditan preparaciones individuales, seleccionadas o
+  filtradas, con idempotencia y resultado por cargo.
+- `fiscal_invoices` puede referenciar exactamente un pago legacy o un cargo.
+- La configuracion del primer cliente fuerza `rg_5866_applicable=false`.
+
 ### PK por modulo
 - Modulos generales (`users`, `students`, `courses`, `staff`, `scheduling`, `tuition`, etc.): **BIGINT**.
 - Modulo exams (`exams`, `exam_submissions`, `exam_grade_history`): **UUID** en PK.
@@ -97,10 +119,22 @@ Orden de prioridad:
 - `tuition_applications.enrollment_id` -> `enrollments.id` (BIGINT, nullable)
 - `tuition_discounts.student_id` -> `students.id` (BIGINT, nullable)
 - `tuition_ledger_entries.student_id` -> `students.id` (BIGINT, nullable)
+- `billing_accounts.guardian_user_id` -> `users.id` (BIGINT, unico, `ON DELETE RESTRICT`)
+- `billing_profiles.account_id` -> `billing_accounts.id` (BIGINT, unico, `ON DELETE RESTRICT`)
+- `billing_profiles.updated_by` -> `users.id` (BIGINT, nullable, `ON DELETE RESTRICT`)
+- `billing_charges.account_id` -> `billing_accounts.id` (BIGINT, `ON DELETE RESTRICT`)
+- `billing_charges.student_id` -> `students.id` (BIGINT, nullable)
+- `payment_allocations.payment_id` -> `payments.id` (BIGINT, `ON DELETE RESTRICT`)
+- `payment_allocations.charge_id` -> `billing_charges.id` (BIGINT, unico, `ON DELETE RESTRICT`)
+- `billing_runs.requested_by` -> `users.id` (BIGINT, `ON DELETE RESTRICT`)
+- `billing_run_items.run_id` -> `billing_runs.id` (BIGINT, `ON DELETE RESTRICT`)
+- `billing_run_items.charge_id` -> `billing_charges.id` (BIGINT, `ON DELETE RESTRICT`)
+- `billing_run_items.invoice_id` -> `fiscal_invoices.id` (BIGINT, unico, `ON DELETE RESTRICT`)
 - `teaching_staff.linked_user_id` -> `users.id` (BIGINT, `ON DELETE SET NULL`)
 - `course_attendance.course_session_id` -> `course_sessions.id` (BIGINT, `ON DELETE RESTRICT`)
 - `payment_receipts.payment_id` -> `payments.id` (BIGINT, unico, `ON DELETE RESTRICT`)
-- `fiscal_invoices.payment_id` -> `payments.id` (BIGINT, unico, `ON DELETE RESTRICT`)
+- `fiscal_invoices.payment_id` -> `payments.id` (BIGINT, unico y nullable, `ON DELETE RESTRICT`)
+- `fiscal_invoices.charge_id` -> `billing_charges.id` (BIGINT, unico y nullable, `ON DELETE RESTRICT`)
 - `fiscal_invoice_attempts.invoice_id` -> `fiscal_invoices.id` (BIGINT, `ON DELETE RESTRICT`)
 - `billing_outbox.invoice_id` -> `fiscal_invoices.id` (BIGINT, `ON DELETE RESTRICT`)
 - `fiscal_invoice_vat_subtotals.invoice_id` -> `fiscal_invoices.id` (BIGINT, `ON DELETE RESTRICT`)
@@ -110,18 +144,19 @@ Orden de prioridad:
 - `schedule_slots.classroom_id` -> `classrooms.id` (`ON DELETE RESTRICT`)
 - `reservations.slot_id` -> `schedule_slots.id` (`ON DELETE RESTRICT`)
 
-## 3) Cambios recientes relevantes (V10 a V17)
+## 3) Cambios recientes relevantes (V10 a V18)
 
 | Version | Archivo | Resultado |
 |---|---|---|
 | V10 | `scripts/migrations/V10__auth_registration_approval_workflow.sql` | `users.status` + tabla `registration_requests` para aprobacion de registro |
 | V11 | `scripts/migrations/V11__extend_users_profile_fields.sql` | nuevos campos de perfil en `users` |
 | V12 | `scripts/migrations/V12__create_scheduling_module.sql` | nuevo esquema de scheduling (`classrooms`, `schedule_slots`, `reservations`) y drop de `course_schedules` |
-| V13 | `scripts/migrations/V13__create_tuition_module.sql` | nuevo esquema tuition para ciclo lectivo, niveles, planes, solicitudes, reservas y ledger mock |
+| V13 | `scripts/migrations/V13__create_tuition_module.sql` | nuevo esquema tuition para ciclo lectivo, niveles, planes, solicitudes, reservas y ledger |
 | V14 | `scripts/migrations/V14__fix_first_manual_flow.sql` | compatibilidad del primer flujo manual |
 | V15 | `scripts/migrations/V15__repair_legacy_test_password_hash.sql` | reparacion acotada de hashes legacy de prueba |
 | V16 | `scripts/migrations/V16__create_billing_persistence.sql` | pagos compatibles, recibos X, facturas, intentos, outbox y secuencias |
 | V17 | `scripts/migrations/V17__add_fiscal_tax_breakdown.sql` | domicilio receptor y detalle IVA/tributos |
+| V18 | `scripts/migrations/V18__create_billing_accounts_charges_and_runs.sql` | cuentas, perfiles, cargos, imputaciones y ejecuciones manuales |
 
 ## 4) Validacion ejecutada en BD (2026-05-31)
 
@@ -166,6 +201,18 @@ Orden de prioridad:
 - Se verifico el backfill de `receiver_address`, la insercion de una alicuota IVA y un tributo.
 - V17 se reaplico con `ON_ERROR_STOP=1` para confirmar idempotencia; el contenedor se elimino.
 
+### Alcance de V18 (2026-07-28)
+
+- Agrega `billing_accounts`, `billing_profiles`, `billing_charges`, `payment_allocations`,
+  `billing_runs` y `billing_run_items`.
+- Permite que `fiscal_invoices` se origine en un pago legacy o en un cargo, exactamente uno.
+- Hace `payments.student_id` nullable para cobrar la matricula antes de crear el estudiante.
+- Migra el ledger `MOCK_PENDING/MOCK_PAID` a `PENDING/PAID` y renombra
+  `mock_reference` a `billing_reference`.
+- Fija `rg_5866_applicable=false` mediante constraint para el primer cliente.
+- V18 se valido y reaplico sobre PostgreSQL 15 Alpine descartable sin tocar la base del proyecto.
+  Preservo filas legacy, migro estado/referencia, creo seis tablas y mantuvo los constraints.
+
 ## 5) Validacion complementaria de `users`
 
 - Se ejecuto `scripts/validate-db-schema.sql` y se verifico:
@@ -187,10 +234,12 @@ Orden de prioridad:
 
 ### Tuition
 - `POST /api/v1/tuition/applications` crea solicitudes de matriculacion para guardian autenticado.
-- `POST /api/v1/tuition/applications/{id}/reserve-seat` crea `tuition_seat_reservations` y `tuition_ledger_entries` de matricula inicial.
-- `POST /api/v1/tuition/applications/{id}/mock-payment` marca la matricula inicial como `MOCK_PAID`.
-- `PUT /api/v1/tuition/applications/{id}/approve` confirma la reserva, activa guardian si corresponde, crea estudiante cuando es nuevo y crea `enrollments`.
-- `tuition_ledger_entries` queda como ledger mock interno hasta que exista el modulo real de pagos/facturacion.
+- `POST /api/v1/tuition/applications/{id}/reserve-seat` crea la reserva, el ledger de matricula
+  inicial y un `billing_charge` idempotente.
+- `POST /api/v1/billing/charges/{id}/payments` crea/imputa el pago y recibo X; el observer de
+  tuition marca el ledger `PAID` y habilita la revision administrativa.
+- `PUT /api/v1/tuition/applications/{id}/approve` confirma la reserva, activa guardian, crea
+  estudiante/enrollment y materializa ledger/cargos de cuotas.
 
 ## 7) Scripts operativos de validacion
 
@@ -198,6 +247,8 @@ Orden de prioridad:
 - `scripts/migrations/V13__create_tuition_module.sql` -> migracion de tuition.
 - `scripts/migrations/V16__create_billing_persistence.sql` -> migracion de pagos/facturacion.
 - `scripts/migrations/V17__add_fiscal_tax_breakdown.sql` -> domicilio y desglose impositivo.
+- `scripts/migrations/V18__create_billing_accounts_charges_and_runs.sql` -> cuentas, perfiles,
+  cargos, imputaciones y ejecuciones manuales de facturas.
 - `scripts/validate-db-schema.sql` -> validacion de esquema de `users`.
 - `scripts/validate-db-schema.sh` -> validacion por consola (psql).
 
@@ -215,19 +266,19 @@ Orden de prioridad:
 4. **Datos semilla tuition**:
    - No hay seed inicial de ciclos, niveles, progresiones ni planes de cuota; deben cargarse por API admin antes de usar el flujo.
 
-5. **Aplicacion de V14/V15/V16/V17**:
+5. **Aplicacion de V14/V15/V16/V17/V18**:
    - Los scripts estan versionados como artefactos operativos. Validarlos primero en una
      base descartable o en una transaccion revertida; el contenedor local existente no debe
      modificarse automaticamente durante el desarrollo.
 
-    - V16/V17 ya fueron validadas en una base descartable; aun deben incorporarse al procedimiento
-      controlado de despliegue de cada ambiente.
+    - V16/V17/V18 ya fueron validadas en una base descartable; aun deben incorporarse al
+      procedimiento controlado de despliegue de cada ambiente.
 
     - En bases legacy con filas existentes, V16 agrega `currency` y `version` como columnas
       rellenables, aplica `ARS`/`0` y recien despues las fija como `NOT NULL`. El mapeo JPA conserva
       esos defaults como salvaguarda adicional cuando `ddl-auto=update` esta activo en `dev`.
 
-6. **Ledger mock**:
+6. **Ledger y cargos**:
    - Las cuotas mensuales se generan/normalizan para enero-diciembre del año de inicio del
      ciclo lectivo (hasta 12 filas). La normalizacion de DTO no reescribe filas historicas.
 

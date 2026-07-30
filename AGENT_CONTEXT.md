@@ -1,8 +1,9 @@
 # AGENT_CONTEXT.md - Contexto para Agentes SiGEP Backend
 
-> **Estado QA (2026-07-21).** Facturacion ya tiene persistencia, casos de uso idempotentes,
+> **Estado base (2026-07-28).** Facturacion ya tiene persistencia, casos de uso idempotentes,
 > outbox, mock embebido/externo, cliente WSAA/WSFEv1, resiliencia, metricas, parametricas,
-> detalle impositivo y PDFs; el flujo QA previo se mantiene estable. Este documento complementa las secciones historicas
+> detalle impositivo, PDFs, cargos, perfiles reutilizables y ejecuciones manuales; el flujo QA
+> previo se mantiene estable. Este documento complementa las secciones historicas
 > y describe el contrato operativo que debe respetarse al cerrar el primer flujo
 > manual. Ante una discrepancia, prevalecen las entidades/DTOs y los controladores
 > actuales, seguidos por `API_CONTRACT.md` y las migraciones versionadas.
@@ -19,7 +20,7 @@ La API debe soportar una gestion academica privada:
 
 - Administracion de usuarios, docentes, guardianes y estudiantes.
 - Oferta academica con cursos publicados y cursos administrados.
-- Matriculacion como proceso: solicitud, reserva de vacante, pago inicial mock y aprobacion administrativa.
+- Matriculacion como proceso: solicitud, reserva de vacante, cargo y pago inicial, y aprobacion administrativa.
 - Inscripcion y seguimiento academico de estudiantes.
 - Asistencia a clases y sesiones.
 - Gestion de materiales por curso.
@@ -27,7 +28,7 @@ La API debe soportar una gestion academica privada:
 - Evaluaciones presenciales, notas e historial de calificaciones.
 - Gestion operativa de aulas, horarios y reservas.
 - Gestion de personal docente/no docente.
-- Facturacion/pagos en desarrollo para pagos, recibos X, comprobantes y estado de deuda.
+- Facturacion/pagos con cargos, perfiles, recibos X, comprobantes y estado de deuda.
 - Comunicaciones y reportes planificados para flujos administrativos.
 
 ## Arquitectura
@@ -43,7 +44,7 @@ staff/           dominio personal
 exams/           dominio examenes
 scheduling/      dominio horarios/reservas
 payments/        dominio facturacion/pagos con persistencia, outbox y frontera fiscal
-tuition/         dominio matriculacion y ledger mock inicial
+tuition/         dominio matriculacion y ledger academico sincronizado con cargos
 communications/  dominio notificaciones planificado
 reports/         dominio reportes planificado
 application/     aplicacion Spring Boot que importa modulos
@@ -87,6 +88,8 @@ Ejemplos:
 - `StudentProfileProvider`: `tuition` crea/valida estudiantes sin depender de `students`.
 - `CourseEnrollmentCommandProvider`: `tuition` consulta cupos y crea `Enrollment` final sin depender de `courses`.
 - `GuardianAccountProvider`: `tuition` activa guardianes al aprobar matriculacion sin depender de repositorios de `security`.
+- `BillingChargeProvider`: `tuition` crea, actualiza o cancela cargos sin depender de `payments`.
+- `BillingChargeSettlementObserver`: `payments` informa una imputacion confirmada sin depender de `tuition`.
 
 Estado real a considerar: `staff` y `exams` todavia dependen directamente de `courses` y `students`. No ampliar este patron; preferir providers nuevos.
 
@@ -243,7 +246,7 @@ Responsabilidades:
 - Planes de cuota y descuentos/becas.
 - Solicitudes de matriculacion por guardian.
 - Reserva temporal de vacante.
-- Ledger mock para matricula inicial y cuotas mensuales.
+- Ledger academico para matricula inicial y cuotas mensuales, sincronizado con cargos.
 - Aprobacion administrativa que confirma reserva, activa guardian si corresponde, crea estudiante nuevo y genera `Enrollment`.
 
 Contrato QA adicional:
@@ -255,18 +258,19 @@ Contrato QA adicional:
   valor.
 - `PASS_PREVIOUS_LEVEL` bloquea una progresion no aprobada; `ADMIN_APPROVAL` marca
   `requiresAdminOverride` y exige nota administrativa no vacia al aprobar.
-- El ledger mock genera la matricula y cuotas de enero a diciembre del mismo ciclo lectivo
-  (maximo 12 vencimientos), y nunca debe interpretarse como factura fiscal.
+- El ledger genera la matricula y cuotas de enero a diciembre del mismo ciclo lectivo
+  (maximo 12 vencimientos). Cada entrada economica se sincroniza con un cargo, pero el
+  ledger nunca debe interpretarse como factura fiscal.
 
 Limites de `tuition`:
 
 - No factura ni emite comprobantes fiscales; esa responsabilidad pertenece a `payments`.
-- No almacena datos de tarjeta ni procesa pagos reales.
+- No almacena datos de tarjeta ni medios de pago.
 - La cuenta `GUARDIAN` debe poder autenticarse para usar endpoints guardian; las cuentas `PENDING_APPROVAL` siguen sin login por regla global de auth.
 
 ### Payments/Billing
 
-Estado: nucleo persistente implementado. `tuition` deja un ledger mock independiente y
+Estado: nucleo persistente implementado. `tuition` sincroniza su ledger con cargos y
 `payments` aporta:
 
 - `FiscalAuthorityPort` como frontera anti-corrupcion.
@@ -277,6 +281,8 @@ Estado: nucleo persistente implementado. `tuition` deja un ledger mock independi
 - Seleccion fail-closed: dev mock; QA/produccion disabled; ambos mocks prohibidos en produccion.
 - `GET /api/v1/billing/provider/health`, exclusivo de `ADMIN` y sin secretos.
 - Entidades y repositorios para pago, recibo X, factura, intentos, outbox y secuencia.
+- Cuentas y perfiles fiscales reutilizables, cargos, imputaciones y ejecuciones manuales
+  individuales, seleccionadas o filtradas.
 - Alta/confirmacion/factura idempotentes y `POST /api/v1/payments/register` como transaccion
   local de pocos clics.
 - Bandeja, detalle, encolado `202 Accepted` y conciliacion de resultados `UNKNOWN`.
@@ -294,6 +300,9 @@ Reglas:
 - Angular nunca consume ARCA ni el mock externo directamente.
 - Un timeout ambiguo no se reintenta: se consulta y concilia.
 - No asumir condicion IVA, alicuota, tipo de comprobante ni aplicabilidad RG 3368.
+- Para el primer cliente, `rg5866Applicable` permanece forzado en `false`; no recopilar ni
+  enviar esos datos hasta una definicion fiscal futura.
+- No agregar generacion mensual programada ni llamadas ARCA multi-registro en esta base.
 - Las sumas de bases/IVA/tributos deben coincidir con los agregados; el preflight deja en
   `DRAFT` cualquier desglose inconsistente.
 - Seguir `BILLING_ARCA_IMPLEMENTATION_GUIDE.md` antes de ampliar el modulo.
@@ -327,7 +336,7 @@ Estado: planificado. Se espera que cubra:
 - Si se modifica logica de negocio, agregar tests de servicio.
 - Si se modifica seguridad, revisar roles y flujo JWT.
 - Si se modifica scheduling, validar disponibilidad, asignacion, desasignacion y conflictos.
-- Si se modifica tuition, validar estados, reserva de cupo, ledger mock, ownership de guardian y aprobacion admin.
+- Si se modifica tuition, validar estados, reserva de cupo, ledger/cargos, ownership de guardian y aprobacion admin.
 
 ## Skills Locales para Agentes
 
@@ -386,7 +395,7 @@ docker-compose up -d
 - `exams` no usa wrapper uniforme en todos sus endpoints.
 - `staff` y `exams` tienen dependencias directas que deberian reducirse.
 - `payments`, `communications` y `reports` pueden inducir a error si se documentan como completos.
-- `tuition` usa ledger mock; no tratarlo como facturacion real ni como integracion ARCA.
+- El ledger de `tuition` no es un comprobante fiscal; la facturacion pertenece a `payments`.
 - Migraciones y `ddl-auto` deben consolidarse antes de produccion.
 - Hay archivos nuevos/no trackeados en el workspace; no asumir que `git status` limpio.
 

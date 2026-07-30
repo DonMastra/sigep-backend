@@ -1,6 +1,6 @@
 # SiGEP Backend - Quickstart
 
-Guia de arranque local y validacion del primer flujo manual QA (actualizada 2026-07-20).
+Guia de arranque local y validacion del primer flujo manual QA (actualizada 2026-07-28).
 
 ## Prerequisitos
 
@@ -57,14 +57,17 @@ planes vigentes y un curso con docente y reserva.
 2. Crear curso con codigo de 1-50 caracteres permitidos, docente y reserva; publicarlo sin
    exigir una cantidad minima de alumnos.
 3. Como `GUARDIAN`, leer catalogos y seleccionar ciclo, nivel, curso y plan.
-4. Crear solicitud, reservar vacante y registrar pago mock.
+4. Crear solicitud y reservar vacante. Como `ADMIN`, abrir facturacion, completar el perfil
+   fiscal si esta incompleto y registrar el pago del cargo de matricula.
 5. Aprobar como `ADMIN`; comprobar estudiante, `currentLevel`, enrollment y contadores
    `enrolledStudents` (activos) / `totalEnrollments` (total).
 6. Crear/editar sesiones en `/api/v1/sessions` y verificar conflictos.
 7. Registrar asistencia con el body `{courseSessionId, date, records}`; la fecha debe ser la
    fecha de la sesion y el envio repetido actualiza la misma combinacion alumno/sesion.
 8. Revisar nombres de estudiante, presentes/tardanzas y justificadas/licencias en estadisticas.
-9. Revisar el ledger mock: matricula y cuotas vencen de enero a diciembre del mismo ciclo.
+9. Revisar el ledger y los cargos: matricula y cuotas vencen de enero a diciembre del mismo
+   ciclo. Previsualizar facturas de forma individual, seleccionada o filtrada; la preparacion
+   no autoriza automaticamente en ARCA.
 
 ## Diagnostico rapido
 

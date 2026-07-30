@@ -239,7 +239,7 @@ internal class BillingPdfRenderer(
                 cursor += columnWidth
             }
             textCentered(canvas, "001", left + columns[0] / 2f, 520f, regular, 8f, OFFICIAL_INK)
-            centeredLines(invoice.payment.concept, left + columns[0] + columns[1] / 2f, 526f, regular, 8f, columns[1] - 12f, 11f)
+            centeredLines(invoice.sourceDescription(), left + columns[0] + columns[1] / 2f, 526f, regular, 8f, columns[1] - 12f, 11f)
             textCentered(canvas, "1", left + columns[0] + columns[1] + columns[2] / 2f, 520f, regular, 8f, OFFICIAL_INK)
             textRight(canvas, amountOnly(invoice.totalAmount), left + columns[0] + columns[1] + columns[2] + columns[3] - 8f, 520f, regular, 8f, OFFICIAL_INK)
             textRight(canvas, amountOnly(invoice.totalAmount), right - 8f, 520f, regular, 8f, OFFICIAL_INK)

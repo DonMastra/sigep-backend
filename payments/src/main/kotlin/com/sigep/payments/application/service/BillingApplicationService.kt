@@ -15,6 +15,10 @@ import com.sigep.payments.application.gateway.VoucherSequenceKey
 import com.sigep.payments.domain.model.BillingOutboxEvent
 import com.sigep.payments.domain.model.BillingOutboxEventType
 import com.sigep.payments.domain.model.BillingOutboxStatus
+import com.sigep.payments.domain.model.BillingCharge
+import com.sigep.payments.domain.model.BillingProfile
+import com.sigep.payments.domain.model.BillingProfileStatus
+import com.sigep.payments.domain.model.FiscalAmountTreatment
 import com.sigep.payments.domain.model.FiscalAttemptOutcome
 import com.sigep.payments.domain.model.FiscalAttemptType
 import com.sigep.payments.domain.model.FiscalInvoice
@@ -36,6 +40,7 @@ import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.time.LocalDateTime
+import java.time.LocalDate
 
 @Service
 @Transactional
@@ -50,6 +55,77 @@ class BillingApplicationService(
     private val issuerSettings: BillingIssuerSettings,
     private val preflightService: FiscalInvoicePreflightService
 ) {
+
+    fun createInvoiceForCharge(
+        charge: BillingCharge,
+        profile: BillingProfile,
+        idempotencyKey: String,
+        issueDate: LocalDate,
+        amountTreatment: FiscalAmountTreatment
+    ): FiscalInvoiceDetailDto {
+        validateIdempotencyKey(idempotencyKey)
+        if (profile.status != BillingProfileStatus.READY) {
+            throw ValidationException("Billing profile ${profile.id} is incomplete")
+        }
+        val chargeId = requireNotNull(charge.id)
+        val fingerprint = BillingFingerprint.chargeInvoice(
+            chargeId = chargeId,
+            profileId = requireNotNull(profile.id),
+            issueDate = issueDate,
+            amountTreatment = amountTreatment,
+            profileVersion = profile.version
+        )
+        invoiceRepository.findByChargeId(chargeId).orElse(null)?.let { existing ->
+            if (existing.creationKey == idempotencyKey && existing.requestFingerprint == fingerprint) {
+                return detail(existing)
+            }
+            throw ResourceConflictException("Charge $chargeId already has a fiscal invoice")
+        }
+
+        val concept = profile.defaultFiscalConcept
+        val serviceFrom = if (concept == 1) null else charge.serviceFrom ?: charge.dueDate
+        val serviceTo = if (concept == 1) null else charge.serviceTo ?: charge.dueDate
+        val amount = money(charge.amount)
+        val now = LocalDateTime.now()
+        val draft = FiscalInvoice(
+            charge = charge,
+            creationKey = idempotencyKey,
+            requestFingerprint = fingerprint,
+            status = FiscalInvoiceStatus.DRAFT,
+            issuerCuit = issuerSettings.cuit,
+            pointOfSale = issuerSettings.pointOfSale,
+            voucherType = requireNotNull(profile.defaultVoucherType),
+            concept = concept,
+            receiverName = profile.receiverName.trim(),
+            receiverAddress = requireNotNull(profile.receiverAddress).trim(),
+            receiverDocumentType = requireNotNull(profile.receiverDocumentType),
+            receiverDocumentNumber = requireNotNull(profile.receiverDocumentNumber),
+            receiverVatConditionId = requireNotNull(profile.receiverVatConditionId),
+            issueDate = issueDate,
+            serviceFrom = serviceFrom,
+            serviceTo = serviceTo,
+            paymentDueDate = if (concept == 1) null else charge.dueDate,
+            currency = profile.fiscalCurrency,
+            exchangeRate = BigDecimal.ONE.setScale(EXCHANGE_RATE_SCALE, RoundingMode.HALF_EVEN),
+            totalAmount = amount,
+            nonTaxedAmount = if (amountTreatment == FiscalAmountTreatment.NON_TAXED) amount else BigDecimal.ZERO.setScale(MONEY_SCALE),
+            netAmount = BigDecimal.ZERO.setScale(MONEY_SCALE),
+            exemptAmount = if (amountTreatment == FiscalAmountTreatment.EXEMPT) amount else BigDecimal.ZERO.setScale(MONEY_SCALE),
+            vatAmount = BigDecimal.ZERO.setScale(MONEY_SCALE),
+            otherTaxesAmount = BigDecimal.ZERO.setScale(MONEY_SCALE),
+            createdAt = now,
+            updatedAt = now
+        )
+        val preflightErrors = preflightService.evaluate(draft)
+        return detail(
+            invoiceRepository.save(
+                draft.copy(
+                    status = if (preflightErrors.isEmpty()) FiscalInvoiceStatus.READY else FiscalInvoiceStatus.DRAFT,
+                    preflightErrors = preflightErrors.toStorage()
+                )
+            )
+        )
+    }
 
     fun createInvoice(
         paymentId: Long,

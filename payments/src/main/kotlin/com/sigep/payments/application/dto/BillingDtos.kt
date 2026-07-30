@@ -1,7 +1,12 @@
 package com.sigep.payments.application.dto
 
 import com.sigep.payments.domain.model.BillingOutboxStatus
+import com.sigep.payments.domain.model.BillingChargeStatus
+import com.sigep.payments.domain.model.BillingProfileStatus
+import com.sigep.payments.domain.model.BillingRunStatus
+import com.sigep.payments.domain.model.BillingSelectionMode
 import com.sigep.payments.domain.model.FiscalAttemptOutcome
+import com.sigep.payments.domain.model.FiscalAmountTreatment
 import com.sigep.payments.domain.model.FiscalAttemptType
 import com.sigep.payments.domain.model.FiscalInvoiceStatus
 import com.sigep.payments.domain.model.PaymentMethod
@@ -21,7 +26,7 @@ import java.time.LocalDateTime
 
 data class CreatePaymentRequest(
     @field:Positive
-    val studentId: Long,
+    val studentId: Long?,
 
     @field:DecimalMin(value = "0.01")
     @field:Digits(integer = 10, fraction = 2)
@@ -165,7 +170,7 @@ data class FiscalOtherTaxRequest(
 
 data class PaymentDto(
     val id: Long,
-    val studentId: Long,
+    val studentId: Long?,
     val amount: BigDecimal,
     val currency: String,
     val concept: String,
@@ -209,8 +214,9 @@ data class BillingWorkflowDto(
 
 data class FiscalInvoiceDto(
     val id: Long,
-    val paymentId: Long,
-    val studentId: Long,
+    val paymentId: Long?,
+    val chargeId: Long?,
+    val studentId: Long?,
     val paymentReceiptNumber: String?,
     val status: FiscalInvoiceStatus,
     val issuerCuit: String?,
@@ -281,4 +287,143 @@ data class FiscalInvoiceAttemptDto(
 data class FiscalInvoiceDetailDto(
     val invoice: FiscalInvoiceDto,
     val attempts: List<FiscalInvoiceAttemptDto>
+)
+
+data class BillingProfileDto(
+    val id: Long,
+    val accountId: Long,
+    val guardianUserId: Long,
+    val receiverName: String,
+    val receiverAddress: String?,
+    val receiverDocumentType: Int?,
+    val receiverDocumentNumber: String?,
+    val receiverVatConditionId: Int?,
+    val defaultVoucherType: Int?,
+    val defaultFiscalConcept: Int,
+    val fiscalCurrency: String,
+    val rg5866Applicable: Boolean,
+    val status: BillingProfileStatus,
+    val missingFields: List<String>,
+    val updatedAt: LocalDateTime
+)
+
+data class UpdateBillingProfileRequest(
+    @field:NotBlank
+    @field:Size(max = 200)
+    val receiverName: String,
+
+    @field:NotBlank
+    @field:Size(max = 300)
+    val receiverAddress: String,
+
+    @field:Positive
+    val receiverDocumentType: Int,
+
+    @field:Pattern(regexp = "^[0-9]{1,20}$")
+    val receiverDocumentNumber: String,
+
+    @field:Positive
+    val receiverVatConditionId: Int,
+
+    @field:Positive
+    val defaultVoucherType: Int,
+
+    @field:Min(1)
+    @field:Max(3)
+    val defaultFiscalConcept: Int = 2,
+
+    @field:Pattern(regexp = "^[A-Z]{3}$")
+    val fiscalCurrency: String = "PES"
+)
+
+data class BillingChargeDto(
+    val id: Long,
+    val accountId: Long,
+    val guardianUserId: Long,
+    val studentId: Long?,
+    val studentName: String,
+    val sourceType: String,
+    val sourceId: Long,
+    val concept: String,
+    val description: String,
+    val amount: BigDecimal,
+    val currency: String,
+    val dueDate: LocalDate,
+    val serviceFrom: LocalDate?,
+    val serviceTo: LocalDate?,
+    val status: BillingChargeStatus,
+    val profile: BillingProfileDto,
+    val invoiceId: Long?,
+    val invoiceStatus: FiscalInvoiceStatus?,
+    val paymentId: Long?,
+    val receiptNumber: String?,
+    val createdAt: LocalDateTime,
+    val updatedAt: LocalDateTime
+)
+
+data class BillingChargeFilterRequest(
+    val status: BillingChargeStatus? = BillingChargeStatus.OPEN,
+    val studentId: Long? = null,
+    val profileStatus: BillingProfileStatus? = null
+)
+
+data class PrepareBillingRunRequest(
+    val selectionMode: BillingSelectionMode,
+
+    @field:Size(max = 1000)
+    val chargeIds: List<Long> = emptyList(),
+
+    @field:Valid
+    val filters: BillingChargeFilterRequest = BillingChargeFilterRequest(),
+
+    val issueDate: LocalDate,
+    val amountTreatment: FiscalAmountTreatment
+)
+
+data class BillingRunPreviewItemDto(
+    val charge: BillingChargeDto,
+    val blockers: List<String>
+)
+
+data class BillingRunPreviewDto(
+    val selectedCount: Int,
+    val readyCount: Int,
+    val blockedCount: Int,
+    val totalAmount: BigDecimal,
+    val items: List<BillingRunPreviewItemDto>
+)
+
+data class BillingRunItemDto(
+    val chargeId: Long,
+    val invoiceId: Long,
+    val invoiceStatus: FiscalInvoiceStatus
+)
+
+data class BillingRunDto(
+    val id: Long,
+    val selectionMode: BillingSelectionMode,
+    val amountTreatment: FiscalAmountTreatment,
+    val issueDate: LocalDate,
+    val selectedCount: Int,
+    val createdCount: Int,
+    val status: BillingRunStatus,
+    val requestedBy: Long,
+    val createdAt: LocalDateTime,
+    val items: List<BillingRunItemDto>
+)
+
+data class RegisterChargePaymentRequest(
+    @field:Valid
+    val confirmation: ConfirmPaymentRequest,
+
+    @field:Size(max = 150)
+    val externalReference: String? = null,
+
+    @field:Size(max = 1000)
+    val notes: String? = null
+)
+
+data class ChargePaymentResultDto(
+    val charge: BillingChargeDto,
+    val payment: PaymentDetailDto
 )
