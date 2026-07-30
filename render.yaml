@@ -21,7 +21,7 @@ services:
       - key: JWT_SECRET
         generateValue: true
       - key: CORS_ALLOWED_ORIGINS
-        value: https://sigep-ui-xi.vercel.app,https://sigep-qa.vercel.app
+        value: https://sigep.com.ar,https://www.sigep.com.ar,https://sigep-ui-xi.vercel.app,https://sigep-qa.vercel.app
       - key: CORS_ALLOWED_ORIGIN_PATTERNS
         value: https://*.vercel.app
       - key: REDIS_HOST
