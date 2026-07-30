@@ -62,7 +62,7 @@ class BillingDocumentService(
     private val attemptRepository: FiscalInvoiceAttemptRepository,
     settings: BillingDocumentSettings
 ) {
-    private val renderer = BillingPdfRenderer(settings)
+    private val renderer by lazy { BillingPdfRenderer(settings) }
 
     fun receipt(paymentId: Long): GeneratedBillingDocument {
         val receipt = receiptRepository.findByPaymentId(paymentId)
