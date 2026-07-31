@@ -11,6 +11,8 @@ data class CourseSessionDto(
     val id: Long,
     val courseId: Long,
     val courseName: String,
+    val teacherId: Long?,
+    val teacherName: String?,
     val sessionDate: LocalDate,
     val startTime: LocalTime,
     val endTime: LocalTime,

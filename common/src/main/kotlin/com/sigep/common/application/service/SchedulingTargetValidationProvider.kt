@@ -12,5 +12,9 @@ interface SchedulingTargetValidationProvider {
      * A course is operational when it is published or active for enrollment.
      */
     fun isCourseOperational(courseId: Long): Boolean
+
+    fun getCourseIdsAssignedToTeacher(teacherUserId: Long): Set<Long>
+
+    fun getSessionIdsAssignedToTeacher(teacherUserId: Long): Set<Long>
 }
 

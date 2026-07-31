@@ -20,7 +20,12 @@ interface CourseRepository : JpaRepository<Course, Long> {
 
     fun findByTeacherId(teacherId: Long, pageable: Pageable): Page<Course>
 
+    fun findByTeacherIdAndIsPublishedTrue(teacherId: Long, pageable: Pageable): Page<Course>
+
     fun findAllByTeacherId(teacherId: Long): List<Course>
+
+    @Query("SELECT c.id FROM Course c WHERE c.teacherId = :teacherId")
+    fun findIdsByTeacherId(@Param("teacherId") teacherId: Long): Set<Long>
 
     fun findByLevel(level: CourseLevel, pageable: Pageable): Page<Course>
 
@@ -34,6 +39,28 @@ interface CourseRepository : JpaRepository<Course, Long> {
 
     @Query("SELECT c FROM Course c WHERE LOWER(c.name) LIKE LOWER(CONCAT('%', :search, '%')) OR LOWER(c.description) LIKE LOWER(CONCAT('%', :search, '%')) OR LOWER(c.code) LIKE LOWER(CONCAT('%', :search, '%'))")
     fun searchCourses(search: String, pageable: Pageable): Page<Course>
+
+    @Query("""
+        SELECT c FROM Course c
+        WHERE c.isPublished = true
+        AND (LOWER(c.name) LIKE LOWER(CONCAT('%', :search, '%'))
+          OR LOWER(c.description) LIKE LOWER(CONCAT('%', :search, '%'))
+          OR LOWER(c.code) LIKE LOWER(CONCAT('%', :search, '%')))
+    """)
+    fun searchPublishedCourses(@Param("search") search: String, pageable: Pageable): Page<Course>
+
+    @Query("""
+        SELECT c FROM Course c
+        WHERE c.teacherId = :teacherUserId
+        AND (LOWER(c.name) LIKE LOWER(CONCAT('%', :search, '%'))
+          OR LOWER(c.description) LIKE LOWER(CONCAT('%', :search, '%'))
+          OR LOWER(c.code) LIKE LOWER(CONCAT('%', :search, '%')))
+    """)
+    fun searchCoursesForTeacher(
+        @Param("search") search: String,
+        @Param("teacherUserId") teacherUserId: Long,
+        pageable: Pageable
+    ): Page<Course>
 
     @Query("""
         SELECT c FROM Course c 

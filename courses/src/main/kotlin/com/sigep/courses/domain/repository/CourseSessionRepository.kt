@@ -15,8 +15,19 @@ interface CourseSessionRepository : JpaRepository<CourseSession, Long> {
 
     fun findByCourseId(courseId: Long, pageable: Pageable): Page<CourseSession>
 
+    fun findByCourseTeacherId(teacherId: Long, pageable: Pageable): Page<CourseSession>
+
+    @Query("SELECT s.id FROM CourseSession s WHERE s.course.teacherId = :teacherId")
+    fun findIdsByTeacherId(teacherId: Long): Set<Long>
+
     fun findByCourseIdAndSessionDateBetween(
         courseId: Long,
+        startDate: LocalDate,
+        endDate: LocalDate
+    ): List<CourseSession>
+
+    fun findByCourseTeacherIdAndSessionDateBetween(
+        teacherId: Long,
         startDate: LocalDate,
         endDate: LocalDate
     ): List<CourseSession>

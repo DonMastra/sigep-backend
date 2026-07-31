@@ -3,6 +3,7 @@ package com.sigep.students.presentation.controller
 import com.sigep.common.application.dto.ApiResponse
 import com.sigep.common.application.dto.PageResponse
 import com.sigep.common.application.exception.UnauthorizedException
+import com.sigep.common.application.exception.ForbiddenException
 import com.sigep.students.application.dto.CreateStudentRequest
 import com.sigep.students.application.dto.GuardianStudentRegistrationRequest
 import com.sigep.students.application.dto.StudentDto
@@ -40,16 +41,31 @@ class StudentController(
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(defaultValue = "10") limit: Int,
         @RequestParam(defaultValue = "id") sort: String,
-        @RequestParam(defaultValue = "ASC") order: String
+        @RequestParam(defaultValue = "ASC") order: String,
+        httpRequest: HttpServletRequest
     ): ResponseEntity<ApiResponse<PageResponse<StudentDto>>> {
-        val students = studentService.getAllStudents(page, limit, sort, order)
+        val actorUserId = httpRequest.getAttribute("userId") as? Long
+        val actorRole = httpRequest.getAttribute("userRole") as? String
+        val students = if (actorRole == "TEACHER") {
+            studentService.getStudentsForTeacher(requireActorUserId(actorUserId), page, limit, sort, order)
+        } else {
+            studentService.getAllStudents(page, limit, sort, order)
+        }
         return ResponseEntity.ok(ApiResponse.success(students))
     }
 
     @GetMapping("/{id}")
     @RequireStaffOrGuardian
     @Operation(summary = "Get student by ID", description = "Retrieve a specific student with full details and course history")
-    fun getStudentById(@PathVariable id: Long): ResponseEntity<ApiResponse<StudentDetailDto>> {
+    fun getStudentById(
+        @PathVariable id: Long,
+        httpRequest: HttpServletRequest
+    ): ResponseEntity<ApiResponse<StudentDetailDto>> {
+        studentService.assertCanAccessStudent(
+            id,
+            httpRequest.getAttribute("userId") as? Long,
+            httpRequest.getAttribute("userRole") as? String
+        )
         val student = studentService.getStudentDetailById(id)
         return ResponseEntity.ok(ApiResponse.success(student))
     }
@@ -60,9 +76,16 @@ class StudentController(
     fun searchStudents(
         @RequestParam query: String,
         @RequestParam(defaultValue = "0") page: Int,
-        @RequestParam(defaultValue = "10") limit: Int
+        @RequestParam(defaultValue = "10") limit: Int,
+        httpRequest: HttpServletRequest
     ): ResponseEntity<ApiResponse<PageResponse<StudentDto>>> {
-        val students = studentService.searchStudents(query, page, limit)
+        val actorUserId = httpRequest.getAttribute("userId") as? Long
+        val actorRole = httpRequest.getAttribute("userRole") as? String
+        val students = if (actorRole == "TEACHER") {
+            studentService.searchStudentsForTeacher(requireActorUserId(actorUserId), query, page, limit)
+        } else {
+            studentService.searchStudents(query, page, limit)
+        }
         return ResponseEntity.ok(ApiResponse.success(students))
     }
 
@@ -72,8 +95,17 @@ class StudentController(
     fun getStudentsByGuardian(
         @PathVariable guardianId: Long,
         @RequestParam(defaultValue = "0") page: Int,
-        @RequestParam(defaultValue = "10") limit: Int
+        @RequestParam(defaultValue = "10") limit: Int,
+        httpRequest: HttpServletRequest
     ): ResponseEntity<ApiResponse<PageResponse<StudentDto>>> {
+        val actorUserId = httpRequest.getAttribute("userId") as? Long
+        val actorRole = httpRequest.getAttribute("userRole") as? String
+        if (actorRole == "GUARDIAN" && actorUserId != guardianId) {
+            throw ForbiddenException("No puede consultar estudiantes de otro tutor")
+        }
+        if (actorRole == "TEACHER") {
+            throw ForbiddenException("Los docentes deben consultar sus estudiantes asignados")
+        }
         val students = studentService.getStudentsByGuardian(guardianId, page, limit)
         return ResponseEntity.ok(ApiResponse.success(students))
     }
@@ -129,7 +161,12 @@ class StudentController(
     @GetMapping("/{id}/photo")
     @RequireStaffOrGuardian
     @Operation(summary = "Get student profile photo", description = "Download student photo if available")
-    fun getStudentPhoto(@PathVariable id: Long): ResponseEntity<InputStreamResource> {
+    fun getStudentPhoto(@PathVariable id: Long, httpRequest: HttpServletRequest): ResponseEntity<InputStreamResource> {
+        studentService.assertCanAccessStudent(
+            id,
+            httpRequest.getAttribute("userId") as? Long,
+            httpRequest.getAttribute("userRole") as? String
+        )
         val photoFile = studentService.getStudentPhotoFile(id)
         val contentType = when (photoFile.extension.lowercase()) {
             "png" -> MediaType.IMAGE_PNG
@@ -153,7 +190,12 @@ class StudentController(
     @GetMapping("/{id}/courses")
     @RequireStaffOrGuardian
     @Operation(summary = "Get student courses", description = "Redirect to enrollment history endpoint")
-    fun getStudentCourses(@PathVariable id: Long): ResponseEntity<ApiResponse<Any>> {
+    fun getStudentCourses(@PathVariable id: Long, httpRequest: HttpServletRequest): ResponseEntity<ApiResponse<Any>> {
+        studentService.assertCanAccessStudent(
+            id,
+            httpRequest.getAttribute("userId") as? Long,
+            httpRequest.getAttribute("userRole") as? String
+        )
         // Esta funcionalidad se implementa a través de /api/v1/enrollments/student/{id}/history
         return ResponseEntity.ok(ApiResponse.success(
             mapOf("redirectTo" to "/api/v1/enrollments/student/$id/history"),
@@ -167,8 +209,16 @@ class StudentController(
         summary = "Get student payment status",
         description = "Retrieve payment status for a specific student. Currently returns mock data until payments module is implemented."
     )
-    fun getStudentPaymentStatus(@PathVariable id: Long): ResponseEntity<ApiResponse<com.sigep.students.application.dto.StudentPaymentStatusDto>> {
+    fun getStudentPaymentStatus(@PathVariable id: Long, httpRequest: HttpServletRequest): ResponseEntity<ApiResponse<com.sigep.students.application.dto.StudentPaymentStatusDto>> {
+        studentService.assertCanAccessStudent(
+            id,
+            httpRequest.getAttribute("userId") as? Long,
+            httpRequest.getAttribute("userRole") as? String
+        )
         val paymentStatus = studentService.getStudentPaymentStatus(id)
         return ResponseEntity.ok(ApiResponse.success(paymentStatus))
     }
+
+    private fun requireActorUserId(actorUserId: Long?): Long =
+        actorUserId ?: throw UnauthorizedException("Token invalido o sin userId")
 }

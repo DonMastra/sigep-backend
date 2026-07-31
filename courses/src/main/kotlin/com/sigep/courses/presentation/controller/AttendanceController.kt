@@ -63,9 +63,16 @@ class AttendanceController(
     fun getAttendanceByStudent(
         @PathVariable studentId: Long,
         @RequestParam(defaultValue = "0") page: Int,
-        @RequestParam(defaultValue = "10") limit: Int
+        @RequestParam(defaultValue = "10") limit: Int,
+        httpRequest: HttpServletRequest
     ): ResponseEntity<ApiResponse<PageResponse<AttendanceDto>>> {
-        val attendances = attendanceService.getAttendanceByStudent(studentId, page, limit)
+        val attendances = attendanceService.getAttendanceByStudent(
+            studentId,
+            page,
+            limit,
+            extractUserId(httpRequest),
+            httpRequest.getAttribute("userRole") as? String
+        )
         return ResponseEntity.ok(ApiResponse.success(attendances))
     }
 

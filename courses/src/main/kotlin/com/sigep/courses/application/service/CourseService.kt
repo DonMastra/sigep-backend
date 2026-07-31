@@ -17,7 +17,6 @@ import com.sigep.security.domain.repository.UserRepository
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.cache.annotation.CacheEvict
-import org.springframework.cache.annotation.Cacheable
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
@@ -38,19 +37,30 @@ class CourseService(
 
     private val logger = LoggerFactory.getLogger(CourseService::class.java)
 
-    @Cacheable(value = ["courses"], key = "#id")
-    fun getCourseById(id: Long): CourseDto {
+    fun getCourseById(id: Long, actorUserId: Long?, actorRole: String?): CourseDto {
         logger.info("Fetching course with id: {}", id)
         val course = courseRepository.findById(id)
             .orElseThrow { ResourceNotFoundException("Course not found with id: $id") }
+        validateCourseReadAccess(course, actorUserId, actorRole)
         return course.toDto()
     }
 
-    fun getAllCourses(page: Int, size: Int, sortBy: String, sortDirection: String): PageResponse<CourseDto> {
+    fun getAllCourses(
+        page: Int,
+        size: Int,
+        sortBy: String,
+        sortDirection: String,
+        actorUserId: Long?,
+        actorRole: String?
+    ): PageResponse<CourseDto> {
         logger.info("Fetching all courses - page: {}, size: {}", page, size)
         val direction = if (sortDirection.uppercase() == "DESC") Sort.Direction.DESC else Sort.Direction.ASC
         val pageable = PageRequest.of(page, size, Sort.by(direction, sortBy))
-        val coursesPage = courseRepository.findAll(pageable)
+        val coursesPage = when (actorRole) {
+            "TEACHER" -> courseRepository.findByTeacherId(requireActorUserId(actorUserId), pageable)
+            "GUARDIAN" -> courseRepository.findByIsPublishedTrue(pageable)
+            else -> courseRepository.findAll(pageable)
+        }
         val teacherNameCache = mutableMapOf<Long, String?>()
         return PageResponse(
             content = coursesPage.content.map { it.toDto(teacherNameCache) },
@@ -61,10 +71,14 @@ class CourseService(
         )
     }
 
-    fun searchCourses(search: String, page: Int, size: Int): PageResponse<CourseDto> {
+    fun searchCourses(search: String, page: Int, size: Int, actorUserId: Long?, actorRole: String?): PageResponse<CourseDto> {
         logger.info("Searching courses with query: {}", search)
         val pageable = PageRequest.of(page, size)
-        val coursesPage = courseRepository.searchCourses(search, pageable)
+        val coursesPage = when (actorRole) {
+            "TEACHER" -> courseRepository.searchCoursesForTeacher(search, requireActorUserId(actorUserId), pageable)
+            "GUARDIAN" -> courseRepository.searchPublishedCourses(search, pageable)
+            else -> courseRepository.searchCourses(search, pageable)
+        }
         val teacherNameCache = mutableMapOf<Long, String?>()
         return PageResponse(
             content = coursesPage.content.map { it.toDto(teacherNameCache) },
@@ -75,10 +89,23 @@ class CourseService(
         )
     }
 
-    fun getCoursesByTeacher(teacherId: Long, page: Int, size: Int): PageResponse<CourseDto> {
+    fun getCoursesByTeacher(
+        teacherId: Long,
+        page: Int,
+        size: Int,
+        actorUserId: Long?,
+        actorRole: String?
+    ): PageResponse<CourseDto> {
+        if (actorRole == "TEACHER" && actorUserId != teacherId) {
+            throw ForbiddenException("Teachers can only access their assigned courses")
+        }
         logger.info("Fetching courses for teacher: {}", teacherId)
         val pageable = PageRequest.of(page, size)
-        val coursesPage = courseRepository.findByTeacherId(teacherId, pageable)
+        val coursesPage = if (actorRole == "GUARDIAN") {
+            courseRepository.findByTeacherIdAndIsPublishedTrue(teacherId, pageable)
+        } else {
+            courseRepository.findByTeacherId(teacherId, pageable)
+        }
         val teacherNameCache = mutableMapOf<Long, String?>()
         return PageResponse(
             content = coursesPage.content.map { it.toDto(teacherNameCache) },
@@ -226,14 +253,20 @@ class CourseService(
         return savedEnrollment.toDto()
     }
 
-    fun filterCourses(filter: CourseFilterRequest, page: Int, size: Int): PageResponse<CourseDto> {
+    fun filterCourses(
+        filter: CourseFilterRequest,
+        page: Int,
+        size: Int,
+        actorUserId: Long?,
+        actorRole: String?
+    ): PageResponse<CourseDto> {
         logger.info("Filtering courses with filter: {}", filter)
         val pageable = PageRequest.of(page, size)
         val coursesPage = courseRepository.filterCourses(
             level = filter.level,
             status = filter.status,
-            teacherId = filter.teacherId,
-            isPublished = filter.isPublished,
+            teacherId = if (actorRole == "TEACHER") requireActorUserId(actorUserId) else filter.teacherId,
+            isPublished = if (actorRole == "GUARDIAN") true else filter.isPublished,
             minPrice = filter.minPrice,
             maxPrice = filter.maxPrice,
             pageable = pageable
@@ -427,6 +460,18 @@ class CourseService(
             updatedAt = updatedAt
         )
     }
+
+    private fun validateCourseReadAccess(course: Course, actorUserId: Long?, actorRole: String?) {
+        if (actorRole == "TEACHER" && actorUserId != course.teacherId) {
+            throw ForbiddenException("Teachers can only access their assigned courses")
+        }
+        if (actorRole == "GUARDIAN" && !course.isPublished) {
+            throw ForbiddenException("Guardians can only access published courses")
+        }
+    }
+
+    private fun requireActorUserId(actorUserId: Long?): Long =
+        actorUserId ?: throw ForbiddenException("Authenticated user id is required")
 
     private fun Course.toSimpleDto(): CourseSimpleDto {
         val enrolledCount = enrollmentRepository.countActiveEnrollmentsByCourse(id!!).toInt()

@@ -2,6 +2,7 @@ package com.sigep.scheduling.application.service
 
 import com.sigep.common.application.dto.PageResponse
 import com.sigep.common.application.exception.BusinessException
+import com.sigep.common.application.exception.ForbiddenException
 import com.sigep.common.application.exception.ResourceNotFoundException
 import com.sigep.common.application.exception.ResourceConflictException
 import com.sigep.common.application.exception.ReservationAlreadyAssignedException
@@ -41,18 +42,40 @@ class ReservationService(
         classroomId: Long?,
         dayOfWeek: SlotDayOfWeek?,
         startTimeFrom: String?,
-        endTimeTo: String?
+        endTimeTo: String?,
+        actorUserId: Long?,
+        actorRole: String?
     ): PageResponse<ReservationDto> {
         val pageable = PageRequest.of(page, size)
-        val result = reservationRepository.findByFilters(
-            status = status,
-            targetType = targetType,
-            classroomId = classroomId,
-            dayOfWeek = dayOfWeek,
-            startTimeFrom = startTimeFrom,
-            endTimeTo = endTimeTo,
-            pageable = pageable
-        )
+        val result = if (actorRole == "TEACHER") {
+            val teacherId = requireActorUserId(actorUserId)
+            val validator = targetValidator()
+            val courseIds = validator.getCourseIdsAssignedToTeacher(teacherId).ifEmpty { setOf(-1L) }
+            val sessionIds = validator.getSessionIdsAssignedToTeacher(teacherId).ifEmpty { setOf(-1L) }
+            reservationRepository.findByFiltersForTeacher(
+                status = status,
+                targetType = targetType,
+                classroomId = classroomId,
+                dayOfWeek = dayOfWeek,
+                startTimeFrom = startTimeFrom,
+                endTimeTo = endTimeTo,
+                courseTargetType = ReservationTargetType.COURSE,
+                sessionTargetType = ReservationTargetType.SESSION,
+                courseIds = courseIds,
+                sessionIds = sessionIds,
+                pageable = pageable
+            )
+        } else {
+            reservationRepository.findByFilters(
+                status = status,
+                targetType = targetType,
+                classroomId = classroomId,
+                dayOfWeek = dayOfWeek,
+                startTimeFrom = startTimeFrom,
+                endTimeTo = endTimeTo,
+                pageable = pageable
+            )
+        }
         return PageResponse(
             content = result.content.map { it.toDto() },
             page = result.number,
@@ -68,7 +91,9 @@ class ReservationService(
         classroomId: Long?,
         dayOfWeek: SlotDayOfWeek?,
         startTimeFrom: String?,
-        endTimeTo: String?
+        endTimeTo: String?,
+        actorUserId: Long?,
+        actorRole: String?
     ): PageResponse<ReservationDto> = getReservations(
         page = page,
         size = size,
@@ -77,13 +102,28 @@ class ReservationService(
         classroomId = classroomId,
         dayOfWeek = dayOfWeek,
         startTimeFrom = startTimeFrom,
-        endTimeTo = endTimeTo
+        endTimeTo = endTimeTo,
+        actorUserId = actorUserId,
+        actorRole = actorRole
     )
 
-    fun getReservationById(id: Long): ReservationDto =
-        reservationRepository.findById(id)
-            .map { it.toDto() }
+    fun getReservationById(id: Long, actorUserId: Long?, actorRole: String?): ReservationDto {
+        val reservation = reservationRepository.findById(id)
             .orElseThrow { ResourceNotFoundException("Reservation not found with id: $id") }
+        if (actorRole == "TEACHER") {
+            val teacherId = requireActorUserId(actorUserId)
+            val validator = targetValidator()
+            val allowed = when (reservation.targetType) {
+                ReservationTargetType.COURSE -> reservation.targetId in validator.getCourseIdsAssignedToTeacher(teacherId)
+                ReservationTargetType.SESSION -> reservation.targetId in validator.getSessionIdsAssignedToTeacher(teacherId)
+                ReservationTargetType.NONE -> false
+            }
+            if (!allowed) {
+                throw ForbiddenException("Teachers can only access reservations assigned to their courses")
+            }
+        }
+        return reservation.toDto()
+    }
 
     fun createReservation(request: CreateReservationRequest): ReservationDto {
         val slot = slotRepository.findById(request.slotId)
@@ -215,13 +255,7 @@ class ReservationService(
     }
 
     private fun validateAssignableTarget(targetType: ReservationTargetType, targetId: Long) {
-        val validator = schedulingTargetValidationProviderProvider.getIfAvailable()
-            ?: throw BusinessException(
-                message = "Target validation provider not available",
-                code = "INTEGRATION_PROVIDER_NOT_AVAILABLE",
-                field = "targetType",
-                details = "Courses module provider is required to validate COURSE/SESSION assignments"
-            )
+        val validator = targetValidator()
 
         when (targetType) {
             ReservationTargetType.COURSE -> {
@@ -241,6 +275,18 @@ class ReservationService(
             }
         }
     }
+
+    private fun targetValidator(): SchedulingTargetValidationProvider =
+        schedulingTargetValidationProviderProvider.getIfAvailable()
+            ?: throw BusinessException(
+                message = "Target validation provider not available",
+                code = "INTEGRATION_PROVIDER_NOT_AVAILABLE",
+                field = "targetType",
+                details = "Courses module provider is required to validate COURSE/SESSION assignments"
+            )
+
+    private fun requireActorUserId(actorUserId: Long?): Long =
+        actorUserId ?: throw ForbiddenException("Authenticated user id is required")
 
     private fun ensureCourseNotOperationalForUnassign(courseId: Long) {
         val validator = schedulingTargetValidationProviderProvider.getIfAvailable()

@@ -26,17 +26,18 @@ class CourseController(
         @RequestParam(required = false) limit: Int?,
         @RequestParam(required = false) size: Int?,
         @RequestParam(defaultValue = "id") sort: String,
-        @RequestParam(defaultValue = "ASC") order: String
+        @RequestParam(defaultValue = "ASC") order: String,
+        httpRequest: HttpServletRequest
     ): ResponseEntity<ApiResponse<PageResponse<CourseDto>>> {
         val pageSize = limit ?: size ?: 10
-        val courses = courseService.getAllCourses(page, pageSize, sort, order)
+        val courses = courseService.getAllCourses(page, pageSize, sort, order, actorUserId(httpRequest), actorRole(httpRequest))
         return ResponseEntity.ok(ApiResponse.success(courses))
     }
 
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER', 'GUARDIAN')")
-    fun getCourseById(@PathVariable id: Long): ResponseEntity<ApiResponse<CourseDto>> {
-        val course = courseService.getCourseById(id)
+    fun getCourseById(@PathVariable id: Long, httpRequest: HttpServletRequest): ResponseEntity<ApiResponse<CourseDto>> {
+        val course = courseService.getCourseById(id, actorUserId(httpRequest), actorRole(httpRequest))
         return ResponseEntity.ok(ApiResponse.success(course))
     }
 
@@ -46,10 +47,11 @@ class CourseController(
         @RequestParam query: String,
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(required = false) limit: Int?,
-        @RequestParam(required = false) size: Int?
+        @RequestParam(required = false) size: Int?,
+        httpRequest: HttpServletRequest
     ): ResponseEntity<ApiResponse<PageResponse<CourseDto>>> {
         val pageSize = limit ?: size ?: 10
-        val courses = courseService.searchCourses(query, page, pageSize)
+        val courses = courseService.searchCourses(query, page, pageSize, actorUserId(httpRequest), actorRole(httpRequest))
         return ResponseEntity.ok(ApiResponse.success(courses))
     }
 
@@ -59,10 +61,11 @@ class CourseController(
         @PathVariable teacherId: Long,
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(required = false) limit: Int?,
-        @RequestParam(required = false) size: Int?
+        @RequestParam(required = false) size: Int?,
+        httpRequest: HttpServletRequest
     ): ResponseEntity<ApiResponse<PageResponse<CourseDto>>> {
         val pageSize = limit ?: size ?: 10
-        val courses = courseService.getCoursesByTeacher(teacherId, page, pageSize)
+        val courses = courseService.getCoursesByTeacher(teacherId, page, pageSize, actorUserId(httpRequest), actorRole(httpRequest))
         return ResponseEntity.ok(ApiResponse.success(courses))
     }
 
@@ -114,10 +117,11 @@ class CourseController(
         @RequestBody filter: CourseFilterRequest,
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(required = false) limit: Int?,
-        @RequestParam(required = false) size: Int?
+        @RequestParam(required = false) size: Int?,
+        httpRequest: HttpServletRequest
     ): ResponseEntity<ApiResponse<PageResponse<CourseDto>>> {
         val pageSize = limit ?: size ?: 10
-        val courses = courseService.filterCourses(filter, page, pageSize)
+        val courses = courseService.filterCourses(filter, page, pageSize, actorUserId(httpRequest), actorRole(httpRequest))
         return ResponseEntity.ok(ApiResponse.success(courses))
     }
 
@@ -166,5 +170,9 @@ class CourseController(
         val course = courseService.deactivateCourse(id)
         return ResponseEntity.ok(ApiResponse.success(course, "Course deactivated successfully"))
     }
+
+    private fun actorUserId(request: HttpServletRequest): Long? = request.getAttribute("userId") as? Long
+
+    private fun actorRole(request: HttpServletRequest): String? = request.getAttribute("userRole") as? String
 }
 

@@ -30,18 +30,36 @@ class EnrollmentService(
 
     private val logger = LoggerFactory.getLogger(EnrollmentService::class.java)
 
-    fun getEnrollmentById(id: Long): EnrollmentDto {
+    fun getEnrollmentById(id: Long, actorUserId: Long?, actorRole: String?): EnrollmentDto {
         logger.info("Fetching enrollment with id: {}", id)
         val enrollment = enrollmentRepository.findById(id)
             .orElseThrow { ResourceNotFoundException("Enrollment not found with id: $id") }
+        assertCanReadEnrollment(enrollment, actorUserId, actorRole)
         return enrollment.toDto()
     }
 
-    fun getStudentEnrollments(studentId: Long, page: Int, size: Int): PageResponse<EnrollmentDto> {
+    fun getStudentEnrollments(
+        studentId: Long,
+        page: Int,
+        size: Int,
+        actorUserId: Long?,
+        actorRole: String?
+    ): PageResponse<EnrollmentDto> {
         logger.info("Fetching enrollments for student: {}", studentId)
 
         val pageable = PageRequest.of(page, size)
-        val enrollmentsPage = enrollmentRepository.findByStudentId(studentId, pageable)
+        val enrollmentsPage = when (actorRole) {
+            "TEACHER" -> enrollmentRepository.findByStudentIdAndCourseTeacherId(
+                studentId,
+                requireActorUserId(actorUserId),
+                pageable
+            )
+            "GUARDIAN" -> {
+                assertGuardianOwnsStudent(studentId, requireActorUserId(actorUserId))
+                enrollmentRepository.findByStudentId(studentId, pageable)
+            }
+            else -> enrollmentRepository.findByStudentId(studentId, pageable)
+        }
 
         return PageResponse(
             content = enrollmentsPage.content.map { it.toDto() },
@@ -52,11 +70,22 @@ class EnrollmentService(
         )
     }
 
-    fun getStudentEnrollmentHistory(studentId: Long): StudentEnrollmentHistoryDto {
+    fun getStudentEnrollmentHistory(studentId: Long, actorUserId: Long?, actorRole: String?): StudentEnrollmentHistoryDto {
         logger.info("Fetching enrollment history for student: {}", studentId)
 
         val pageable = PageRequest.of(0, 1000) // Get all enrollments
-        val enrollmentsPage = enrollmentRepository.findByStudentId(studentId, pageable)
+        val enrollmentsPage = when (actorRole) {
+            "TEACHER" -> enrollmentRepository.findByStudentIdAndCourseTeacherId(
+                studentId,
+                requireActorUserId(actorUserId),
+                pageable
+            )
+            "GUARDIAN" -> {
+                assertGuardianOwnsStudent(studentId, requireActorUserId(actorUserId))
+                enrollmentRepository.findByStudentId(studentId, pageable)
+            }
+            else -> enrollmentRepository.findByStudentId(studentId, pageable)
+        }
         val enrollments = enrollmentsPage.content.map { it.toDto() }
 
         return StudentEnrollmentHistoryDto(
@@ -68,8 +97,22 @@ class EnrollmentService(
         )
     }
 
-    fun getCourseEnrollments(courseId: Long, page: Int, size: Int): PageResponse<EnrollmentDto> {
+    fun getCourseEnrollments(
+        courseId: Long,
+        page: Int,
+        size: Int,
+        actorUserId: Long?,
+        actorRole: String?
+    ): PageResponse<EnrollmentDto> {
         logger.info("Fetching enrollments for course: {}", courseId)
+
+        if (actorRole == "TEACHER") {
+            val course = courseRepository.findById(courseId)
+                .orElseThrow { ResourceNotFoundException("Course not found with id: $courseId") }
+            if (course.teacherId != requireActorUserId(actorUserId)) {
+                throw ForbiddenException("Teachers can only access enrollments from their assigned courses")
+            }
+        }
 
         val pageable = PageRequest.of(page, size)
         val enrollmentsPage = enrollmentRepository.findByCourseId(courseId, pageable)
@@ -169,6 +212,26 @@ class EnrollmentService(
 
         return savedEnrollments.map { it.toDto() }
     }
+
+    private fun assertCanReadEnrollment(enrollment: Enrollment, actorUserId: Long?, actorRole: String?) {
+        when (actorRole) {
+            "ADMIN" -> return
+            "TEACHER" -> if (enrollment.course.teacherId != requireActorUserId(actorUserId)) {
+                throw ForbiddenException("Teachers can only access enrollments from their assigned courses")
+            }
+            "GUARDIAN" -> assertGuardianOwnsStudent(enrollment.studentId, requireActorUserId(actorUserId))
+            else -> throw ForbiddenException("User role cannot access enrollments")
+        }
+    }
+
+    private fun assertGuardianOwnsStudent(studentId: Long, guardianUserId: Long) {
+        if (studentProfileProvider.getStudentProfile(studentId)?.guardianId != guardianUserId) {
+            throw ForbiddenException("Guardians can only access enrollments for their own students")
+        }
+    }
+
+    private fun requireActorUserId(actorUserId: Long?): Long =
+        actorUserId ?: throw ForbiddenException("Authenticated user id is required")
 
     private fun Enrollment.toDto() = EnrollmentDto(
         id = id!!,

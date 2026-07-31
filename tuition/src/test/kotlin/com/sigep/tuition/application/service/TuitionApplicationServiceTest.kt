@@ -216,6 +216,29 @@ class TuitionApplicationServiceTest {
     }
 
     @Test
+    fun `gets one application directly with its ledger detail`() {
+        val application = application(status = TuitionApplicationStatus.PAYMENT_PENDING)
+        val ledger = TuitionLedgerEntry(
+            id = 55L,
+            application = application,
+            concept = TuitionLedgerConcept.TUITION_ENROLLMENT,
+            grossAmount = BigDecimal("10000.00"),
+            netAmount = BigDecimal("10000.00"),
+            dueDate = LocalDate.now(),
+            status = TuitionLedgerStatus.PENDING
+        )
+        every { applicationRepository.findById(123L) } returns Optional.of(application)
+        every { seatReservationRepository.findByApplicationId(123L) } returns Optional.empty()
+        every { ledgerEntryRepository.findByApplicationId(123L) } returns listOf(ledger)
+
+        val response = service.getApplicationDetail(123L)
+
+        assertEquals(123L, response.id)
+        assertEquals(TuitionApplicationStatus.PAYMENT_PENDING, response.status)
+        assertEquals(TuitionLedgerStatus.PENDING, response.ledgerEntries.single().status)
+    }
+
+    @Test
     fun `approve application creates student enrollment confirms reservation and monthly ledger`() {
         val application = application(status = TuitionApplicationStatus.READY_FOR_ADMIN_APPROVAL, studentId = null)
         val reservation = TuitionSeatReservation(
