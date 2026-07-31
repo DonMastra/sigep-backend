@@ -84,6 +84,12 @@ class TuitionApplicationController(
         return ResponseEntity.ok(ApiResponse.success(tuitionApplicationService.listApplications(status, academicYearId, page, limit)))
     }
 
+    @GetMapping("/applications/{id}")
+    @RequireAdmin
+    @Operation(summary = "Get tuition application", description = "Returns one tuition application with its reservation and ledger")
+    fun getApplication(@PathVariable id: Long): ResponseEntity<ApiResponse<TuitionApplicationDto>> =
+        ResponseEntity.ok(ApiResponse.success(tuitionApplicationService.getApplicationDetail(id)))
+
     @PutMapping("/applications/{id}/approve")
     @RequireAdmin
     @Operation(summary = "Approve tuition application", description = "Confirms seat, activates guardian if needed, creates student and enrollment, and generates monthly mock ledger")

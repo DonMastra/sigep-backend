@@ -146,6 +146,12 @@ class TuitionApplicationService(
         return applicationRepository.findByFilters(status, academicYearId, pageable).toPageResponse { it.toDto() }
     }
 
+    @Transactional(readOnly = true)
+    fun getApplicationDetail(applicationId: Long): TuitionApplicationDto =
+        applicationRepository.findById(applicationId)
+            .orElseThrow { ResourceNotFoundException("Tuition application not found with id: $applicationId") }
+            .toDto()
+
     fun reserveSeat(applicationId: Long, guardianUserId: Long): TuitionApplicationDto {
         val application = getOwnedApplication(applicationId, guardianUserId)
         if (application.status !in setOf(TuitionApplicationStatus.SUBMITTED, TuitionApplicationStatus.SEAT_RESERVED, TuitionApplicationStatus.PAYMENT_PENDING)) {

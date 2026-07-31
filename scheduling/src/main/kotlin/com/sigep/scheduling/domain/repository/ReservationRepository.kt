@@ -58,4 +58,33 @@ interface ReservationRepository : JpaRepository<Reservation, Long> {
         @Param("endTimeTo") endTimeTo: String?,
         pageable: Pageable
     ): Page<Reservation>
+
+    @Query(
+        """
+        SELECT r FROM Reservation r
+        JOIN r.slot s
+        JOIN s.classroom c
+        WHERE (:status IS NULL OR r.status = :status)
+          AND (:targetType IS NULL OR r.targetType = :targetType)
+          AND (:classroomId IS NULL OR c.id = :classroomId)
+          AND (:dayOfWeek IS NULL OR s.dayOfWeek = :dayOfWeek)
+          AND (:startTimeFrom IS NULL OR s.startTime >= :startTimeFrom)
+          AND (:endTimeTo IS NULL OR s.endTime <= :endTimeTo)
+          AND ((r.targetType = :courseTargetType AND r.targetId IN :courseIds)
+            OR (r.targetType = :sessionTargetType AND r.targetId IN :sessionIds))
+    """
+    )
+    fun findByFiltersForTeacher(
+        @Param("status") status: ReservationStatus?,
+        @Param("targetType") targetType: ReservationTargetType?,
+        @Param("classroomId") classroomId: Long?,
+        @Param("dayOfWeek") dayOfWeek: SlotDayOfWeek?,
+        @Param("startTimeFrom") startTimeFrom: String?,
+        @Param("endTimeTo") endTimeTo: String?,
+        @Param("courseTargetType") courseTargetType: ReservationTargetType,
+        @Param("sessionTargetType") sessionTargetType: ReservationTargetType,
+        @Param("courseIds") courseIds: Collection<Long>,
+        @Param("sessionIds") sessionIds: Collection<Long>,
+        pageable: Pageable
+    ): Page<Reservation>
 }

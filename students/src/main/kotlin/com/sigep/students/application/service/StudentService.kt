@@ -72,6 +72,30 @@ class StudentService(
         )
     }
 
+    fun getStudentsForTeacher(
+        teacherUserId: Long,
+        page: Int,
+        size: Int,
+        sortBy: String,
+        sortDirection: String
+    ): PageResponse<StudentDto> {
+        val studentIds = enrollmentServiceProvider.getActiveStudentIdsByTeacher(teacherUserId)
+        if (studentIds.isEmpty()) {
+            return PageResponse(emptyList(), page, size, 0, 0)
+        }
+
+        val direction = if (sortDirection.uppercase() == "DESC") Sort.Direction.DESC else Sort.Direction.ASC
+        val pageable = PageRequest.of(page, size, Sort.by(direction, sortBy))
+        val studentsPage = studentRepository.findByIdIn(studentIds, pageable)
+        return PageResponse(
+            content = studentsPage.content.map { it.toDto() },
+            page = studentsPage.number,
+            size = studentsPage.size,
+            totalElements = studentsPage.totalElements,
+            totalPages = studentsPage.totalPages
+        )
+    }
+
     fun searchStudents(search: String, page: Int, size: Int): PageResponse<StudentDto> {
         logger.info("Searching students with query: {}", search)
 
@@ -85,6 +109,42 @@ class StudentService(
             totalElements = studentsPage.totalElements,
             totalPages = studentsPage.totalPages
         )
+    }
+
+    fun searchStudentsForTeacher(teacherUserId: Long, search: String, page: Int, size: Int): PageResponse<StudentDto> {
+        val studentIds = enrollmentServiceProvider.getActiveStudentIdsByTeacher(teacherUserId)
+        if (studentIds.isEmpty()) {
+            return PageResponse(emptyList(), page, size, 0, 0)
+        }
+
+        val pageable = PageRequest.of(page, size)
+        val studentsPage = studentRepository.searchStudentsByIds(search, studentIds, pageable)
+        return PageResponse(
+            content = studentsPage.content.map { it.toDto() },
+            page = studentsPage.number,
+            size = studentsPage.size,
+            totalElements = studentsPage.totalElements,
+            totalPages = studentsPage.totalPages
+        )
+    }
+
+    fun assertCanAccessStudent(studentId: Long, actorUserId: Long?, actorRole: String?) {
+        when (actorRole) {
+            UserRole.ADMIN.name -> return
+            UserRole.TEACHER.name -> {
+                if (actorUserId == null || !enrollmentServiceProvider.teacherCanAccessStudent(actorUserId, studentId)) {
+                    throw ForbiddenException("Teachers can only access students enrolled in their assigned courses")
+                }
+            }
+            UserRole.GUARDIAN.name -> {
+                val student = studentRepository.findById(studentId)
+                    .orElseThrow { ResourceNotFoundException("Student not found with id: $studentId") }
+                if (actorUserId == null || student.guardianId != actorUserId) {
+                    throw ForbiddenException("Guardians can only access their own students")
+                }
+            }
+            else -> throw ForbiddenException("User role cannot access students")
+        }
     }
 
     @CacheEvict(value = ["students", "students_detail"], allEntries = true)

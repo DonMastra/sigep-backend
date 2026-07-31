@@ -14,12 +14,15 @@ class TeacherInfoProviderImpl(
             return emptyMap()
         }
 
-        return teachingStaffRepository.findAllByIdInAndIsActiveTrue(teacherIds)
-            .associate { staff -> staff.id!! to staff.fullName }
+        return teachingStaffRepository.findAllByLinkedUserIdInAndIsActiveTrue(teacherIds)
+            .mapNotNull { staff -> staff.linkedUserId?.let { it to staff.fullName } }
+            .toMap()
     }
 
     override fun getTeacherNameById(teacherId: Long): String? {
-        return teachingStaffRepository.findByIdAndIsActiveTrue(teacherId)?.fullName
+        return teachingStaffRepository.findByLinkedUserId(teacherId)
+            ?.takeIf { it.isActive }
+            ?.fullName
     }
 }
 
