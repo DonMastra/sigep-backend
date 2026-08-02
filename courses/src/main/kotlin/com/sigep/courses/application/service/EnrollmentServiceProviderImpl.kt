@@ -81,5 +81,11 @@ class EnrollmentServiceProviderImpl(
             )
         }
     }
+
+    override fun getActiveStudentIdsByTeacher(teacherUserId: Long): Set<Long> =
+        enrollmentRepository.findActiveStudentIdsByTeacher(teacherUserId)
+
+    override fun teacherCanAccessStudent(teacherUserId: Long, studentId: Long): Boolean =
+        enrollmentRepository.existsActiveByStudentIdAndTeacherId(studentId, teacherUserId)
 }
 

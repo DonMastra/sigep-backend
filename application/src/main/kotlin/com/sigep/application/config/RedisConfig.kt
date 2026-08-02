@@ -148,7 +148,10 @@ class CacheManagementService(
     /**
      * Limpia el cache automáticamente cada 12 horas para evitar datos obsoletos
      */
-    @Scheduled(fixedRate = 43200000) // 12 horas en milisegundos
+    @Scheduled(
+        fixedRate = 43200000,
+        initialDelay = 43200000
+    ) // 12 horas en milisegundos
     fun scheduledCacheClear() {
         logger.info("Scheduled cache clear started")
         clearAllCache()

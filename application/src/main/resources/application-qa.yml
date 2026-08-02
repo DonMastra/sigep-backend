@@ -17,6 +17,7 @@ spring:
       max-lifetime: 1200000
 
   jpa:
+    open-in-view: false
     hibernate:
       # QA keeps schema bootstrap tolerant until the existing SQL migrations are complete.
       ddl-auto: ${JPA_DDL_AUTO:update}
@@ -33,6 +34,8 @@ spring:
 
   data:
     redis:
+      repositories:
+        enabled: false
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
@@ -48,7 +51,7 @@ jwt:
 
 app:
   cors:
-    allowed-origins: ${CORS_ALLOWED_ORIGINS:https://sigep-qa.vercel.app}
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:https://sigep.com.ar,https://www.sigep.com.ar,https://sigep-qa.vercel.app}
     allowed-origin-patterns: ${CORS_ALLOWED_ORIGIN_PATTERNS:https://*.vercel.app}
   security:
     rate-limit:
@@ -110,4 +113,5 @@ billing:
     connect-timeout: ${BILLING_MOCK_SERVICE_CONNECT_TIMEOUT:2s}
     request-timeout: ${BILLING_MOCK_SERVICE_REQUEST_TIMEOUT:5s}
   outbox:
+    enabled: ${BILLING_OUTBOX_ENABLED:false}
     poll-delay-ms: ${BILLING_OUTBOX_POLL_DELAY_MS:1000}

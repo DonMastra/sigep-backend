@@ -16,6 +16,7 @@ interface StudentRepository : JpaRepository<Student, Long> {
     fun existsByDocumentNumber(documentNumber: String): Boolean
     fun findByActive(active: Boolean, pageable: Pageable): Page<Student>
     fun findByGuardianId(guardianId: Long, pageable: Pageable): Page<Student>
+    fun findByIdIn(ids: Collection<Long>, pageable: Pageable): Page<Student>
 
     @Query("""
         SELECT s FROM Student s WHERE 
@@ -25,5 +26,18 @@ interface StudentRepository : JpaRepository<Student, Long> {
         LOWER(s.documentNumber) LIKE LOWER(CONCAT('%', :search, '%'))
     """)
     fun searchStudents(@Param("search") search: String, pageable: Pageable): Page<Student>
+
+    @Query("""
+        SELECT s FROM Student s WHERE s.id IN :studentIds AND (
+        LOWER(s.firstName) LIKE LOWER(CONCAT('%', :search, '%')) OR
+        LOWER(s.lastName) LIKE LOWER(CONCAT('%', :search, '%')) OR
+        LOWER(s.email) LIKE LOWER(CONCAT('%', :search, '%')) OR
+        LOWER(s.documentNumber) LIKE LOWER(CONCAT('%', :search, '%')))
+    """)
+    fun searchStudentsByIds(
+        @Param("search") search: String,
+        @Param("studentIds") studentIds: Collection<Long>,
+        pageable: Pageable
+    ): Page<Student>
 }
 

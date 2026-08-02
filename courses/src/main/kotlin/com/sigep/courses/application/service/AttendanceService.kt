@@ -1,6 +1,7 @@
 package com.sigep.courses.application.service
 
 import com.sigep.common.application.dto.PageResponse
+import com.sigep.common.application.exception.ForbiddenException
 import com.sigep.common.application.service.StudentProfileProvider
 import com.sigep.common.domain.exception.BusinessException
 import com.sigep.common.domain.exception.ResourceNotFoundException
@@ -72,8 +73,25 @@ class AttendanceService(
         )
     }
 
-    fun getAttendanceByStudent(studentId: Long, page: Int, size: Int): PageResponse<AttendanceDto> {
+    fun getAttendanceByStudent(
+        studentId: Long,
+        page: Int,
+        size: Int,
+        actorUserId: Long,
+        actorRole: String?
+    ): PageResponse<AttendanceDto> {
         logger.info("Fetching attendance for student: {}", studentId)
+
+        when (actorRole) {
+            "ADMIN" -> Unit
+            "TEACHER" -> if (!enrollmentRepository.existsActiveByStudentIdAndTeacherId(studentId, actorUserId)) {
+                throw ForbiddenException("Teachers can only read attendance for students in their active courses")
+            }
+            "GUARDIAN" -> if (!studentProfileProvider.validateGuardianOwnsStudent(actorUserId, studentId)) {
+                throw ForbiddenException("Guardians can only read attendance for their own students")
+            }
+            else -> throw ForbiddenException("Attendance access is not allowed for this role")
+        }
 
         val pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "attendanceDate"))
         val attendancePage = attendanceRepository.findByStudentId(studentId, pageable)

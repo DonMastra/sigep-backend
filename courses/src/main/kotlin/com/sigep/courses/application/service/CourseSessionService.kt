@@ -1,6 +1,8 @@
 package com.sigep.courses.application.service
 
 import com.sigep.common.application.dto.PageResponse
+import com.sigep.common.application.exception.ForbiddenException
+import com.sigep.common.application.service.TeacherInfoProvider
 import com.sigep.common.domain.exception.BusinessException
 import com.sigep.common.domain.exception.ResourceNotFoundException
 import com.sigep.courses.application.dto.*
@@ -22,14 +24,19 @@ class CourseSessionService(
     private val sessionExceptionRepository: SessionExceptionRepository,
     private val courseRepository: CourseRepository,
     private val enrollmentRepository: EnrollmentRepository,
-    private val attendanceRepository: AttendanceRepository
+    private val attendanceRepository: AttendanceRepository,
+    private val teacherInfoProvider: TeacherInfoProvider
 ) {
 
     private val logger = LoggerFactory.getLogger(CourseSessionService::class.java)
 
-    fun getAllSessions(page: Int, size: Int): PageResponse<CourseSessionDto> {
+    fun getAllSessions(page: Int, size: Int, actorUserId: Long?, actorRole: String?): PageResponse<CourseSessionDto> {
         val pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "sessionDate", "startTime"))
-        val sessions = sessionRepository.findAll(pageable)
+        val sessions = if (actorRole == "TEACHER") {
+            sessionRepository.findByCourseTeacherId(requireActorUserId(actorUserId), pageable)
+        } else {
+            sessionRepository.findAll(pageable)
+        }
         return PageResponse(
             content = sessions.content.map { it.toDto() },
             page = sessions.number,
@@ -39,16 +46,20 @@ class CourseSessionService(
         )
     }
 
-    fun getSessionById(id: Long): CourseSessionDto {
+    fun getSessionById(id: Long, actorUserId: Long?, actorRole: String?): CourseSessionDto {
         logger.info("Fetching session with id: {}", id)
         val session = sessionRepository.findById(id)
             .orElseThrow { ResourceNotFoundException("Session not found with id: $id") }
+        validateTeacherAccess(session.course.teacherId, actorUserId, actorRole)
         return session.toDto()
     }
 
-    fun getSessionsByCourse(courseId: Long, page: Int, size: Int): PageResponse<CourseSessionDto> {
+    fun getSessionsByCourse(courseId: Long, page: Int, size: Int, actorUserId: Long?, actorRole: String?): PageResponse<CourseSessionDto> {
         logger.info("Fetching sessions for course: {}", courseId)
 
+        val course = courseRepository.findById(courseId)
+            .orElseThrow { ResourceNotFoundException("Course not found with id: $courseId") }
+        validateTeacherAccess(course.teacherId, actorUserId, actorRole)
         val pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "sessionDate", "startTime"))
         val sessionsPage = sessionRepository.findByCourseId(courseId, pageable)
 
@@ -61,17 +72,27 @@ class CourseSessionService(
         )
     }
 
-    fun getSessionsByDateRange(courseId: Long, startDate: LocalDate, endDate: LocalDate): List<CourseSessionDto> {
+    fun getSessionsByDateRange(
+        courseId: Long,
+        startDate: LocalDate,
+        endDate: LocalDate,
+        actorUserId: Long?,
+        actorRole: String?
+    ): List<CourseSessionDto> {
         logger.info("Fetching sessions for course {} between {} and {}", courseId, startDate, endDate)
+        val course = courseRepository.findById(courseId)
+            .orElseThrow { ResourceNotFoundException("Course not found with id: $courseId") }
+        validateTeacherAccess(course.teacherId, actorUserId, actorRole)
         val sessions = sessionRepository.findByCourseIdAndSessionDateBetween(courseId, startDate, endDate)
         return sessions.map { it.toDto() }
     }
 
-    fun createSession(request: CreateSessionRequest): CourseSessionDto {
+    fun createSession(request: CreateSessionRequest, actorUserId: Long?, actorRole: String?): CourseSessionDto {
         logger.info("Creating session for course: {}", request.courseId)
 
         val course = courseRepository.findById(request.courseId)
             .orElseThrow { ResourceNotFoundException("Course not found with id: ${request.courseId}") }
+        validateTeacherAccess(course.teacherId, actorUserId, actorRole)
 
         // Validate time range
         if (request.endTime.isBefore(request.startTime) || request.endTime == request.startTime) {
@@ -110,11 +131,16 @@ class CourseSessionService(
         return savedSession.toDto()
     }
 
-    fun generateRecurringSessions(request: GenerateRecurringSessionsRequest): List<CourseSessionDto> {
+    fun generateRecurringSessions(
+        request: GenerateRecurringSessionsRequest,
+        actorUserId: Long?,
+        actorRole: String?
+    ): List<CourseSessionDto> {
         logger.info("Generating recurring sessions for course: {}", request.courseId)
 
         val course = courseRepository.findById(request.courseId)
             .orElseThrow { ResourceNotFoundException("Course not found with id: ${request.courseId}") }
+        validateTeacherAccess(course.teacherId, actorUserId, actorRole)
 
         if (request.endDate.isBefore(request.startDate)) {
             throw BusinessException("End date must be after start date")
@@ -167,11 +193,12 @@ class CourseSessionService(
         return savedSessions.map { it.toDto() }
     }
 
-    fun updateSession(id: Long, request: UpdateSessionRequest): CourseSessionDto {
+    fun updateSession(id: Long, request: UpdateSessionRequest, actorUserId: Long?, actorRole: String?): CourseSessionDto {
         logger.info("Updating session with id: {}", id)
 
         val session = sessionRepository.findById(id)
             .orElseThrow { ResourceNotFoundException("Session not found with id: $id") }
+        validateTeacherAccess(session.course.teacherId, actorUserId, actorRole)
 
         val newDate = request.sessionDate ?: session.sessionDate
         val newStartTime = request.startTime ?: session.startTime
@@ -232,11 +259,16 @@ class CourseSessionService(
         logger.info("Session deleted successfully with id: {}", id)
     }
 
-    fun createException(request: CreateSessionExceptionRequest): SessionExceptionDto {
+    fun createException(
+        request: CreateSessionExceptionRequest,
+        actorUserId: Long?,
+        actorRole: String?
+    ): SessionExceptionDto {
         logger.info("Creating exception for session: {}", request.sessionId)
 
         val session = sessionRepository.findById(request.sessionId)
             .orElseThrow { ResourceNotFoundException("Session not found with id: ${request.sessionId}") }
+        validateTeacherAccess(session.course.teacherId, actorUserId, actorRole)
 
         // Check if exception already exists for this date
         val existing = sessionExceptionRepository.findBySessionIdAndExceptionDate(request.sessionId, request.exceptionDate)
@@ -302,16 +334,27 @@ class CourseSessionService(
         }
     }
 
-    fun checkConflictsForRequest(request: ConflictCheckRequest): ConflictDto {
+    fun checkConflictsForRequest(
+        request: ConflictCheckRequest,
+        actorUserId: Long?,
+        actorRole: String?
+    ): ConflictDto {
         logger.info("Checking conflicts for request")
+
+        if (actorRole == "TEACHER" && request.teacherId != null && request.teacherId != actorUserId) {
+            throw ForbiddenException("Teachers can only check conflicts for their own schedule")
+        }
+        val effectiveRequest = if (actorRole == "TEACHER") {
+            request.copy(teacherId = requireActorUserId(actorUserId))
+        } else request
 
         val conflicts = mutableListOf<CourseSession>()
         var conflictType = ""
 
         // Check teacher conflicts
-        if (request.teacherId != null) {
+        if (effectiveRequest.teacherId != null) {
             val teacherConflicts = sessionRepository.findTeacherConflicts(
-                request.teacherId, request.date, request.startTime, request.endTime
+                effectiveRequest.teacherId, effectiveRequest.date, effectiveRequest.startTime, effectiveRequest.endTime
             )
             if (teacherConflicts.isNotEmpty()) {
                 conflicts.addAll(teacherConflicts)
@@ -320,9 +363,9 @@ class CourseSessionService(
         }
 
         // Check classroom conflicts
-        if (request.classroomId != null) {
+        if (effectiveRequest.classroomId != null) {
             val classroomConflicts = sessionRepository.findClassroomConflicts(
-                request.classroomId, request.date, request.startTime, request.endTime
+                effectiveRequest.classroomId, effectiveRequest.date, effectiveRequest.startTime, effectiveRequest.endTime
             )
             if (classroomConflicts.isNotEmpty()) {
                 conflicts.addAll(classroomConflicts)
@@ -331,9 +374,9 @@ class CourseSessionService(
         }
 
         // Check student conflicts
-        if (request.studentId != null) {
+        if (effectiveRequest.studentId != null) {
             val studentConflicts = sessionRepository.findStudentConflicts(
-                request.studentId, request.date, request.startTime, request.endTime
+                effectiveRequest.studentId, effectiveRequest.date, effectiveRequest.startTime, effectiveRequest.endTime
             )
             if (studentConflicts.isNotEmpty()) {
                 conflicts.addAll(studentConflicts)
@@ -356,11 +399,12 @@ class CourseSessionService(
         )
     }
 
-    fun getSessionAttendanceSummary(sessionId: Long): SessionAttendanceSummaryDto {
+    fun getSessionAttendanceSummary(sessionId: Long, actorUserId: Long?, actorRole: String?): SessionAttendanceSummaryDto {
         logger.info("Getting attendance summary for session: {}", sessionId)
 
         val session = sessionRepository.findById(sessionId)
             .orElseThrow { ResourceNotFoundException("Session not found with id: $sessionId") }
+        validateTeacherAccess(session.course.teacherId, actorUserId, actorRole)
 
         val attendances = attendanceRepository.findByCourseSessionId(sessionId)
         val totalEnrolled = enrollmentRepository.countActiveEnrollmentsByCourse(session.course.id!!).toInt()
@@ -385,11 +429,24 @@ class CourseSessionService(
         )
     }
 
-    fun getCalendar(courseId: Long?, startDate: LocalDate, endDate: LocalDate): List<SessionCalendarDto> {
+    fun getCalendar(
+        courseId: Long?,
+        startDate: LocalDate,
+        endDate: LocalDate,
+        actorUserId: Long?,
+        actorRole: String?
+    ): List<SessionCalendarDto> {
         logger.info("Getting calendar from {} to {}", startDate, endDate)
 
         val sessions = if (courseId != null) {
+            val course = courseRepository.findById(courseId)
+                .orElseThrow { ResourceNotFoundException("Course not found with id: $courseId") }
+            validateTeacherAccess(course.teacherId, actorUserId, actorRole)
             sessionRepository.findByCourseIdAndSessionDateBetween(courseId, startDate, endDate)
+        } else if (actorRole == "TEACHER") {
+            sessionRepository.findByCourseTeacherIdAndSessionDateBetween(
+                requireActorUserId(actorUserId), startDate, endDate
+            )
         } else {
             sessionRepository.findAll().filter {
                 !it.sessionDate.isBefore(startDate) && !it.sessionDate.isAfter(endDate)
@@ -420,6 +477,8 @@ class CourseSessionService(
             id = id!!,
             courseId = course.id,
             courseName = course.name,
+            teacherId = course.teacherId,
+            teacherName = course.teacherId?.let(teacherInfoProvider::getTeacherNameById),
             sessionDate = sessionDate,
             startTime = startTime,
             endTime = endTime,
@@ -436,6 +495,15 @@ class CourseSessionService(
             updatedAt = updatedAt
         )
     }
+
+    private fun validateTeacherAccess(courseTeacherId: Long?, actorUserId: Long?, actorRole: String?) {
+        if (actorRole == "TEACHER" && actorUserId != courseTeacherId) {
+            throw ForbiddenException("Teachers can only access sessions from their assigned courses")
+        }
+    }
+
+    private fun requireActorUserId(actorUserId: Long?): Long =
+        actorUserId ?: throw ForbiddenException("Authenticated user id is required")
 
     private fun SessionException.toDto() = SessionExceptionDto(
         id = id!!,

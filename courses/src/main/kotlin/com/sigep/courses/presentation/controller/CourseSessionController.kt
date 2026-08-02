@@ -8,6 +8,7 @@ import com.sigep.security.application.annotation.RequireAdmin
 import com.sigep.security.application.annotation.RequireAdminOrTeacher
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
+import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
 import org.springframework.format.annotation.DateTimeFormat
 import org.springframework.http.HttpStatus
@@ -27,15 +28,16 @@ class CourseSessionController(
     @Operation(summary = "Get all sessions")
     fun getAllSessions(
         @RequestParam(defaultValue = "0") page: Int,
-        @RequestParam(defaultValue = "20") limit: Int
+        @RequestParam(defaultValue = "20") limit: Int,
+        httpRequest: HttpServletRequest
     ): ResponseEntity<ApiResponse<PageResponse<CourseSessionDto>>> =
-        ResponseEntity.ok(ApiResponse.success(sessionService.getAllSessions(page, limit)))
+        ResponseEntity.ok(ApiResponse.success(sessionService.getAllSessions(page, limit, actorUserId(httpRequest), actorRole(httpRequest))))
 
     @GetMapping("/{id}")
     @RequireAdminOrTeacher
     @Operation(summary = "Get session by ID")
-    fun getSessionById(@PathVariable id: Long): ResponseEntity<ApiResponse<CourseSessionDto>> {
-        val session = sessionService.getSessionById(id)
+    fun getSessionById(@PathVariable id: Long, httpRequest: HttpServletRequest): ResponseEntity<ApiResponse<CourseSessionDto>> {
+        val session = sessionService.getSessionById(id, actorUserId(httpRequest), actorRole(httpRequest))
         return ResponseEntity.ok(ApiResponse.success(session))
     }
 
@@ -45,9 +47,10 @@ class CourseSessionController(
     fun getSessionsByCourse(
         @PathVariable courseId: Long,
         @RequestParam(defaultValue = "0") page: Int,
-        @RequestParam(defaultValue = "10") limit: Int
+        @RequestParam(defaultValue = "10") limit: Int,
+        httpRequest: HttpServletRequest
     ): ResponseEntity<ApiResponse<PageResponse<CourseSessionDto>>> {
-        val sessions = sessionService.getSessionsByCourse(courseId, page, limit)
+        val sessions = sessionService.getSessionsByCourse(courseId, page, limit, actorUserId(httpRequest), actorRole(httpRequest))
         return ResponseEntity.ok(ApiResponse.success(sessions))
     }
 
@@ -57,17 +60,18 @@ class CourseSessionController(
     fun getSessionsByDateRange(
         @PathVariable courseId: Long,
         @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) startDate: LocalDate,
-        @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) endDate: LocalDate
+        @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) endDate: LocalDate,
+        httpRequest: HttpServletRequest
     ): ResponseEntity<ApiResponse<List<CourseSessionDto>>> {
-        val sessions = sessionService.getSessionsByDateRange(courseId, startDate, endDate)
+        val sessions = sessionService.getSessionsByDateRange(courseId, startDate, endDate, actorUserId(httpRequest), actorRole(httpRequest))
         return ResponseEntity.ok(ApiResponse.success(sessions))
     }
 
     @PostMapping
     @RequireAdminOrTeacher
     @Operation(summary = "Create a session")
-    fun createSession(@Valid @RequestBody request: CreateSessionRequest): ResponseEntity<ApiResponse<CourseSessionDto>> {
-        val session = sessionService.createSession(request)
+    fun createSession(@Valid @RequestBody request: CreateSessionRequest, httpRequest: HttpServletRequest): ResponseEntity<ApiResponse<CourseSessionDto>> {
+        val session = sessionService.createSession(request, actorUserId(httpRequest), actorRole(httpRequest))
         return ResponseEntity
             .status(HttpStatus.CREATED)
             .body(ApiResponse.success(session, "Session created successfully"))
@@ -77,9 +81,10 @@ class CourseSessionController(
     @RequireAdminOrTeacher
     @Operation(summary = "Generate recurring sessions")
     fun generateRecurringSessions(
-        @Valid @RequestBody request: GenerateRecurringSessionsRequest
+        @Valid @RequestBody request: GenerateRecurringSessionsRequest,
+        httpRequest: HttpServletRequest
     ): ResponseEntity<ApiResponse<List<CourseSessionDto>>> {
-        val sessions = sessionService.generateRecurringSessions(request)
+        val sessions = sessionService.generateRecurringSessions(request, actorUserId(httpRequest), actorRole(httpRequest))
         return ResponseEntity
             .status(HttpStatus.CREATED)
             .body(ApiResponse.success(sessions, "${sessions.size} sessions generated successfully"))
@@ -90,9 +95,10 @@ class CourseSessionController(
     @Operation(summary = "Update session")
     fun updateSession(
         @PathVariable id: Long,
-        @Valid @RequestBody request: UpdateSessionRequest
+        @Valid @RequestBody request: UpdateSessionRequest,
+        httpRequest: HttpServletRequest
     ): ResponseEntity<ApiResponse<CourseSessionDto>> {
-        val session = sessionService.updateSession(id, request)
+        val session = sessionService.updateSession(id, request, actorUserId(httpRequest), actorRole(httpRequest))
         return ResponseEntity.ok(ApiResponse.success(session, "Session updated successfully"))
     }
 
@@ -108,9 +114,10 @@ class CourseSessionController(
     @RequireAdminOrTeacher
     @Operation(summary = "Create session exception")
     fun createException(
-        @Valid @RequestBody request: CreateSessionExceptionRequest
+        @Valid @RequestBody request: CreateSessionExceptionRequest,
+        httpRequest: HttpServletRequest
     ): ResponseEntity<ApiResponse<SessionExceptionDto>> {
-        val exception = sessionService.createException(request)
+        val exception = sessionService.createException(request, actorUserId(httpRequest), actorRole(httpRequest))
         return ResponseEntity
             .status(HttpStatus.CREATED)
             .body(ApiResponse.success(exception, "Exception created successfully"))
@@ -119,16 +126,16 @@ class CourseSessionController(
     @PostMapping("/check-conflicts")
     @RequireAdminOrTeacher
     @Operation(summary = "Check for scheduling conflicts")
-    fun checkConflicts(@Valid @RequestBody request: ConflictCheckRequest): ResponseEntity<ApiResponse<ConflictDto>> {
-        val result = sessionService.checkConflictsForRequest(request)
+    fun checkConflicts(@Valid @RequestBody request: ConflictCheckRequest, httpRequest: HttpServletRequest): ResponseEntity<ApiResponse<ConflictDto>> {
+        val result = sessionService.checkConflictsForRequest(request, actorUserId(httpRequest), actorRole(httpRequest))
         return ResponseEntity.ok(ApiResponse.success(result))
     }
 
     @GetMapping("/{id}/attendance-summary")
     @RequireAdminOrTeacher
     @Operation(summary = "Get attendance summary for a session")
-    fun getSessionAttendanceSummary(@PathVariable id: Long): ResponseEntity<ApiResponse<SessionAttendanceSummaryDto>> {
-        val summary = sessionService.getSessionAttendanceSummary(id)
+    fun getSessionAttendanceSummary(@PathVariable id: Long, httpRequest: HttpServletRequest): ResponseEntity<ApiResponse<SessionAttendanceSummaryDto>> {
+        val summary = sessionService.getSessionAttendanceSummary(id, actorUserId(httpRequest), actorRole(httpRequest))
         return ResponseEntity.ok(ApiResponse.success(summary))
     }
 
@@ -138,10 +145,15 @@ class CourseSessionController(
     fun getCalendar(
         @RequestParam(required = false) courseId: Long?,
         @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) startDate: LocalDate,
-        @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) endDate: LocalDate
+        @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) endDate: LocalDate,
+        httpRequest: HttpServletRequest
     ): ResponseEntity<ApiResponse<List<SessionCalendarDto>>> {
-        val calendar = sessionService.getCalendar(courseId, startDate, endDate)
+        val calendar = sessionService.getCalendar(courseId, startDate, endDate, actorUserId(httpRequest), actorRole(httpRequest))
         return ResponseEntity.ok(ApiResponse.success(calendar))
     }
+
+    private fun actorUserId(request: HttpServletRequest): Long? = request.getAttribute("userId") as? Long
+
+    private fun actorRole(request: HttpServletRequest): String? = request.getAttribute("userRole") as? String
 }
 

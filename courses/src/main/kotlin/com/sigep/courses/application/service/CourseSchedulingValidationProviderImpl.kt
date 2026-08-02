@@ -22,5 +22,11 @@ class CourseSchedulingValidationProviderImpl(
         val course = courseRepository.findById(courseId).orElse(null) ?: return false
         return course.isPublished || course.status == CourseStatus.ACTIVE
     }
+
+    override fun getCourseIdsAssignedToTeacher(teacherUserId: Long): Set<Long> =
+        courseRepository.findIdsByTeacherId(teacherUserId)
+
+    override fun getSessionIdsAssignedToTeacher(teacherUserId: Long): Set<Long> =
+        sessionRepository.findIdsByTeacherId(teacherUserId)
 }
 

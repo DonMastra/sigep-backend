@@ -22,5 +22,13 @@ interface EnrollmentServiceProvider {
      * Obtiene los enrollments de un estudiante por estado
      */
     fun getEnrollmentsByStudentAndStatus(studentId: Long, status: String): List<EnrollmentSummaryDto>
+
+    /**
+     * Returns the students with an active enrollment in a course assigned to
+     * the authenticated teacher user.
+     */
+    fun getActiveStudentIdsByTeacher(teacherUserId: Long): Set<Long>
+
+    fun teacherCanAccessStudent(teacherUserId: Long, studentId: Long): Boolean
 }
 

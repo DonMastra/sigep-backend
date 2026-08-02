@@ -9,6 +9,7 @@ import com.sigep.scheduling.domain.model.ReservationTargetType
 import com.sigep.scheduling.domain.model.SlotDayOfWeek
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
+import jakarta.servlet.http.HttpServletRequest
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
@@ -30,7 +31,8 @@ class ReservationController(private val reservationService: ReservationService) 
         @RequestParam(required = false) classroomId: Long?,
         @RequestParam(required = false) dayOfWeek: SlotDayOfWeek?,
         @RequestParam(required = false) startTimeFrom: String?,
-        @RequestParam(required = false) endTimeTo: String?
+        @RequestParam(required = false) endTimeTo: String?,
+        httpRequest: HttpServletRequest
     ): ResponseEntity<ApiResponse<PageResponse<ReservationDto>>> {
         val pageSize = limit ?: size ?: 20
         return ResponseEntity.ok(
@@ -43,7 +45,9 @@ class ReservationController(private val reservationService: ReservationService) 
                     classroomId = classroomId,
                     dayOfWeek = dayOfWeek,
                     startTimeFrom = startTimeFrom,
-                    endTimeTo = endTimeTo
+                    endTimeTo = endTimeTo,
+                    actorUserId = actorUserId(httpRequest),
+                    actorRole = actorRole(httpRequest)
                 )
             )
         )
@@ -58,7 +62,8 @@ class ReservationController(private val reservationService: ReservationService) 
         @RequestParam(required = false) classroomId: Long?,
         @RequestParam(required = false) dayOfWeek: SlotDayOfWeek?,
         @RequestParam(required = false) startTimeFrom: String?,
-        @RequestParam(required = false) endTimeTo: String?
+        @RequestParam(required = false) endTimeTo: String?,
+        httpRequest: HttpServletRequest
     ): ResponseEntity<ApiResponse<PageResponse<ReservationDto>>> {
         val pageSize = limit ?: size ?: 20
         return ResponseEntity.ok(
@@ -69,7 +74,9 @@ class ReservationController(private val reservationService: ReservationService) 
                     classroomId = classroomId,
                     dayOfWeek = dayOfWeek,
                     startTimeFrom = startTimeFrom,
-                    endTimeTo = endTimeTo
+                    endTimeTo = endTimeTo,
+                    actorUserId = actorUserId(httpRequest),
+                    actorRole = actorRole(httpRequest)
                 )
             )
         )
@@ -77,8 +84,8 @@ class ReservationController(private val reservationService: ReservationService) 
 
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
-    fun getReservationById(@PathVariable id: Long): ResponseEntity<ApiResponse<ReservationDto>> {
-        return ResponseEntity.ok(ApiResponse.success(reservationService.getReservationById(id)))
+    fun getReservationById(@PathVariable id: Long, httpRequest: HttpServletRequest): ResponseEntity<ApiResponse<ReservationDto>> {
+        return ResponseEntity.ok(ApiResponse.success(reservationService.getReservationById(id, actorUserId(httpRequest), actorRole(httpRequest))))
     }
 
     @PostMapping
@@ -108,4 +115,8 @@ class ReservationController(private val reservationService: ReservationService) 
     fun inactivateReservation(@PathVariable id: Long): ResponseEntity<ApiResponse<ReservationDto>> {
         return ResponseEntity.ok(ApiResponse.success(reservationService.inactivateReservation(id), "Reservation inactivated"))
     }
+
+    private fun actorUserId(request: HttpServletRequest): Long? = request.getAttribute("userId") as? Long
+
+    private fun actorRole(request: HttpServletRequest): String? = request.getAttribute("userRole") as? String
 }
