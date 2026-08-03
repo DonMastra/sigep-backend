@@ -157,6 +157,8 @@ Orden de prioridad:
 | V16 | `scripts/migrations/V16__create_billing_persistence.sql` | pagos compatibles, recibos X, facturas, intentos, outbox y secuencias |
 | V17 | `scripts/migrations/V17__add_fiscal_tax_breakdown.sql` | domicilio receptor y detalle IVA/tributos |
 | V18 | `scripts/migrations/V18__create_billing_accounts_charges_and_runs.sql` | cuentas, perfiles, cargos, imputaciones y ejecuciones manuales |
+| V19 | `scripts/migrations/V19__repair_tuition_ledger_statuses.sql` | normalizacion de estados heredados del ledger de matriculacion |
+| V20 | `scripts/migrations/V20__repair_hibernate_tuition_ledger_status_constraint.sql` | reemplazo del `CHECK` legacy generado por Hibernate y correccion del valor por defecto |
 
 ## 4) Validacion ejecutada en BD (2026-05-31)
 
