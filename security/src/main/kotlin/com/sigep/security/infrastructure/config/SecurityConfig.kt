@@ -100,6 +100,7 @@ class SecurityConfig(
         configuration.allowedHeaders = listOf(
             "Authorization",
             "Content-Type",
+            "Idempotency-Key",
             "X-Requested-With",
             "Accept",
             "Origin",
