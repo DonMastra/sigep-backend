@@ -3,6 +3,9 @@ package com.sigep.exams.application.service
 import com.fasterxml.jackson.core.type.TypeReference
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.sigep.common.application.dto.PageResponse
+import com.sigep.common.application.exception.ForbiddenException
+import com.sigep.common.application.service.CourseAccessInfo
+import com.sigep.common.application.service.CourseAccessProvider
 import com.sigep.common.application.service.TeacherInfoProvider
 import com.sigep.common.domain.exception.ResourceNotFoundException
 import com.sigep.common.application.exception.ValidationException
@@ -13,7 +16,6 @@ import com.sigep.exams.domain.model.ExamStatus
 import com.sigep.exams.domain.repository.ExamRepository
 import com.sigep.exams.domain.repository.ExamSubmissionRepository
 import org.springframework.cache.annotation.CacheEvict
-import org.springframework.cache.annotation.Cacheable
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
@@ -27,16 +29,73 @@ class ExamService(
     private val examRepository: ExamRepository,
     private val submissionRepository: ExamSubmissionRepository,
     private val objectMapper: ObjectMapper,
-    private val teacherInfoProvider: TeacherInfoProvider
+    private val teacherInfoProvider: TeacherInfoProvider,
+    private val courseAccessProvider: CourseAccessProvider
 ) {
 
     private val longListType = object : TypeReference<List<Long>>() {}
 
-    @Cacheable(value = ["exams"], key = "#id")
-    fun getExamById(id: UUID): ExamDto {
+    fun getExamById(id: UUID, actorUserId: Long, actorRole: String?): ExamDto {
         val exam = examRepository.findById(id)
             .orElseThrow { ResourceNotFoundException("Examen no encontrado con ID: $id") }
+        validateCourseAccess(exam.courseId, actorUserId, actorRole)
         return toDto(exam)
+    }
+
+    fun getExamsForActor(
+        actorUserId: Long,
+        actorRole: String?,
+        status: ExamStatus?,
+        page: Int = 0,
+        size: Int = 100
+    ): PageResponse<ExamSummaryDto> {
+        val pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "scheduledAt"))
+        val examsPage = when (actorRole) {
+            "ADMIN" -> if (status == null) {
+                examRepository.findAll(pageable)
+            } else {
+                examRepository.findByStatus(status, pageable)
+            }
+
+            "TEACHER" -> {
+                val courseIds = courseAccessProvider.getCourseIdsAssignedToTeacher(actorUserId)
+                if (courseIds.isEmpty()) {
+                    return PageResponse(emptyList(), page, size, 0, 0)
+                }
+                if (status == null) {
+                    examRepository.findByCourseIdIn(courseIds, pageable)
+                } else {
+                    examRepository.findByCourseIdInAndStatus(courseIds, status, pageable)
+                }
+            }
+
+            else -> throw ForbiddenException("No tiene permisos para consultar exámenes")
+        }
+
+        val courseInfo = courseAccessProvider.getCourseInfo(examsPage.content.map { it.courseId })
+        val counts = if (examsPage.content.isEmpty()) {
+            emptyMap()
+        } else {
+            submissionRepository.summarizeByExamIds(examsPage.content.map { it.id })
+                .associateBy { it.examId }
+        }
+
+        return PageResponse(
+            content = examsPage.content.map { exam ->
+                val count = counts[exam.id]
+                toSummaryDto(
+                    exam = exam,
+                    courseInfo = courseInfo[exam.courseId],
+                    totalSubmissions = count?.totalSubmissions?.toInt() ?: 0,
+                    gradedSubmissions = count?.gradedSubmissions?.toInt() ?: 0,
+                    pendingSubmissions = count?.pendingSubmissions?.toInt() ?: 0
+                )
+            },
+            page = examsPage.number,
+            size = examsPage.size,
+            totalElements = examsPage.totalElements,
+            totalPages = examsPage.totalPages
+        )
     }
 
     fun getExamsByCourse(
@@ -109,7 +168,8 @@ class ExamService(
 
     @Transactional
     @CacheEvict(value = ["exams"], allEntries = true)
-    fun createExam(request: CreateExamRequest, createdBy: Long): ExamDto {
+    fun createExam(request: CreateExamRequest, createdBy: Long, actorRole: String?): ExamDto {
+        validateCourseAccess(request.courseId, createdBy, actorRole)
         // Validar que no exista otro examen con el mismo título en el curso
         val exists = examRepository.existsByCourseIdAndTitleAndIdNot(
             request.courseId,
@@ -124,7 +184,7 @@ class ExamService(
             courseId = request.courseId,
             title = request.title,
             description = request.description,
-            modality = ExamModality.OFFLINE, // Fase 1: solo offline
+            modality = request.modality,
             status = ExamStatus.DRAFT,
             totalPoints = request.totalPoints,
             weight = request.weight,
@@ -144,9 +204,10 @@ class ExamService(
 
     @Transactional
     @CacheEvict(value = ["exams"], key = "#id")
-    fun updateExam(id: UUID, request: UpdateExamRequest, updatedBy: Long): ExamDto {
+    fun updateExam(id: UUID, request: UpdateExamRequest, updatedBy: Long, actorRole: String?): ExamDto {
         val exam = examRepository.findById(id)
             .orElseThrow { ResourceNotFoundException("Examen no encontrado con ID: $id") }
+        validateCourseAccess(exam.courseId, updatedBy, actorRole)
 
         // Solo se puede editar si no está cerrado
         if (exam.status == ExamStatus.CLOSED) {
@@ -177,9 +238,10 @@ class ExamService(
 
     @Transactional
     @CacheEvict(value = ["exams"], key = "#id")
-    fun publishExam(id: UUID, updatedBy: Long): ExamDto {
+    fun publishExam(id: UUID, updatedBy: Long, actorRole: String?): ExamDto {
         val exam = examRepository.findById(id)
             .orElseThrow { ResourceNotFoundException("Examen no encontrado con ID: $id") }
+        validateCourseAccess(exam.courseId, updatedBy, actorRole)
 
         exam.publish()
         val updated = exam.copy(updatedBy = updatedBy, updatedAt = LocalDateTime.now())
@@ -189,9 +251,10 @@ class ExamService(
 
     @Transactional
     @CacheEvict(value = ["exams"], key = "#id")
-    fun closeExam(id: UUID, updatedBy: Long): ExamDto {
+    fun closeExam(id: UUID, updatedBy: Long, actorRole: String?): ExamDto {
         val exam = examRepository.findById(id)
             .orElseThrow { ResourceNotFoundException("Examen no encontrado con ID: $id") }
+        validateCourseAccess(exam.courseId, updatedBy, actorRole)
 
         exam.close()
         val updated = exam.copy(updatedBy = updatedBy, updatedAt = LocalDateTime.now())
@@ -233,10 +296,13 @@ class ExamService(
     // Métodos auxiliares
     fun toDto(exam: Exam): ExamDto {
         val assignedTeachers = parseAssignedTeachers(exam.assignedTeachers)
+        val courseInfo = courseAccessProvider.getCourseInfo(exam.courseId)
 
         return ExamDto(
             id = exam.id,
             courseId = exam.courseId,
+            courseCode = courseInfo?.code,
+            courseName = courseInfo?.name,
             title = exam.title,
             description = exam.description,
             modality = exam.modality,
@@ -259,6 +325,33 @@ class ExamService(
         )
     }
 
+    private fun toSummaryDto(
+        exam: Exam,
+        courseInfo: CourseAccessInfo?,
+        totalSubmissions: Int,
+        gradedSubmissions: Int,
+        pendingSubmissions: Int
+    ): ExamSummaryDto {
+        val assignedTeachers = parseAssignedTeachers(exam.assignedTeachers)
+        return ExamSummaryDto(
+            id = exam.id,
+            courseId = exam.courseId,
+            courseCode = courseInfo?.code,
+            courseName = courseInfo?.name,
+            title = exam.title,
+            modality = exam.modality,
+            status = exam.status,
+            scheduledAt = exam.scheduledAt,
+            totalPoints = exam.totalPoints,
+            weight = exam.weight,
+            assignedTeachers = assignedTeachers,
+            teacherNames = resolveTeacherNames(assignedTeachers),
+            totalSubmissions = totalSubmissions,
+            gradedSubmissions = gradedSubmissions,
+            pendingSubmissions = pendingSubmissions
+        )
+    }
+
     fun parseAssignedTeachers(json: String?): List<Long>? =
         json?.let { objectMapper.readValue(it, longListType) }
 
@@ -269,5 +362,19 @@ class ExamService(
 
         val namesById = teacherInfoProvider.getTeacherNamesByIds(assignedTeachers)
         return assignedTeachers.map { teacherId -> namesById[teacherId] ?: teacherId.toString() }
+    }
+
+    fun validateExamAccess(examId: UUID, actorUserId: Long, actorRole: String?) {
+        val exam = examRepository.findById(examId)
+            .orElseThrow { ResourceNotFoundException("Examen no encontrado con ID: $examId") }
+        validateCourseAccess(exam.courseId, actorUserId, actorRole)
+    }
+
+    private fun validateCourseAccess(courseId: Long, actorUserId: Long, actorRole: String?) {
+        when (actorRole) {
+            "ADMIN" -> return
+            "TEACHER" -> if (courseAccessProvider.isTeacherAssignedToCourse(courseId, actorUserId)) return
+        }
+        throw ForbiddenException("Los docentes solo pueden gestionar exámenes de sus cursos asignados")
     }
 }

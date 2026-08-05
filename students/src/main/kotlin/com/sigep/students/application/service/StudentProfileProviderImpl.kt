@@ -19,6 +19,13 @@ class StudentProfileProviderImpl(
     override fun getStudentProfile(studentId: Long): StudentProfileInfo? =
         studentRepository.findById(studentId).map { it.toInfo() }.orElse(null)
 
+    override fun getStudentProfiles(studentIds: Collection<Long>): Map<Long, StudentProfileInfo> {
+        if (studentIds.isEmpty()) return emptyMap()
+
+        return studentRepository.findAllById(studentIds.distinct())
+            .associate { student -> student.id!! to student.toInfo() }
+    }
+
     override fun validateGuardianOwnsStudent(guardianUserId: Long, studentId: Long): Boolean {
         val student = studentRepository.findById(studentId)
             .orElseThrow { ResourceNotFoundException("Student not found with id: $studentId") }

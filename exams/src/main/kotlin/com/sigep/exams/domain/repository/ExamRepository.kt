@@ -16,7 +16,17 @@ interface ExamRepository : JpaRepository<Exam, UUID> {
 
     fun findByCourseId(courseId: Long, pageable: Pageable): Page<Exam>
 
+    fun findByCourseIdIn(courseIds: Collection<Long>, pageable: Pageable): Page<Exam>
+
+    fun findByCourseIdInAndStatus(
+        courseIds: Collection<Long>,
+        status: ExamStatus,
+        pageable: Pageable
+    ): Page<Exam>
+
     fun findByCourseIdAndStatus(courseId: Long, status: ExamStatus, pageable: Pageable): Page<Exam>
+
+    fun findByStatus(status: ExamStatus, pageable: Pageable): Page<Exam>
 
     @Query("""
         SELECT e FROM Exam e 

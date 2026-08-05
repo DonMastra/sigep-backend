@@ -140,6 +140,17 @@ Orden de prioridad:
 - `fiscal_invoice_vat_subtotals.invoice_id` -> `fiscal_invoices.id` (BIGINT, `ON DELETE RESTRICT`)
 - `fiscal_invoice_taxes.invoice_id` -> `fiscal_invoices.id` (BIGINT, `ON DELETE RESTRICT`)
 
+### Calificaciones de idiomas (V21)
+
+- `exam_submissions.reading_score`, `writing_score` y `listening_score` son enteros nullable con
+  restriccion `0..100`; permiten guardar progreso parcial sin inventar una nota final.
+- `exam_submissions.score` conserva la nota final calculada y las notas legacy previas a V21.
+- `exam_grade_history` conserva los valores anterior/nuevo de cada categoria y permite
+  `new_score` nullable cuando la nueva carga queda incompleta.
+- `exam_submissions.version` es el control de concurrencia optimista usado por el guardado en lote.
+- `scripts/migrations/V21__add_language_skill_exam_grades.sql` es una migracion manual e idempotente;
+  debe aplicarse en la base del ambiente antes de desplegar el backend que lee estas columnas.
+
 ### FK de scheduling (V12)
 - `schedule_slots.classroom_id` -> `classrooms.id` (`ON DELETE RESTRICT`)
 - `reservations.slot_id` -> `schedule_slots.id` (`ON DELETE RESTRICT`)

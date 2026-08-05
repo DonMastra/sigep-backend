@@ -41,9 +41,19 @@ class ExamSubmissionController(
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(defaultValue = "50") size: Int,
         @RequestParam(defaultValue = "createdAt") sort: String,
-        @RequestParam(defaultValue = "ASC") order: String
+        @RequestParam(defaultValue = "ASC") order: String,
+        httpRequest: HttpServletRequest
     ): PageResponse<ExamSubmissionDto> {
-        return submissionService.getSubmissionsByExam(examId, status, page, size, sort, order)
+        return submissionService.getSubmissionsByExam(
+            examId = examId,
+            status = status,
+            page = page,
+            size = size,
+            sort = sort,
+            order = order,
+            actorUserId = httpRequest.getAttribute("userId") as Long,
+            actorRole = httpRequest.getAttribute("userRole") as? String
+        )
     }
 
     @GetMapping("/student/{studentId}")
@@ -76,7 +86,11 @@ class ExamSubmissionController(
         httpRequest: HttpServletRequest
     ): ExamSubmissionDto {
         val createdBy = httpRequest.getAttribute("userId") as Long
-        return submissionService.createSubmission(request, createdBy)
+        return submissionService.createSubmission(
+            request,
+            createdBy,
+            httpRequest.getAttribute("userRole") as? String
+        )
     }
 
     @PostMapping("/{id}/grade")
@@ -88,7 +102,12 @@ class ExamSubmissionController(
         httpRequest: HttpServletRequest
     ): ExamSubmissionDto {
         val gradedBy = httpRequest.getAttribute("userId") as Long
-        return submissionService.gradeSubmission(id, request, gradedBy)
+        return submissionService.gradeSubmission(
+            id,
+            request,
+            gradedBy,
+            httpRequest.getAttribute("userRole") as? String
+        )
     }
 
     @PutMapping("/{id}/grade")
@@ -100,7 +119,12 @@ class ExamSubmissionController(
         httpRequest: HttpServletRequest
     ): ExamSubmissionDto {
         val updatedBy = httpRequest.getAttribute("userId") as Long
-        return submissionService.updateGrade(id, request, updatedBy)
+        return submissionService.updateGrade(
+            id,
+            request,
+            updatedBy,
+            httpRequest.getAttribute("userRole") as? String
+        )
     }
 
     @PostMapping("/{id}/attach-file")
@@ -128,8 +152,13 @@ class ExamSubmissionController(
     @RequireAdminOrTeacher
     @Operation(summary = "Obtener historial de cambios de calificación")
     fun getGradeHistory(
-        @PathVariable id: UUID
+        @PathVariable id: UUID,
+        httpRequest: HttpServletRequest
     ): List<GradeHistoryDto> {
-        return submissionService.getGradeHistory(id)
+        return submissionService.getGradeHistory(
+            id,
+            httpRequest.getAttribute("userId") as Long,
+            httpRequest.getAttribute("userRole") as? String
+        )
     }
 }
