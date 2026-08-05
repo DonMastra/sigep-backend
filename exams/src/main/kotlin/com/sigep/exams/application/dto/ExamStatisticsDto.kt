@@ -11,7 +11,13 @@ data class GradeHistoryDto(
     val changedBy: Long,
     val changedByName: String?,
     val previousScore: BigDecimal?,
-    val newScore: BigDecimal,
+    val newScore: BigDecimal?,
+    val previousReadingScore: Int? = null,
+    val newReadingScore: Int? = null,
+    val previousWritingScore: Int? = null,
+    val newWritingScore: Int? = null,
+    val previousListeningScore: Int? = null,
+    val newListeningScore: Int? = null,
     val reason: String?
 )
 

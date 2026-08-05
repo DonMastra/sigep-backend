@@ -3,6 +3,7 @@ package com.sigep.exams.presentation.controller
 import com.sigep.common.application.dto.PageResponse
 import com.sigep.exams.application.dto.*
 import com.sigep.exams.application.service.ExamService
+import com.sigep.exams.application.service.ExamSubmissionService
 import com.sigep.exams.application.service.ExamStatisticsService
 import com.sigep.exams.domain.model.ExamStatus
 import com.sigep.security.application.annotation.RequireAdmin
@@ -22,15 +23,38 @@ import java.util.UUID
 @SecurityRequirement(name = "bearerAuth")
 class ExamController(
     private val examService: ExamService,
-    private val statisticsService: ExamStatisticsService
+    private val statisticsService: ExamStatisticsService,
+    private val submissionService: ExamSubmissionService
 ) {
 
+    @GetMapping
+    @RequireAdminOrTeacher
+    @Operation(summary = "Listar exámenes disponibles para el usuario autenticado")
+    fun getExams(
+        @RequestParam(required = false) status: ExamStatus?,
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "100") size: Int,
+        httpRequest: HttpServletRequest
+    ): PageResponse<ExamSummaryDto> = examService.getExamsForActor(
+        actorUserId = httpRequest.getAttribute("userId") as Long,
+        actorRole = httpRequest.getAttribute("userRole") as? String,
+        status = status,
+        page = page,
+        size = size
+    )
+
     @GetMapping("/{id}")
+    @RequireAdminOrTeacher
     @Operation(summary = "Obtener examen por ID")
     fun getExamById(
-        @PathVariable id: UUID
+        @PathVariable id: UUID,
+        httpRequest: HttpServletRequest
     ): ExamDto {
-        return examService.getExamById(id)
+        return examService.getExamById(
+            id,
+            httpRequest.getAttribute("userId") as Long,
+            httpRequest.getAttribute("userRole") as? String
+        )
     }
 
     @GetMapping("/course/{courseId}")
@@ -77,7 +101,7 @@ class ExamController(
         httpRequest: HttpServletRequest
     ): ExamDto {
         val createdBy = httpRequest.getAttribute("userId") as Long
-        return examService.createExam(request, createdBy)
+        return examService.createExam(request, createdBy, httpRequest.getAttribute("userRole") as? String)
     }
 
     @PutMapping("/{id}")
@@ -89,7 +113,7 @@ class ExamController(
         httpRequest: HttpServletRequest
     ): ExamDto {
         val updatedBy = httpRequest.getAttribute("userId") as Long
-        return examService.updateExam(id, request, updatedBy)
+        return examService.updateExam(id, request, updatedBy, httpRequest.getAttribute("userRole") as? String)
     }
 
     @PostMapping("/{id}/publish")
@@ -100,7 +124,7 @@ class ExamController(
         httpRequest: HttpServletRequest
     ): ExamDto {
         val updatedBy = httpRequest.getAttribute("userId") as Long
-        return examService.publishExam(id, updatedBy)
+        return examService.publishExam(id, updatedBy, httpRequest.getAttribute("userRole") as? String)
     }
 
     @PostMapping("/{id}/close")
@@ -111,7 +135,7 @@ class ExamController(
         httpRequest: HttpServletRequest
     ): ExamDto {
         val updatedBy = httpRequest.getAttribute("userId") as Long
-        return examService.closeExam(id, updatedBy)
+        return examService.closeExam(id, updatedBy, httpRequest.getAttribute("userRole") as? String)
     }
 
     @PostMapping("/{id}/cancel")
@@ -139,10 +163,42 @@ class ExamController(
     @RequireAdminOrTeacher
     @Operation(summary = "Obtener estadísticas del examen")
     fun getExamStatistics(
-        @PathVariable id: UUID
+        @PathVariable id: UUID,
+        httpRequest: HttpServletRequest
     ): ExamStatisticsDto {
+        examService.validateExamAccess(
+            id,
+            httpRequest.getAttribute("userId") as Long,
+            httpRequest.getAttribute("userRole") as? String
+        )
         return statisticsService.getExamStatistics(id)
     }
+
+    @GetMapping("/{id}/gradebook")
+    @RequireAdminOrTeacher
+    @Operation(summary = "Obtener libro de calificaciones por categorías")
+    fun getGradebook(
+        @PathVariable id: UUID,
+        httpRequest: HttpServletRequest
+    ): ExamGradebookDto = submissionService.getGradebook(
+        examId = id,
+        actorUserId = httpRequest.getAttribute("userId") as Long,
+        actorRole = httpRequest.getAttribute("userRole") as? String
+    )
+
+    @PatchMapping("/{id}/grades")
+    @RequireAdminOrTeacher
+    @Operation(summary = "Guardar calificaciones por categorías en lote")
+    fun updateGrades(
+        @PathVariable id: UUID,
+        @Valid @RequestBody request: BatchGradeRequest,
+        httpRequest: HttpServletRequest
+    ): ExamGradebookDto = submissionService.updateGradesBatch(
+        examId = id,
+        request = request,
+        actorUserId = httpRequest.getAttribute("userId") as Long,
+        actorRole = httpRequest.getAttribute("userRole") as? String
+    )
 
     @GetMapping("/course/{courseId}/statistics")
     @RequireAdminOrTeacher

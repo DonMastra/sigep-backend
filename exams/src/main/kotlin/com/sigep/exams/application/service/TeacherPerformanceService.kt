@@ -114,6 +114,7 @@ class TeacherPerformanceService(
                     id = exam.id,
                     courseId = exam.courseId,
                     title = exam.title,
+                    modality = exam.modality,
                     status = exam.status,
                     scheduledAt = exam.scheduledAt,
                     totalPoints = exam.totalPoints,

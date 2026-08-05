@@ -34,8 +34,26 @@ data class ExamGradeHistory(
     @Column(name = "previous_score", precision = 10, scale = 2)
     val previousScore: BigDecimal?,
 
-    @Column(name = "new_score", nullable = false, precision = 10, scale = 2)
-    val newScore: BigDecimal,
+    @Column(name = "new_score", precision = 10, scale = 2)
+    val newScore: BigDecimal?,
+
+    @Column(name = "previous_reading_score")
+    val previousReadingScore: Int? = null,
+
+    @Column(name = "new_reading_score")
+    val newReadingScore: Int? = null,
+
+    @Column(name = "previous_writing_score")
+    val previousWritingScore: Int? = null,
+
+    @Column(name = "new_writing_score")
+    val newWritingScore: Int? = null,
+
+    @Column(name = "previous_listening_score")
+    val previousListeningScore: Int? = null,
+
+    @Column(name = "new_listening_score")
+    val newListeningScore: Int? = null,
 
     @Column(columnDefinition = "TEXT")
     val reason: String? = null,

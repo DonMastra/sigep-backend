@@ -16,6 +16,8 @@ interface ExamSubmissionRepository : JpaRepository<ExamSubmission, UUID> {
 
     fun findByExamId(examId: UUID, pageable: Pageable): Page<ExamSubmission>
 
+    fun findAllByExamIdOrderByStudentIdAscAttemptNumberAsc(examId: UUID): List<ExamSubmission>
+
     fun findByStudentId(studentId: Long, pageable: Pageable): Page<ExamSubmission>
 
     fun findByExamIdAndStudentId(examId: UUID, studentId: Long): List<ExamSubmission>
@@ -66,4 +68,22 @@ interface ExamSubmissionRepository : JpaRepository<ExamSubmission, UUID> {
         AND s.status = 'GRADED'
     """)
     fun findGradedSubmissionsByExams(@Param("examIds") examIds: List<UUID>): List<ExamSubmission>
+
+    @Query("""
+        SELECT s.examId AS examId,
+               COUNT(s) AS totalSubmissions,
+               SUM(CASE WHEN s.status = 'GRADED' THEN 1 ELSE 0 END) AS gradedSubmissions,
+               SUM(CASE WHEN s.status = 'PENDING' THEN 1 ELSE 0 END) AS pendingSubmissions
+        FROM ExamSubmission s
+        WHERE s.examId IN :examIds
+        GROUP BY s.examId
+    """)
+    fun summarizeByExamIds(@Param("examIds") examIds: Collection<UUID>): List<ExamSubmissionCountProjection>
+}
+
+interface ExamSubmissionCountProjection {
+    val examId: UUID
+    val totalSubmissions: Long
+    val gradedSubmissions: Long
+    val pendingSubmissions: Long
 }

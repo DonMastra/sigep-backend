@@ -610,6 +610,7 @@ Importante: estos endpoints no siempre usan `ApiResponse<T>`.
 
 | Metodo | Ruta | Roles | Descripcion | Respuesta actual |
 |---|---|---|---|---|
+| GET | `/` | ADMIN, TEACHER | Lista examenes del actor; ADMIN ve todos y TEACHER solo cursos asignados. | `PageResponse<ExamSummaryDto>` |
 | GET | `/{id}` | Autenticado | Obtiene examen. | `ExamDto` |
 | GET | `/course/{courseId}` | Autenticado | Lista examenes por curso. | `PageResponse<ExamDto>` |
 | GET | `/my-exams?courseIds=` | ADMIN, TEACHER | Examenes del docente autenticado. | `PageResponse<ExamDto>` |
@@ -621,14 +622,29 @@ Importante: estos endpoints no siempre usan `ApiResponse<T>`.
 | POST | `/{id}/cancel` | ADMIN | Cancela examen. | `ExamDto` |
 | DELETE | `/{id}` | ADMIN | Elimina examen draft sin submissions. | `204` |
 | GET | `/{id}/statistics` | ADMIN, TEACHER | Estadisticas de examen. | `ExamStatisticsDto` |
+| GET | `/{id}/gradebook` | ADMIN, TEACHER | Sincroniza alumnos activos y devuelve la grilla de notas. Un TEACHER debe estar asignado al curso. | `ExamGradebookDto` |
+| PATCH | `/{id}/grades` | ADMIN, TEACHER | Guarda hasta 200 filas por lote con control de version. Un TEACHER debe estar asignado al curso. | `ExamGradebookDto` |
 | GET | `/course/{courseId}/statistics` | ADMIN, TEACHER | Estadisticas por curso. | `CourseExamStatisticsDto` |
 
 Enums relevantes:
 
 ```ts
 type ExamStatus = 'DRAFT' | 'PUBLISHED' | 'CLOSED' | 'CANCELLED';
-type ExamModality = 'WRITTEN' | 'ORAL' | 'PRACTICAL' | 'MIXED';
+type ExamModality = 'OFFLINE' | 'ONLINE';
 ```
+
+Calificaciones por categorias:
+
+- `readingScore`, `writingScore` y `listeningScore` son enteros opcionales entre `0` y `100`.
+- `finalScore`/`score` es de solo lectura para clientes: el backend calcula el promedio simple de
+  las tres categorias y redondea a entero con `HALF_UP`.
+- La aprobacion se determina con nota final mayor o igual a `60`.
+- Una carga parcial permanece `PENDING` y no tiene nota final. Si ya existe una nota final, las
+  tres categorias deben enviarse completas para reemplazarla.
+- Cada item de `PATCH /{id}/grades` envia `submissionId`, `expectedVersion`, las tres categorias,
+  `feedback?` y `reason?`. El motivo es obligatorio al modificar una nota ya existente.
+- Una version desactualizada responde conflicto `409` con codigo `GRADE_VERSION_CONFLICT`; el lote
+  es transaccional y no se aplican cambios parciales.
 
 ## Exam Submissions
 
@@ -650,7 +666,8 @@ Importante: estos endpoints no siempre usan `ApiResponse<T>`.
 | GET | `/{id}/grade-history` | ADMIN, TEACHER | Historial de cambios de nota. | `GradeHistoryDto[]` |
 
 ```ts
-type SubmissionStatus = 'PENDING' | 'GRADED' | 'CANCELLED';
+type SubmissionStatus = 'PENDING' | 'GRADED' | 'CANCELLED' | 'UNDER_REVIEW';
+type GradeCompletionStatus = 'NOT_STARTED' | 'INCOMPLETE' | 'COMPLETE' | 'LEGACY_FINAL_ONLY';
 ```
 
 ## Teacher Performance

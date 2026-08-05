@@ -20,6 +20,9 @@ interface EnrollmentRepository : JpaRepository<Enrollment, Long> {
     @Query("SELECT DISTINCT e.studentId FROM Enrollment e WHERE e.course.teacherId = :teacherUserId AND e.status = 'ACTIVE'")
     fun findActiveStudentIdsByTeacher(teacherUserId: Long): Set<Long>
 
+    @Query("SELECT DISTINCT e.studentId FROM Enrollment e WHERE e.course.id = :courseId AND e.status = 'ACTIVE'")
+    fun findActiveStudentIdsByCourse(courseId: Long): Set<Long>
+
     @Query("SELECT COUNT(e) > 0 FROM Enrollment e WHERE e.studentId = :studentId AND e.course.teacherId = :teacherUserId AND e.status = 'ACTIVE'")
     fun existsActiveByStudentIdAndTeacherId(studentId: Long, teacherUserId: Long): Boolean
 

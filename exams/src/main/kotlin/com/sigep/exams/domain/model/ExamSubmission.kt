@@ -2,6 +2,7 @@ package com.sigep.exams.domain.model
 
 import jakarta.persistence.*
 import java.math.BigDecimal
+import java.math.RoundingMode
 import java.time.LocalDateTime
 import java.util.UUID
 
@@ -54,6 +55,15 @@ data class ExamSubmission(
     // Calificación
     @Column(precision = 10, scale = 2)
     var score: BigDecimal? = null,
+
+    @Column(name = "reading_score")
+    var readingScore: Int? = null,
+
+    @Column(name = "writing_score")
+    var writingScore: Int? = null,
+
+    @Column(name = "listening_score")
+    var listeningScore: Int? = null,
 
     // Información del evaluador
     @Column(name = "graded_by")
@@ -112,6 +122,49 @@ data class ExamSubmission(
         this.feedback = feedback
     }
 
+    fun updateSkillGrades(
+        readingScore: Int?,
+        writingScore: Int?,
+        listeningScore: Int?,
+        updatedBy: Long,
+        feedback: String? = null
+    ) {
+        require(status != SubmissionStatus.CANCELLED) {
+            "No se puede calificar un intento cancelado"
+        }
+        validateSkillScore("Reading", readingScore)
+        validateSkillScore("Writing", writingScore)
+        validateSkillScore("Listening", listeningScore)
+
+        val complete = readingScore != null && writingScore != null && listeningScore != null
+        require(score == null || complete) {
+            "Una calificación final existente solo puede reemplazarse cargando las tres categorías"
+        }
+
+        this.readingScore = readingScore
+        this.writingScore = writingScore
+        this.listeningScore = listeningScore
+        this.feedback = feedback
+        this.updatedBy = updatedBy
+        this.updatedAt = LocalDateTime.now()
+
+        if (complete) {
+            this.score = calculateFinalScore(
+                requireNotNull(readingScore),
+                requireNotNull(writingScore),
+                requireNotNull(listeningScore)
+            )
+            this.gradedBy = updatedBy
+            this.gradedAt = LocalDateTime.now()
+            this.status = SubmissionStatus.GRADED
+        } else {
+            this.score = null
+            this.gradedBy = null
+            this.gradedAt = null
+            this.status = SubmissionStatus.PENDING
+        }
+    }
+
     fun cancel() {
         require(this.status != SubmissionStatus.GRADED) {
             "No se puede cancelar un intento ya calificado"
@@ -121,6 +174,18 @@ data class ExamSubmission(
 
     fun attachScannedFile(filePath: String) {
         this.scannedFilePath = filePath
+    }
+
+    private fun validateSkillScore(category: String, value: Int?) {
+        require(value == null || value in 0..100) {
+            "$category debe estar entre 0 y 100"
+        }
+    }
+
+    companion object {
+        fun calculateFinalScore(readingScore: Int, writingScore: Int, listeningScore: Int): BigDecimal =
+            BigDecimal(readingScore + writingScore + listeningScore)
+                .divide(BigDecimal(3), 0, RoundingMode.HALF_UP)
     }
 }
 

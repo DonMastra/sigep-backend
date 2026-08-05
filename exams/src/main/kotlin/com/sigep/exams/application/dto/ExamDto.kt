@@ -9,6 +9,8 @@ import java.util.UUID
 data class ExamDto(
     val id: UUID,
     val courseId: Long,
+    val courseCode: String? = null,
+    val courseName: String? = null,
     val title: String,
     val description: String?,
     val modality: ExamModality,
@@ -62,7 +64,10 @@ data class UpdateExamRequest(
 data class ExamSummaryDto(
     val id: UUID,
     val courseId: Long,
+    val courseCode: String? = null,
+    val courseName: String? = null,
     val title: String,
+    val modality: ExamModality,
     val status: ExamStatus,
     val scheduledAt: LocalDateTime?,
     val totalPoints: BigDecimal,
