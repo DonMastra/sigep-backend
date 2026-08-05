@@ -143,7 +143,7 @@ class BillingOperationsService(
         val result = chargeRepository.findByFilters(
             status,
             studentId,
-            normalizeStudentQuery(studentQuery),
+            normalizeStudentQuery(studentQuery).orEmpty(),
             profileStatus,
             PageRequest.of(
                 page.coerceAtLeast(0),
@@ -363,7 +363,7 @@ class BillingOperationsService(
         val page = chargeRepository.findByFilters(
             request.filters.status,
             request.filters.studentId,
-            normalizeStudentQuery(request.filters.studentQuery),
+            normalizeStudentQuery(request.filters.studentQuery).orEmpty(),
             request.filters.profileStatus,
             PageRequest.of(0, MAX_RUN_ITEMS, Sort.by(Sort.Order.asc("dueDate"), Sort.Order.asc("id")))
         )

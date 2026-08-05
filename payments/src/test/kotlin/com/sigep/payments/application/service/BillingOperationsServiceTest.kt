@@ -84,6 +84,32 @@ class BillingOperationsServiceTest {
     }
 
     @Test
+    fun `charge listing binds empty text when student search is absent`() {
+        every {
+            chargeRepository.findByFilters(any(), any(), any(), any(), any())
+        } returns PageImpl(emptyList(), PageRequest.of(0, 25), 0)
+
+        service.listCharges(
+            status = BillingChargeStatus.OPEN,
+            studentId = null,
+            studentQuery = null,
+            profileStatus = null,
+            page = 0,
+            size = 25
+        )
+
+        verify(exactly = 1) {
+            chargeRepository.findByFilters(
+                BillingChargeStatus.OPEN,
+                null,
+                "",
+                null,
+                match { it.pageNumber == 0 && it.pageSize == 25 }
+            )
+        }
+    }
+
+    @Test
     fun `filtered billing preview keeps the student search`() {
         every {
             chargeRepository.findByFilters(any(), any(), any(), any(), any())
