@@ -135,6 +135,7 @@ class BillingOperationsService(
     fun listCharges(
         status: BillingChargeStatus?,
         studentId: Long?,
+        studentQuery: String?,
         profileStatus: BillingProfileStatus?,
         page: Int,
         size: Int
@@ -142,6 +143,7 @@ class BillingOperationsService(
         val result = chargeRepository.findByFilters(
             status,
             studentId,
+            normalizeStudentQuery(studentQuery),
             profileStatus,
             PageRequest.of(
                 page.coerceAtLeast(0),
@@ -361,6 +363,7 @@ class BillingOperationsService(
         val page = chargeRepository.findByFilters(
             request.filters.status,
             request.filters.studentId,
+            normalizeStudentQuery(request.filters.studentQuery),
             request.filters.profileStatus,
             PageRequest.of(0, MAX_RUN_ITEMS, Sort.by(Sort.Order.asc("dueDate"), Sort.Order.asc("id")))
         )
@@ -478,6 +481,7 @@ class BillingOperationsService(
             request.chargeIds.distinct().sorted().joinToString(","),
             request.filters.status,
             request.filters.studentId,
+            normalizeStudentQuery(request.filters.studentQuery),
             request.filters.profileStatus,
             request.issueDate,
             request.amountTreatment
@@ -488,6 +492,15 @@ class BillingOperationsService(
     }
 
     private companion object {
+        const val MAX_STUDENT_QUERY_LENGTH = 100
         const val MAX_RUN_ITEMS = 1000
+    }
+
+    private fun normalizeStudentQuery(query: String?): String? {
+        val normalized = query?.trim()?.takeIf(String::isNotEmpty) ?: return null
+        if (normalized.length > MAX_STUDENT_QUERY_LENGTH) {
+            throw ValidationException("Student query must have at most $MAX_STUDENT_QUERY_LENGTH characters")
+        }
+        return normalized
     }
 }

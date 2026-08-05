@@ -40,12 +40,13 @@ class BillingOperationsController(
     fun listCharges(
         @RequestParam(required = false) status: BillingChargeStatus?,
         @RequestParam(required = false) studentId: Long?,
+        @RequestParam(required = false) studentQuery: String?,
         @RequestParam(required = false) profileStatus: BillingProfileStatus?,
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(defaultValue = "20") limit: Int
     ): ResponseEntity<ApiResponse<PageResponse<BillingChargeDto>>> = ResponseEntity.ok(
         ApiResponse.success(
-            billingOperationsService.listCharges(status, studentId, profileStatus, page, limit)
+            billingOperationsService.listCharges(status, studentId, studentQuery, profileStatus, page, limit)
         )
     )
 

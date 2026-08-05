@@ -883,7 +883,7 @@ Base operativa: `/api/v1/billing`
 
 | Metodo | Ruta | Idempotency-Key | Respuesta | Descripcion |
 |---|---|---|---|---|
-| GET | `/charges` | No | `ApiResponse<PageResponse<BillingChargeDto>>` | Lista cargos por `status`, `studentId`, `profileStatus`, `page` y `limit`. |
+| GET | `/charges` | No | `ApiResponse<PageResponse<BillingChargeDto>>` | Lista cargos por `status`, `studentId`, `studentQuery` (nombre o apellido, parcial y sin distinguir mayusculas), `profileStatus`, `page` y `limit`. |
 | GET | `/accounts/{accountId}/profile` | No | `ApiResponse<BillingProfileDto>` | Perfil fiscal reutilizable y campos faltantes. |
 | PUT | `/accounts/{accountId}/profile` | No | `ApiResponse<BillingProfileDto>` | Valida y completa receptor, documento, IVA, comprobante, concepto y moneda. |
 | POST | `/charges/{chargeId}/payments` | Si | `201 ApiResponse<ChargePaymentResultDto>` | Imputa el total del cargo, confirma pago y genera recibo X. |
