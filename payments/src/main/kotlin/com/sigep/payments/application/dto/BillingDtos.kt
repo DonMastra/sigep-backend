@@ -364,6 +364,8 @@ data class BillingChargeDto(
 data class BillingChargeFilterRequest(
     val status: BillingChargeStatus? = BillingChargeStatus.OPEN,
     val studentId: Long? = null,
+    @field:Size(max = 100)
+    val studentQuery: String? = null,
     val profileStatus: BillingProfileStatus? = null
 )
 
