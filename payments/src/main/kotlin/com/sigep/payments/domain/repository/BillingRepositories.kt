@@ -69,12 +69,14 @@ interface BillingChargeRepository : JpaRepository<BillingCharge, Long> {
         join BillingProfile profile on profile.account.id = charge.account.id
         where (:status is null or charge.status = :status)
           and (:studentId is null or charge.studentId = :studentId)
+          and (:studentQuery is null or locate(lower(:studentQuery), lower(charge.studentName)) > 0)
           and (:profileStatus is null or profile.status = :profileStatus)
         """
     )
     fun findByFilters(
         @Param("status") status: BillingChargeStatus?,
         @Param("studentId") studentId: Long?,
+        @Param("studentQuery") studentQuery: String?,
         @Param("profileStatus") profileStatus: BillingProfileStatus?,
         pageable: Pageable
     ): Page<BillingCharge>

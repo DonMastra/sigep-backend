@@ -1,8 +1,13 @@
 package com.sigep.payments.application.service
 
 import com.sigep.common.application.service.BillingChargeSettlementObserver
+import com.sigep.payments.application.dto.BillingChargeFilterRequest
+import com.sigep.payments.application.dto.PrepareBillingRunRequest
 import com.sigep.payments.application.dto.UpdateBillingProfileRequest
 import com.sigep.payments.domain.model.BillingAccount
+import com.sigep.payments.domain.model.BillingChargeStatus
+import com.sigep.payments.domain.model.BillingSelectionMode
+import com.sigep.payments.domain.model.FiscalAmountTreatment
 import com.sigep.payments.domain.model.BillingProfile
 import com.sigep.payments.domain.model.BillingProfileStatus
 import com.sigep.payments.domain.repository.BillingAccountRepository
@@ -16,7 +21,11 @@ import com.sigep.payments.domain.repository.PaymentRepository
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
+import io.mockk.verify
 import org.junit.jupiter.api.Test
+import org.springframework.data.domain.PageImpl
+import org.springframework.data.domain.PageRequest
+import java.time.LocalDate
 import java.util.Optional
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -46,6 +55,63 @@ class BillingOperationsServiceTest {
         billingService,
         emptyList<BillingChargeSettlementObserver>()
     )
+
+    @Test
+    fun `charge listing trims student search and keeps server pagination`() {
+        every {
+            chargeRepository.findByFilters(any(), any(), any(), any(), any())
+        } returns PageImpl(emptyList(), PageRequest.of(0, 25), 0)
+
+        val result = service.listCharges(
+            status = BillingChargeStatus.OPEN,
+            studentId = null,
+            studentQuery = "  Ana Perez  ",
+            profileStatus = BillingProfileStatus.READY,
+            page = 0,
+            size = 25
+        )
+
+        assertEquals(0, result.totalElements)
+        verify(exactly = 1) {
+            chargeRepository.findByFilters(
+                BillingChargeStatus.OPEN,
+                null,
+                "Ana Perez",
+                BillingProfileStatus.READY,
+                match { it.pageNumber == 0 && it.pageSize == 25 }
+            )
+        }
+    }
+
+    @Test
+    fun `filtered billing preview keeps the student search`() {
+        every {
+            chargeRepository.findByFilters(any(), any(), any(), any(), any())
+        } returns PageImpl(emptyList(), PageRequest.of(0, 1000), 0)
+
+        val result = service.preview(
+            PrepareBillingRunRequest(
+                selectionMode = BillingSelectionMode.FILTERED,
+                filters = BillingChargeFilterRequest(
+                    status = BillingChargeStatus.OPEN,
+                    studentQuery = "Ana Perez"
+                ),
+                issueDate = LocalDate.of(2026, 8, 5),
+                amountTreatment = FiscalAmountTreatment.NON_TAXED
+            )
+        )
+
+        assertEquals(0, result.selectedCount)
+        verify(exactly = 1) {
+            chargeRepository.findByFilters(
+                BillingChargeStatus.OPEN,
+                null,
+                "Ana Perez",
+                null,
+                match { it.pageSize == 1000 }
+            )
+        }
+    }
 
     @Test
     fun `validated profile becomes reusable while RG 5866 remains disabled`() {
