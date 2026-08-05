@@ -28,3 +28,23 @@ services:
         sync: false
       - key: REDIS_PORT
         value: 6379
+      # QA-only fiscal simulation. Production profiles reject this provider.
+      - key: BILLING_FISCAL_PROVIDER
+        value: mock
+      - key: BILLING_OUTBOX_ENABLED
+        value: true
+      # Configure these values in Render so generated demo documents are complete.
+      - key: BILLING_ISSUER_CUIT
+        sync: false
+      - key: BILLING_ISSUER_POINT_OF_SALE
+        sync: false
+      - key: BILLING_ISSUER_LEGAL_NAME
+        sync: false
+      - key: BILLING_ISSUER_BUSINESS_ADDRESS
+        sync: false
+      - key: BILLING_ISSUER_VAT_CONDITION
+        sync: false
+      - key: BILLING_ISSUER_GROSS_INCOME
+        sync: false
+      - key: BILLING_ISSUER_ACTIVITY_START
+        sync: false
