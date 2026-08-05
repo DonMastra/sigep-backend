@@ -36,6 +36,7 @@ data class CreateExamRequest(
     val courseId: Long,
     val title: String,
     val description: String? = null,
+    val modality: ExamModality = ExamModality.OFFLINE,
     val totalPoints: BigDecimal = BigDecimal("100.00"),
     val weight: BigDecimal = BigDecimal("1.00"),
     val timeLimitMinutes: Int? = null,

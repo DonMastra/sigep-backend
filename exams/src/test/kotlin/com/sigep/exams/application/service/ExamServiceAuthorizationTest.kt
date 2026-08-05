@@ -5,7 +5,9 @@ import com.sigep.common.application.exception.ForbiddenException
 import com.sigep.common.application.service.CourseAccessInfo
 import com.sigep.common.application.service.CourseAccessProvider
 import com.sigep.common.application.service.TeacherInfoProvider
+import com.sigep.exams.application.dto.CreateExamRequest
 import com.sigep.exams.domain.model.Exam
+import com.sigep.exams.domain.model.ExamModality
 import com.sigep.exams.domain.repository.ExamRepository
 import com.sigep.exams.domain.repository.ExamSubmissionRepository
 import io.mockk.every
@@ -67,6 +69,25 @@ class ExamServiceAuthorizationTest {
         val result = service.getExamById(exam.id, actorUserId = 1, actorRole = "ADMIN")
 
         assertEquals(exam.courseId, result.courseId)
+    }
+
+    @Test
+    fun `acepta y conserva la modalidad enviada por el frontend al crear`() {
+        every { examRepository.existsByCourseIdAndTitleAndIdNot(7, "Final online", any()) } returns false
+        every { examRepository.save(any()) } answers { firstArg() }
+        every { courseAccessProvider.getCourseInfo(7) } returns courseInfo(7, 20)
+
+        val result = service.createExam(
+            request = CreateExamRequest(
+                courseId = 7,
+                title = "Final online",
+                modality = ExamModality.ONLINE
+            ),
+            createdBy = 1,
+            actorRole = "ADMIN"
+        )
+
+        assertEquals(ExamModality.ONLINE, result.modality)
     }
 
     private fun exam() = Exam(

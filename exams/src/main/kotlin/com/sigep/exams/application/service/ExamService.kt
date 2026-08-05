@@ -184,7 +184,7 @@ class ExamService(
             courseId = request.courseId,
             title = request.title,
             description = request.description,
-            modality = ExamModality.OFFLINE, // Fase 1: solo offline
+            modality = request.modality,
             status = ExamStatus.DRAFT,
             totalPoints = request.totalPoints,
             weight = request.weight,
