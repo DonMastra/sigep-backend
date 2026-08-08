@@ -49,6 +49,7 @@ internal fun FiscalInvoice.toDto(outboxStatus: BillingOutboxStatus? = null) = Fi
     id = requireNotNull(id),
     paymentId = payment?.id,
     chargeId = charge?.id,
+    collectionChannel = charge?.collectionChannel,
     studentId = sourceStudentId(),
     paymentReceiptNumber = payment?.receiptNumber,
     status = status,

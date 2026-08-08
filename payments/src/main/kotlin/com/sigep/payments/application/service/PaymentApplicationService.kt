@@ -10,6 +10,7 @@ import com.sigep.payments.application.dto.CreatePaymentRequest
 import com.sigep.payments.application.dto.PaymentDetailDto
 import com.sigep.payments.application.dto.PaymentDto
 import com.sigep.payments.application.dto.PaymentReceiptDto
+import com.sigep.payments.application.dto.RegisterPaymentReceiptRequest
 import com.sigep.payments.domain.model.Payment
 import com.sigep.payments.domain.model.PaymentReceipt
 import com.sigep.payments.domain.model.PaymentStatus
@@ -32,6 +33,27 @@ class PaymentApplicationService(
     private val invoiceRepository: FiscalInvoiceRepository,
     private val outboxRepository: BillingOutboxRepository
 ) {
+
+    fun registerReceipt(
+        idempotencyKey: String,
+        request: RegisterPaymentReceiptRequest,
+        adminId: Long
+    ): PaymentDetailDto {
+        if (idempotencyKey.isBlank() || idempotencyKey.length > 120) {
+            throw ValidationException("Idempotency-Key is required and must have at most 120 characters")
+        }
+        val created = create(
+            "$idempotencyKey:create",
+            request.payment,
+            initialPaymentDate = request.confirmation.paymentDate
+        )
+        return confirm(
+            created.payment.id,
+            "$idempotencyKey:confirm",
+            request.confirmation,
+            adminId
+        )
+    }
 
     fun create(
         idempotencyKey: String,
@@ -95,8 +117,8 @@ class PaymentApplicationService(
             }
             throw ResourceConflictException("Payment $paymentId is already confirmed")
         }
-        if (payment.status == PaymentStatus.CANCELLED) {
-            throw ResourceConflictException("Cancelled payment $paymentId cannot be confirmed")
+        if (payment.status in setOf(PaymentStatus.CANCELLED, PaymentStatus.REVERSED)) {
+            throw ResourceConflictException("Payment $paymentId cannot be confirmed from status ${payment.status}")
         }
 
         val now = LocalDateTime.now()

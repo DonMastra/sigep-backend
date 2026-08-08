@@ -175,6 +175,18 @@ data class TuitionFeePlan(
     @Column(nullable = false)
     val installments: Int,
 
+    @Column(name = "monthly_due_day", nullable = false)
+    val monthlyDueDay: Int = 20,
+
+    @Column(name = "late_fee_percentage", nullable = false, precision = 5, scale = 2)
+    val lateFeePercentage: BigDecimal = BigDecimal.ZERO,
+
+    @Column(name = "automatic_debit_monthly", nullable = false)
+    val automaticDebitMonthly: Boolean = true,
+
+    @Column(name = "automatic_debit_enrollment", nullable = false)
+    val automaticDebitEnrollment: Boolean = false,
+
     @Column(nullable = false, length = 3)
     val currency: String = "ARS",
 
@@ -434,6 +446,12 @@ data class TuitionLedgerEntry(
     @Column(name = "net_amount", nullable = false, precision = 12, scale = 2)
     val netAmount: BigDecimal,
 
+    @Column(name = "paid_amount", nullable = false, precision = 12, scale = 2)
+    val paidAmount: BigDecimal = BigDecimal.ZERO,
+
+    @Column(name = "late_fee_amount", nullable = false, precision = 12, scale = 2)
+    val lateFeeAmount: BigDecimal = BigDecimal.ZERO,
+
     @Column(name = "due_date", nullable = false)
     val dueDate: LocalDate,
 
@@ -470,4 +488,4 @@ enum class TuitionApplicationStatus {
 }
 enum class TuitionSeatReservationStatus { ACTIVE, CONFIRMED, RELEASED, EXPIRED }
 enum class TuitionLedgerConcept { TUITION_ENROLLMENT, MONTHLY_FEE }
-enum class TuitionLedgerStatus { PENDING, PAID, CANCELLED }
+enum class TuitionLedgerStatus { PENDING, PARTIALLY_PAID, PAID, CANCELLED }

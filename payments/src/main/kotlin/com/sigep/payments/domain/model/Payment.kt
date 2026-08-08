@@ -82,7 +82,8 @@ enum class PaymentStatus {
     PENDING,
     PAID,
     OVERDUE,
-    CANCELLED
+    CANCELLED,
+    REVERSED
 }
 
 enum class PaymentMethod {
@@ -90,6 +91,7 @@ enum class PaymentMethod {
     CREDIT_CARD,
     DEBIT_CARD,
     BANK_TRANSFER,
-    CHECK
+    CHECK,
+    AUTOMATIC_DEBIT
 }
 

@@ -10,10 +10,16 @@ import com.sigep.payments.application.dto.BillingRunPreviewDto
 import com.sigep.payments.application.dto.ChargePaymentResultDto
 import com.sigep.payments.application.dto.PrepareBillingRunRequest
 import com.sigep.payments.application.dto.RegisterChargePaymentRequest
+import com.sigep.payments.application.dto.ReverseLateFeeRequest
+import com.sigep.payments.application.dto.RectifyFiscalDecisionRequest
 import com.sigep.payments.application.dto.UpdateBillingProfileRequest
 import com.sigep.payments.application.service.BillingOperationsService
+import com.sigep.payments.application.service.BillingLateFeeService
 import com.sigep.payments.domain.model.BillingChargeStatus
 import com.sigep.payments.domain.model.BillingProfileStatus
+import com.sigep.payments.domain.model.BillingChargeFiscalDisposition
+import com.sigep.payments.domain.model.AutomaticDebitInstructionStatus
+import com.sigep.payments.domain.model.BillingCollectionChannel
 import com.sigep.security.application.annotation.RequireAdmin
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
@@ -33,7 +39,8 @@ import org.springframework.web.bind.annotation.RestController
 @RequestMapping("/api/v1/billing")
 @RequireAdmin
 class BillingOperationsController(
-    private val billingOperationsService: BillingOperationsService
+    private val billingOperationsService: BillingOperationsService,
+    private val lateFeeService: BillingLateFeeService
 ) {
 
     @GetMapping("/charges")
@@ -42,11 +49,60 @@ class BillingOperationsController(
         @RequestParam(required = false) studentId: Long?,
         @RequestParam(required = false) studentQuery: String?,
         @RequestParam(required = false) profileStatus: BillingProfileStatus?,
+        @RequestParam(required = false) fiscalDisposition: BillingChargeFiscalDisposition?,
+        @RequestParam(required = false) overdue: Boolean?,
+        @RequestParam(required = false) automaticDebitStatus: AutomaticDebitInstructionStatus?,
+        @RequestParam(required = false) collectionChannel: BillingCollectionChannel?,
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(defaultValue = "20") limit: Int
     ): ResponseEntity<ApiResponse<PageResponse<BillingChargeDto>>> = ResponseEntity.ok(
         ApiResponse.success(
-            billingOperationsService.listCharges(status, studentId, studentQuery, profileStatus, page, limit)
+            billingOperationsService.listCharges(
+                status,
+                studentId,
+                studentQuery,
+                profileStatus,
+                fiscalDisposition,
+                overdue,
+                automaticDebitStatus,
+                collectionChannel,
+                page,
+                limit
+            )
+        )
+    )
+
+    @GetMapping("/charges/{chargeId}")
+    fun getCharge(@PathVariable chargeId: Long): ResponseEntity<ApiResponse<BillingChargeDto>> =
+        ResponseEntity.ok(ApiResponse.success(billingOperationsService.getCharge(chargeId)))
+
+    @PostMapping("/charges/{chargeId}/late-fee/reversal")
+    fun reverseLateFee(
+        @PathVariable chargeId: Long,
+        @Valid @RequestBody request: ReverseLateFeeRequest,
+        httpRequest: HttpServletRequest
+    ): ResponseEntity<ApiResponse<BillingChargeDto>> {
+        lateFeeService.reverse(chargeId, request.reason, httpRequest.requireUserId())
+        return ResponseEntity.ok(
+            ApiResponse.success(billingOperationsService.getCharge(chargeId), "Late fee reversed")
+        )
+    }
+
+    @PostMapping("/charges/{chargeId}/fiscal-decisions")
+    fun rectifyFiscalDecision(
+        @PathVariable chargeId: Long,
+        @RequestHeader("Idempotency-Key") idempotencyKey: String,
+        @Valid @RequestBody request: RectifyFiscalDecisionRequest,
+        httpRequest: HttpServletRequest
+    ): ResponseEntity<ApiResponse<BillingChargeDto>> = ResponseEntity.ok(
+        ApiResponse.success(
+            billingOperationsService.rectifyFiscalDecision(
+                chargeId,
+                idempotencyKey,
+                request,
+                httpRequest.requireUserId()
+            ),
+            "Fiscal treatment rectified with audit trail"
         )
     )
 

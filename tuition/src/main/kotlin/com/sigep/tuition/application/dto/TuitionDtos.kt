@@ -11,6 +11,7 @@ import com.sigep.tuition.domain.model.TuitionProgressionRule
 import com.sigep.tuition.domain.model.TuitionSeatReservationStatus
 import com.sigep.tuition.domain.model.TuitionSegment
 import jakarta.validation.constraints.DecimalMin
+import jakarta.validation.constraints.DecimalMax
 import jakarta.validation.constraints.Email
 import jakarta.validation.constraints.Max
 import jakarta.validation.constraints.Min
@@ -139,6 +140,10 @@ data class TuitionFeePlanDto(
     val enrollmentFee: BigDecimal,
     val monthlyFee: BigDecimal,
     val installments: Int,
+    val monthlyDueDay: Int,
+    val lateFeePercentage: BigDecimal,
+    val automaticDebitMonthly: Boolean,
+    val automaticDebitEnrollment: Boolean,
     val currency: String,
     val validFrom: LocalDate,
     val validTo: LocalDate?,
@@ -155,6 +160,10 @@ data class CreateTuitionFeePlanRequest(
     @field:DecimalMin("0.00") val enrollmentFee: BigDecimal,
     @field:DecimalMin("0.00") val monthlyFee: BigDecimal,
     @field:Min(1) @field:Max(24) val installments: Int,
+    @field:Min(1) @field:Max(28) val monthlyDueDay: Int = 20,
+    @field:DecimalMin("0.00") @field:DecimalMax("100.00") val lateFeePercentage: BigDecimal = BigDecimal.ZERO,
+    val automaticDebitMonthly: Boolean = true,
+    val automaticDebitEnrollment: Boolean = false,
     @field:Size(min = 3, max = 3) val currency: String = "ARS",
     @field:NotNull val validFrom: LocalDate,
     val validTo: LocalDate? = null,
@@ -168,6 +177,10 @@ data class UpdateTuitionFeePlanRequest(
     @field:DecimalMin("0.00") val enrollmentFee: BigDecimal? = null,
     @field:DecimalMin("0.00") val monthlyFee: BigDecimal? = null,
     @field:Min(1) @field:Max(24) val installments: Int? = null,
+    @field:Min(1) @field:Max(28) val monthlyDueDay: Int? = null,
+    @field:DecimalMin("0.00") @field:DecimalMax("100.00") val lateFeePercentage: BigDecimal? = null,
+    val automaticDebitMonthly: Boolean? = null,
+    val automaticDebitEnrollment: Boolean? = null,
     @field:Size(min = 3, max = 3) val currency: String? = null,
     val validFrom: LocalDate? = null,
     val validTo: LocalDate? = null,
@@ -291,6 +304,10 @@ data class TuitionLedgerEntryDto(
     val grossAmount: BigDecimal,
     val discountAmount: BigDecimal,
     val netAmount: BigDecimal,
+    val paidAmount: BigDecimal,
+    val lateFeeAmount: BigDecimal,
+    val totalAmount: BigDecimal,
+    val outstandingAmount: BigDecimal,
     val dueDate: LocalDate,
     val status: TuitionLedgerStatus,
     val billingReference: String?,

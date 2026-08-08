@@ -192,6 +192,14 @@ Facturacion:
   la descarga funcione sin configuración adicional; deben reemplazarse antes de
   homologación o producción.
 - `BILLING_OUTBOX_POLL_DELAY_MS` controla el intervalo del worker (por defecto, 1000 ms).
+- `BILLING_FISCAL_EXCLUSION_ENABLED=true` habilita `EXCLUDE_CHARGE` solo en dev/QA; produccion
+  conserva `false` hasta contar con validacion contable escrita.
+- `BILLING_AUTOMATIC_DEBIT_PROVIDER=mock` habilita solo la adhesion Tutor simulada en dev/QA. El
+  circuito ADMIN siempre es manual y factura-primero: prepara datos seguros, registra presentacion y
+  respuesta de la procesadora, y crea el pago unicamente al confirmar `APPROVED`. El backend rechaza
+  el mock con perfiles `prod`/`production`; produccion usa `disabled` para la autogestion Tutor.
+- `BILLING_LATE_FEE_CRON` configura el procesador idempotente de recargos (zona
+  `America/Argentina/Buenos_Aires`). El calculo usa una sola vez el capital pendiente y `HALF_EVEN`.
 - `BILLING_FISCAL_REFERENCE_DATA_CACHE_TTL`, `BILLING_FISCAL_REFERENCE_DATA_STALE_IF_ERROR`
   y las variables `BILLING_FISCAL_*` de resiliencia controlan cache, circuit breaker y
   bulkhead; ver `ARCA_HOMOLOGATION_RUNBOOK.md`.
@@ -259,6 +267,10 @@ Migraciones del cierre QA:
   `voucher_sequences`.
 - `V17__add_fiscal_tax_breakdown.sql`: domicilio fiscal del receptor y detalle ordenado de
   alicuotas IVA/tributos para WSFE.
+- `V22__support_partial_payments_and_fiscal_decisions.sql`: pagos parciales, saldo, estados y
+  decisiones fiscales auditadas.
+- `V23__add_late_fee_policies_and_adjustments.sql`: politica por plan, snapshot y recargo unico.
+- `V24__create_automatic_debit_foundation.sql`: mandatos, instrucciones y eventos sanitizados.
 
 Validarlas en una base descartable o transaccion revertida antes de aplicarlas al contenedor
 actual; no se ejecutan automaticamente durante esta implementacion.

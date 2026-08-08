@@ -1,5 +1,6 @@
 package com.sigep.tuition.application.service
 
+import com.sigep.common.application.service.BillingChargeSettlement
 import com.sigep.tuition.domain.model.TuitionAcademicYear
 import com.sigep.tuition.domain.model.TuitionAcademicYearStatus
 import com.sigep.tuition.domain.model.TuitionApplication
@@ -48,7 +49,18 @@ class TuitionBillingSettlementObserverTest {
         every { ledgerRepository.save(capture(savedLedger)) } answers { savedLedger.captured }
         every { applicationRepository.save(capture(savedApplication)) } answers { savedApplication.captured }
 
-        observer.onChargePaid("TUITION_LEDGER", 55L, 900L)
+        observer.onChargeSettlementChanged(
+            BillingChargeSettlement(
+                sourceType = "TUITION_LEDGER",
+                sourceId = 55L,
+                paymentId = 900L,
+                baseAmount = BigDecimal("10000.00"),
+                lateFeeAmount = BigDecimal.ZERO,
+                paidAmount = BigDecimal("10000.00"),
+                outstandingAmount = BigDecimal.ZERO,
+                status = "PAID"
+            )
+        )
 
         assertEquals(TuitionLedgerStatus.PAID, savedLedger.captured.status)
         assertEquals("PAYMENT-900", savedLedger.captured.billingReference)
@@ -57,9 +69,53 @@ class TuitionBillingSettlementObserverTest {
 
     @Test
     fun `ignores charges owned by another source`() {
-        observer.onChargePaid("OTHER", 55L, 900L)
+        observer.onChargeSettlementChanged(
+            BillingChargeSettlement(
+                sourceType = "OTHER",
+                sourceId = 55L,
+                paymentId = 900L,
+                baseAmount = BigDecimal.ONE,
+                lateFeeAmount = BigDecimal.ZERO,
+                paidAmount = BigDecimal.ONE,
+                outstandingAmount = BigDecimal.ZERO,
+                status = "PAID"
+            )
+        )
 
         verify(exactly = 0) { ledgerRepository.findById(any()) }
+    }
+
+    @Test
+    fun `partial enrollment payment keeps application pending`() {
+        val application = application()
+        val entry = TuitionLedgerEntry(
+            id = 55L,
+            application = application,
+            concept = TuitionLedgerConcept.TUITION_ENROLLMENT,
+            grossAmount = BigDecimal("10000.00"),
+            netAmount = BigDecimal("10000.00"),
+            dueDate = LocalDate.of(2027, 2, 20)
+        )
+        val savedLedger = slot<TuitionLedgerEntry>()
+        every { ledgerRepository.findById(55L) } returns Optional.of(entry)
+        every { ledgerRepository.save(capture(savedLedger)) } answers { savedLedger.captured }
+
+        observer.onChargeSettlementChanged(
+            BillingChargeSettlement(
+                sourceType = "TUITION_LEDGER",
+                sourceId = 55L,
+                paymentId = 901L,
+                baseAmount = BigDecimal("10000.00"),
+                lateFeeAmount = BigDecimal.ZERO,
+                paidAmount = BigDecimal("4000.00"),
+                outstandingAmount = BigDecimal("6000.00"),
+                status = "PARTIALLY_PAID"
+            )
+        )
+
+        assertEquals(TuitionLedgerStatus.PARTIALLY_PAID, savedLedger.captured.status)
+        assertEquals(BigDecimal("4000.00"), savedLedger.captured.paidAmount)
+        verify(exactly = 0) { applicationRepository.save(any()) }
     }
 
     private fun application(): TuitionApplication {

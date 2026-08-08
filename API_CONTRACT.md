@@ -403,7 +403,7 @@ type TuitionApplicationStatus =
   | 'CANCELLED'
   | 'EXPIRED';
 type TuitionLedgerConcept = 'TUITION_ENROLLMENT' | 'MONTHLY_FEE';
-type TuitionLedgerStatus = 'PENDING' | 'PAID' | 'CANCELLED';
+type TuitionLedgerStatus = 'PENDING' | 'PARTIALLY_PAID' | 'PAID' | 'CANCELLED';
 
 type TuitionProgressionRule = 'PASS_PREVIOUS_LEVEL' | 'ADMIN_APPROVAL';
 ```
@@ -795,6 +795,7 @@ Base de pagos: `/api/v1/payments`
 | Metodo | Ruta | Idempotency-Key | Respuesta | Descripcion |
 |---|---|---|---|---|
 | POST | `/register` | Si | `201 ApiResponse<BillingWorkflowDto>` | Crea pago confirmado, recibo X y borrador fiscal en una transaccion local. |
+| POST | `/receipts` | Si | `201 ApiResponse<PaymentDetailDto>` | Registra atomicamente pago confirmado y recibo X; no crea factura, outbox ni llama al proveedor fiscal. |
 | POST | `/` | Si | `201 ApiResponse<PaymentDetailDto>` | Crea un pago `PENDING`. |
 | GET | `/` | No | `ApiResponse<PageResponse<PaymentDto>>` | Lista por `page` y `limit`. |
 | GET | `/{id}` | No | `ApiResponse<PaymentDetailDto>` | Devuelve pago, recibo y factura vinculada. |
@@ -806,7 +807,7 @@ Base de pagos: `/api/v1/payments`
 Requests principales:
 
 ```ts
-type PaymentMethod = 'CASH' | 'CREDIT_CARD' | 'DEBIT_CARD' | 'BANK_TRANSFER' | 'CHECK';
+type PaymentMethod = 'CASH' | 'CREDIT_CARD' | 'DEBIT_CARD' | 'BANK_TRANSFER' | 'CHECK' | 'AUTOMATIC_DEBIT';
 
 interface CreatePaymentRequest {
   studentId: number | null; // nullable durante la matriculacion previa al alta del estudiante
@@ -900,18 +901,25 @@ Base operativa: `/api/v1/billing`
 
 | Metodo | Ruta | Idempotency-Key | Respuesta | Descripcion |
 |---|---|---|---|---|
-| GET | `/charges` | No | `ApiResponse<PageResponse<BillingChargeDto>>` | Lista cargos por `status`, `studentId`, `studentQuery` (nombre o apellido, parcial y sin distinguir mayusculas), `profileStatus`, `page` y `limit`. |
+| GET | `/charges` | No | `ApiResponse<PageResponse<BillingChargeDto>>` | Lista por `status`, estudiante, perfil, `fiscalDisposition`, `overdue`, `automaticDebitStatus`, `collectionChannel`, `page` y `limit`. |
+| GET | `/charges/{chargeId}` | No | `ApiResponse<BillingChargeDto>` | Detalle con capital, recargo, pagado, saldo, pagos/recibos y ultimo intento de debito. |
 | GET | `/accounts/{accountId}/profile` | No | `ApiResponse<BillingProfileDto>` | Perfil fiscal reutilizable y campos faltantes. |
 | PUT | `/accounts/{accountId}/profile` | No | `ApiResponse<BillingProfileDto>` | Valida y completa receptor, documento, IVA, comprobante, concepto y moneda. |
-| POST | `/charges/{chargeId}/payments` | Si | `201 ApiResponse<ChargePaymentResultDto>` | Imputa el total del cargo, confirma pago y genera recibo X. |
-| POST | `/runs/preview` | No | `ApiResponse<BillingRunPreviewDto>` | Resuelve seleccion individual, explicita o filtrada sin escribir. |
+| POST | `/charges/{chargeId}/payments` | Si | `201 ApiResponse<ChargePaymentResultDto>` | Imputa `amount` total o parcial y emite un recibo X. Al cancelar saldo exige `fiscalClosure`; `EXCLUDE_CHARGE` exige motivo y feature flag. |
+| POST | `/charges/{chargeId}/fiscal-decisions` | Si | `ApiResponse<BillingChargeDto>` | Rectifica el tratamiento fiscal mediante una nueva decision auditada. |
+| POST | `/charges/{chargeId}/late-fee/reversal` | No | `ApiResponse<BillingChargeDto>` | Anula el recargo activo con motivo; se bloquea si existe factura o el recargo ya fue cobrado. |
+| POST | `/runs/preview` | No | `ApiResponse<BillingRunPreviewDto>` | Resuelve seleccion individual, explicita o filtrada; revalida y puede persistir un recargo vencido, pero no crea facturas. |
 | POST | `/runs` | Si | `201 ApiResponse<BillingRunDto>` | Crea en servidor las facturas del conjunto validado y audita la ejecucion. |
 | GET | `/runs/{runId}` | No | `ApiResponse<BillingRunDto>` | Devuelve ejecucion e items creados. |
 
 ```ts
 type BillingSelectionMode = 'INDIVIDUAL' | 'SELECTED' | 'FILTERED';
-type BillingChargeStatus = 'OPEN' | 'PAID' | 'CANCELLED';
+type BillingChargeStatus = 'OPEN' | 'PARTIALLY_PAID' | 'PAID' | 'CANCELLED';
 type BillingProfileStatus = 'INCOMPLETE' | 'READY';
+type BillingCollectionChannel = 'REGULAR' | 'AUTOMATIC_DEBIT';
+type AutomaticDebitInstructionStatus =
+  | 'READY_FOR_PROCESSING' | 'SUBMITTED' | 'APPROVED' | 'REJECTED' | 'UNKNOWN'
+  | 'ACCOUNTING_RESOLUTION_REQUIRED' | 'CREDIT_NOTE_REQUIRED' | 'REVERSED' | 'CANCELLED';
 type FiscalAmountTreatment = 'NON_TAXED' | 'EXEMPT';
 
 interface PrepareBillingRunRequest {
@@ -921,11 +929,59 @@ interface PrepareBillingRunRequest {
     status?: BillingChargeStatus | null;
     studentId?: number | null;
     profileStatus?: BillingProfileStatus | null;
+    fiscalDisposition?: 'PENDING' | 'EXCLUDED' | null;
+    overdue?: boolean | null;
+    automaticDebitStatus?: AutomaticDebitInstructionStatus | null;
+    collectionChannel?: BillingCollectionChannel | null; // default REGULAR
   };
   issueDate: string;
   amountTreatment: FiscalAmountTreatment;
 }
 ```
+
+`BillingChargeDto.amount` conserva compatibilidad y representa el total (`baseAmount + lateFeeAmount`).
+Tambien expone `paidAmount`, `outstandingAmount`, `overdue`, `fiscalDisposition`, elegibilidad y
+`payments[]`. Cada parcial debe ser mayor que cero y no superar el saldo; la fila del cargo se bloquea
+transaccionalmente. Los parciales siempre usan `KEEP_PENDING`. El pago no invoca `FiscalAuthorityPort`.
+
+Base de adhesion Tutor: `/api/v1/billing/me/debit-mandates` (`GUARDIAN`). Esta autogestion
+solo esta disponible con el autorizador mock de desarrollo/QA y se identifica como simulada.
+
+| Metodo | Ruta | Descripcion |
+|---|---|---|
+| GET | `/` | Lista solamente los mandatos de la cuenta autenticada. |
+| POST | `/` | Registra consentimiento y referencia opaca; nunca recibe PAN, CVV ni CBU completo. |
+| PATCH | `/{mandateId}` | Activa, pausa o cancela un mandato propio; un mandato ajeno no se expone. |
+
+Base ADMIN: `/api/v1/billing/automatic-debit`.
+
+| Metodo | Ruta | Idempotency-Key | Descripcion |
+|---|---|---|---|
+| GET | `/mandates` | No | Consola paginada de mandatos. |
+| GET | `/instructions` | No | Consola paginada de instrucciones. |
+| POST | `/mandates` | No | Adhiere manualmente una cuenta, procesadora, instrumento enmascarado, alcance y vigencia. |
+| PATCH | `/mandates/{id}` | No | Activa, pausa o cancela una adhesion. |
+| POST | `/instructions` | Si | Prepara la tarjeta de copia desde una factura fiscal ya autorizada; no envia ni cobra. |
+| POST | `/instructions/{id}/submission` | Si | Registra que ADMIN presento el dato a la procesadora y su referencia externa. |
+| POST | `/instructions/{id}/results` | Si | Registra `APPROVED`, `REJECTED` o `UNKNOWN`; solo `APPROVED` crea pago y recibo X. |
+| POST | `/instructions/{id}/resolution` | Si | Resuelve un rechazo conservando la factura o marcando `CREDIT_NOTE_REQUIRED`, siempre con motivo. |
+| POST | `/instructions/{id}/cancellation` | Si | Cancela una preparacion que aun no fue presentada, con motivo. |
+| POST | `/instructions/{id}/reversal` | No | Revierte un aprobado, marca el pago `REVERSED` y reabre el saldo. |
+
+La adhesion vive en la cuenta de facturacion y enruta solo cargos futuros elegibles al
+`collectionChannel=AUTOMATIC_DEBIT`; la matricula se incluye unicamente si el alcance lo indica.
+Los lotes de facturacion no mezclan los canales regular y debito. Para preparar el procesamiento,
+la factura debe estar autorizada y tener punto de venta y numero de comprobante. La respuesta incluye
+cliente, estudiante, comprobante completo, ultimos tres digitos, importe, fecha, procesadora e
+instrumento enmascarado para copia en pantalla; no existe exportador ni persistencia de PAN, CVV o CBU.
+
+Una instruccion `READY_FOR_PROCESSING`, `SUBMITTED`, `UNKNOWN`, `ACCOUNTING_RESOLUTION_REQUIRED` o
+`CREDIT_NOTE_REQUIRED` bloquea el cobro manual para evitar duplicados. `REJECTED` abre una decision
+contable manual: `KEEP_INVOICE` conserva la factura y libera el circuito de cobranza, mientras
+`REQUEST_CREDIT_NOTE` crea una tarea `CREDIT_NOTE_REQUIRED`; no emite una nota de credito
+automaticamente. Solo `APPROVED` crea pago `AUTOMATIC_DEBIT`, imputacion y recibo X, siempre
+`KEEP_PENDING`. El autorizador mock se limita al alta Tutor en dev/QA y falla al arrancar en produccion;
+no simula el envio ni el resultado de la procesadora.
 
 `FILTERED` se resuelve completamente en backend (maximo 1000 cargos); Angular no itera creando
 facturas una por una. El preview bloquea perfiles incompletos, cargos cancelados, montos no
