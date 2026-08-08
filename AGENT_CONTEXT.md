@@ -283,6 +283,13 @@ Estado: nucleo persistente implementado. `tuition` sincroniza su ledger con carg
 - Entidades y repositorios para pago, recibo X, factura, intentos, outbox y secuencia.
 - Cuentas y perfiles fiscales reutilizables, cargos, imputaciones y ejecuciones manuales
   individuales, seleccionadas o filtradas.
+- V22-V24: multiples imputaciones por cargo, `PARTIALLY_PAID`, saldo transaccional, decision fiscal
+  auditada, politica de mora por plan y recargo unico sobre capital pendiente.
+- Debito factura-primero: adhesion por cuenta, canal separado en cargos, factura autorizada antes de
+  preparar datos, presentacion/resultado manuales, decision contable ante rechazo y reversa auditada.
+  La tarjeta de copia no expone PAN/CBU/CVV ni genera archivos. `AutomaticDebitPort` se limita a
+  autorizar la adhesion Tutor simulada en dev/QA; nunca procesa ni aprueba cobros.
+- `POST /api/v1/payments/receipts` confirma un pago libre y recibo X sin factura ni outbox.
 - Alta/confirmacion/factura idempotentes y `POST /api/v1/payments/register` como transaccion
   local de pocos clics.
 - Bandeja, detalle, encolado `202 Accepted` y conciliacion de resultados `UNKNOWN`.
@@ -302,7 +309,9 @@ Reglas:
 - No asumir condicion IVA, alicuota, tipo de comprobante ni aplicabilidad RG 3368.
 - Para el primer cliente, `rg5866Applicable` permanece forzado en `false`; no recopilar ni
   enviar esos datos hasta una definicion fiscal futura.
-- No agregar generacion mensual programada ni llamadas ARCA multi-registro en esta base.
+- La unica generacion programada financiera permitida es el recargo. Las facturas, presentaciones y
+  resultados de debito requieren acciones ADMIN auditadas; nunca se autorizan facturas en ARCA ni se
+  simulan aprobaciones de debito en segundo plano.
 - Las sumas de bases/IVA/tributos deben coincidir con los agregados; el preflight deja en
   `DRAFT` cualquier desglose inconsistente.
 - Seguir `BILLING_ARCA_IMPLEMENTATION_GUIDE.md` antes de ampliar el modulo.

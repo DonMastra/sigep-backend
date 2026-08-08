@@ -23,7 +23,10 @@ data class BillingChargeCommand(
     val serviceTo: LocalDate?,
     val receiverName: String,
     val receiverAddress: String?,
-    val receiverDocumentNumber: String?
+    val receiverDocumentNumber: String?,
+    val lateFeePercentage: BigDecimal = BigDecimal.ZERO,
+    val lateFeeEligible: Boolean = false,
+    val automaticDebitEligible: Boolean = false
 )
 
 data class BillingChargeInfo(
@@ -34,5 +37,16 @@ data class BillingChargeInfo(
 )
 
 interface BillingChargeSettlementObserver {
-    fun onChargePaid(sourceType: String, sourceId: Long, paymentId: Long)
+    fun onChargeSettlementChanged(settlement: BillingChargeSettlement)
 }
+
+data class BillingChargeSettlement(
+    val sourceType: String,
+    val sourceId: Long,
+    val paymentId: Long?,
+    val baseAmount: BigDecimal,
+    val lateFeeAmount: BigDecimal,
+    val paidAmount: BigDecimal,
+    val outstandingAmount: BigDecimal,
+    val status: String
+)

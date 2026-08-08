@@ -77,6 +77,12 @@ logging:
     org.hibernate.SQL: WARN
 
 billing:
+  fiscal-exclusion:
+    enabled: ${BILLING_FISCAL_EXCLUSION_ENABLED:false}
+  automatic-debit:
+    provider: ${BILLING_AUTOMATIC_DEBIT_PROVIDER:disabled}
+  late-fee:
+    cron: ${BILLING_LATE_FEE_CRON:0 15 1 * * *}
   fiscal:
     provider: ${BILLING_FISCAL_PROVIDER:disabled}
     reference-data-cache-ttl: ${BILLING_FISCAL_REFERENCE_DATA_CACHE_TTL:6h}

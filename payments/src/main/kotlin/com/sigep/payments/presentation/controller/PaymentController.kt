@@ -12,6 +12,7 @@ import com.sigep.payments.application.dto.PaymentDto
 import com.sigep.payments.application.dto.PaymentReceiptDto
 import com.sigep.payments.application.dto.BillingWorkflowDto
 import com.sigep.payments.application.dto.RegisterPaymentAndInvoiceRequest
+import com.sigep.payments.application.dto.RegisterPaymentReceiptRequest
 import com.sigep.payments.application.service.BillingApplicationService
 import com.sigep.payments.application.service.BillingDocumentService
 import com.sigep.payments.application.service.BillingWorkflowService
@@ -42,6 +43,20 @@ class PaymentController(
     private val workflowService: BillingWorkflowService,
     private val documentService: BillingDocumentService
 ) {
+
+    @PostMapping("/receipts")
+    fun registerReceipt(
+        @RequestHeader("Idempotency-Key") idempotencyKey: String,
+        @Valid @RequestBody request: RegisterPaymentReceiptRequest,
+        httpRequest: HttpServletRequest
+    ): ResponseEntity<ApiResponse<PaymentDetailDto>> = ResponseEntity
+        .status(HttpStatus.CREATED)
+        .body(
+            ApiResponse.success(
+                paymentService.registerReceipt(idempotencyKey, request, httpRequest.requireUserId()),
+                "Payment and non-fiscal receipt created without fiscal invoice"
+            )
+        )
 
     @PostMapping("/register")
     fun register(

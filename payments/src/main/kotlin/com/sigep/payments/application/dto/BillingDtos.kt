@@ -2,6 +2,14 @@ package com.sigep.payments.application.dto
 
 import com.sigep.payments.domain.model.BillingOutboxStatus
 import com.sigep.payments.domain.model.BillingChargeStatus
+import com.sigep.payments.domain.model.BillingChargeFiscalDisposition
+import com.sigep.payments.domain.model.FiscalClosure
+import com.sigep.payments.domain.model.AutomaticDebitInstructionStatus
+import com.sigep.payments.domain.model.AutomaticDebitInstrumentType
+import com.sigep.payments.domain.model.AutomaticDebitMandateStatus
+import com.sigep.payments.domain.model.AutomaticDebitResolution
+import com.sigep.payments.domain.model.AutomaticDebitScope
+import com.sigep.payments.domain.model.BillingCollectionChannel
 import com.sigep.payments.domain.model.BillingProfileStatus
 import com.sigep.payments.domain.model.BillingRunStatus
 import com.sigep.payments.domain.model.BillingSelectionMode
@@ -216,6 +224,7 @@ data class FiscalInvoiceDto(
     val id: Long,
     val paymentId: Long?,
     val chargeId: Long?,
+    val collectionChannel: BillingCollectionChannel?,
     val studentId: Long?,
     val paymentReceiptNumber: String?,
     val status: FiscalInvoiceStatus,
@@ -346,19 +355,49 @@ data class BillingChargeDto(
     val sourceId: Long,
     val concept: String,
     val description: String,
+    val baseAmount: BigDecimal,
+    val lateFeeAmount: BigDecimal,
     val amount: BigDecimal,
+    val paidAmount: BigDecimal,
+    val outstandingAmount: BigDecimal,
     val currency: String,
     val dueDate: LocalDate,
     val serviceFrom: LocalDate?,
     val serviceTo: LocalDate?,
     val status: BillingChargeStatus,
+    val overdue: Boolean,
+    val lateFeePercentage: BigDecimal,
+    val lateFeeEligible: Boolean,
+    val automaticDebitEligible: Boolean,
+    val collectionChannel: BillingCollectionChannel,
+    val automaticDebitEnrolled: Boolean,
+    val fiscalDisposition: BillingChargeFiscalDisposition,
+    val automaticDebitStatus: AutomaticDebitInstructionStatus?,
     val profile: BillingProfileDto,
     val invoiceId: Long?,
     val invoiceStatus: FiscalInvoiceStatus?,
     val paymentId: Long?,
     val receiptNumber: String?,
+    val payments: List<BillingChargePaymentDto>,
     val createdAt: LocalDateTime,
     val updatedAt: LocalDateTime
+)
+
+data class RegisterPaymentReceiptRequest(
+    @field:Valid
+    val payment: CreatePaymentRequest,
+
+    @field:Valid
+    val confirmation: ConfirmPaymentRequest
+)
+
+data class BillingChargePaymentDto(
+    val paymentId: Long,
+    val amount: BigDecimal,
+    val paymentDate: LocalDate?,
+    val method: PaymentMethod?,
+    val status: PaymentStatus,
+    val receiptNumber: String?
 )
 
 data class BillingChargeFilterRequest(
@@ -366,7 +405,11 @@ data class BillingChargeFilterRequest(
     val studentId: Long? = null,
     @field:Size(max = 100)
     val studentQuery: String? = null,
-    val profileStatus: BillingProfileStatus? = null
+    val profileStatus: BillingProfileStatus? = null,
+    val fiscalDisposition: BillingChargeFiscalDisposition? = null,
+    val overdue: Boolean? = null,
+    val automaticDebitStatus: AutomaticDebitInstructionStatus? = null,
+    val collectionChannel: BillingCollectionChannel? = BillingCollectionChannel.REGULAR
 )
 
 data class PrepareBillingRunRequest(
@@ -415,8 +458,17 @@ data class BillingRunDto(
 )
 
 data class RegisterChargePaymentRequest(
+    @field:DecimalMin(value = "0.01")
+    @field:Digits(integer = 10, fraction = 2)
+    val amount: BigDecimal,
+
     @field:Valid
     val confirmation: ConfirmPaymentRequest,
+
+    val fiscalClosure: FiscalClosure? = null,
+
+    @field:Size(max = 500)
+    val fiscalReason: String? = null,
 
     @field:Size(max = 150)
     val externalReference: String? = null,
@@ -428,4 +480,145 @@ data class RegisterChargePaymentRequest(
 data class ChargePaymentResultDto(
     val charge: BillingChargeDto,
     val payment: PaymentDetailDto
+)
+
+data class AutomaticDebitMandateDto(
+    val id: Long,
+    val accountId: Long,
+    val provider: String,
+    val maskedLabel: String,
+    val processorName: String,
+    val instrumentType: AutomaticDebitInstrumentType,
+    val scope: AutomaticDebitScope,
+    val effectiveFrom: LocalDate,
+    val status: AutomaticDebitMandateStatus,
+    val isDefault: Boolean,
+    val consentVersion: String,
+    val consentedAt: LocalDateTime,
+    val cancelledAt: LocalDateTime?,
+    val simulated: Boolean
+)
+
+data class CreateAutomaticDebitMandateRequest(
+    @field:NotBlank
+    @field:Size(max = 100)
+    val maskedLabel: String,
+
+    @field:NotBlank
+    @field:Size(max = 40)
+    val consentVersion: String,
+
+    @field:NotBlank
+    @field:Size(max = 80)
+    val processorName: String = "Simulated",
+
+    val instrumentType: AutomaticDebitInstrumentType = AutomaticDebitInstrumentType.CARD,
+    val scope: AutomaticDebitScope = AutomaticDebitScope.INSTALLMENTS,
+    val effectiveFrom: LocalDate = LocalDate.now()
+)
+
+data class CreateAdminAutomaticDebitMandateRequest(
+    @field:Positive
+    val accountId: Long,
+
+    @field:NotBlank
+    @field:Size(max = 100)
+    val maskedLabel: String,
+
+    @field:NotBlank
+    @field:Size(max = 80)
+    val processorName: String,
+
+    val instrumentType: AutomaticDebitInstrumentType,
+    val scope: AutomaticDebitScope = AutomaticDebitScope.INSTALLMENTS,
+    val effectiveFrom: LocalDate,
+
+    @field:NotBlank
+    @field:Size(max = 40)
+    val consentVersion: String
+)
+
+data class UpdateAutomaticDebitMandateRequest(
+    val status: AutomaticDebitMandateStatus
+)
+
+data class AutomaticDebitInstructionDto(
+    val id: Long,
+    val mandateId: Long,
+    val chargeId: Long,
+    val invoiceId: Long,
+    val paymentId: Long?,
+    val accountId: Long,
+    val studentName: String,
+    val receiverName: String,
+    val pointOfSale: Int,
+    val voucherNumber: Long,
+    val voucherSuffix: String,
+    val processorName: String,
+    val instrumentType: AutomaticDebitInstrumentType,
+    val maskedLabel: String,
+    val amount: BigDecimal,
+    val currency: String,
+    val processingDate: LocalDate,
+    val status: AutomaticDebitInstructionStatus,
+    val submissionReference: String?,
+    val failureCode: String?,
+    val failureMessage: String?,
+    val resolution: AutomaticDebitResolution?,
+    val resolutionReason: String?,
+    val submittedAt: LocalDateTime?,
+    val resolvedAt: LocalDateTime?,
+    val createdAt: LocalDateTime,
+    val updatedAt: LocalDateTime,
+    val simulated: Boolean
+)
+
+data class CreateAutomaticDebitInstructionRequest(
+    @field:Positive
+    val invoiceId: Long,
+    val processingDate: LocalDate
+)
+
+data class SubmitAutomaticDebitInstructionRequest(
+    @field:NotBlank
+    @field:Size(max = 150)
+    val submissionReference: String
+)
+
+data class RecordAutomaticDebitResultRequest(
+    val outcome: AutomaticDebitInstructionStatus,
+
+    @field:Size(max = 80)
+    val failureCode: String? = null,
+
+    @field:Size(max = 500)
+    val failureMessage: String? = null
+)
+
+data class ResolveAutomaticDebitRejectionRequest(
+    val resolution: AutomaticDebitResolution,
+
+    @field:NotBlank
+    @field:Size(max = 500)
+    val reason: String
+)
+
+data class ReverseAutomaticDebitRequest(
+    @field:NotBlank
+    @field:Size(max = 500)
+    val reason: String
+)
+
+data class ReverseLateFeeRequest(
+    @field:NotBlank
+    @field:Size(max = 500)
+    val reason: String
+)
+
+data class RectifyFiscalDecisionRequest(
+    val decision: FiscalClosure,
+
+    @field:NotBlank
+    @field:Size(max = 500)
+    val reason: String
 )

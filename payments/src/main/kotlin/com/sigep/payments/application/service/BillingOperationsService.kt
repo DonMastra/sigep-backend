@@ -7,7 +7,9 @@ import com.sigep.common.application.exception.ValidationException
 import com.sigep.common.application.service.BillingChargeCommand
 import com.sigep.common.application.service.BillingChargeInfo
 import com.sigep.common.application.service.BillingChargeProvider
+import com.sigep.common.application.service.BillingChargeSettlement
 import com.sigep.common.application.service.BillingChargeSettlementObserver
+import com.sigep.payments.application.dto.BillingChargePaymentDto
 import com.sigep.payments.application.dto.BillingChargeDto
 import com.sigep.payments.application.dto.BillingProfileDto
 import com.sigep.payments.application.dto.BillingRunDto
@@ -18,18 +20,32 @@ import com.sigep.payments.application.dto.ChargePaymentResultDto
 import com.sigep.payments.application.dto.CreatePaymentRequest
 import com.sigep.payments.application.dto.PrepareBillingRunRequest
 import com.sigep.payments.application.dto.RegisterChargePaymentRequest
+import com.sigep.payments.application.dto.RectifyFiscalDecisionRequest
 import com.sigep.payments.application.dto.UpdateBillingProfileRequest
 import com.sigep.payments.domain.model.BillingAccount
 import com.sigep.payments.domain.model.BillingCharge
 import com.sigep.payments.domain.model.BillingChargeStatus
+import com.sigep.payments.domain.model.BillingChargeFiscalDecision
+import com.sigep.payments.domain.model.BillingChargeFiscalDisposition
+import com.sigep.payments.domain.model.FiscalClosure
+import com.sigep.payments.domain.model.AutomaticDebitInstructionStatus
+import com.sigep.payments.domain.model.AutomaticDebitMandateStatus
+import com.sigep.payments.domain.model.AutomaticDebitScope
+import com.sigep.payments.domain.model.BillingCollectionChannel
+import com.sigep.payments.domain.model.BillingChargeAdjustmentSource
 import com.sigep.payments.domain.model.BillingProfile
 import com.sigep.payments.domain.model.BillingProfileStatus
 import com.sigep.payments.domain.model.BillingRun
 import com.sigep.payments.domain.model.BillingRunItem
 import com.sigep.payments.domain.model.BillingSelectionMode
 import com.sigep.payments.domain.model.PaymentAllocation
+import com.sigep.payments.domain.model.PaymentStatus
+import com.sigep.payments.domain.model.PaymentMethod
 import com.sigep.payments.domain.repository.BillingAccountRepository
 import com.sigep.payments.domain.repository.BillingChargeRepository
+import com.sigep.payments.domain.repository.BillingChargeFiscalDecisionRepository
+import com.sigep.payments.domain.repository.AutomaticDebitInstructionRepository
+import com.sigep.payments.domain.repository.AutomaticDebitMandateRepository
 import com.sigep.payments.domain.repository.BillingProfileRepository
 import com.sigep.payments.domain.repository.BillingRunItemRepository
 import com.sigep.payments.domain.repository.BillingRunRepository
@@ -38,6 +54,7 @@ import com.sigep.payments.domain.repository.PaymentAllocationRepository
 import com.sigep.payments.domain.repository.PaymentRepository
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
@@ -45,6 +62,8 @@ import java.math.RoundingMode
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.time.LocalDateTime
+import java.time.LocalDate
+import java.time.ZoneId
 
 @Service
 @Transactional
@@ -52,6 +71,9 @@ class BillingOperationsService(
     private val accountRepository: BillingAccountRepository,
     private val profileRepository: BillingProfileRepository,
     private val chargeRepository: BillingChargeRepository,
+    private val fiscalDecisionRepository: BillingChargeFiscalDecisionRepository,
+    private val automaticDebitInstructionRepository: AutomaticDebitInstructionRepository,
+    private val automaticDebitMandateRepository: AutomaticDebitMandateRepository,
     private val allocationRepository: PaymentAllocationRepository,
     private val paymentRepository: PaymentRepository,
     private val invoiceRepository: FiscalInvoiceRepository,
@@ -59,7 +81,10 @@ class BillingOperationsService(
     private val runItemRepository: BillingRunItemRepository,
     private val paymentService: PaymentApplicationService,
     private val billingService: BillingApplicationService,
-    private val settlementObservers: List<BillingChargeSettlementObserver>
+    private val lateFeeService: BillingLateFeeService,
+    private val settlementObservers: List<BillingChargeSettlementObserver>,
+    @Value("\${billing.fiscal-exclusion.enabled:false}")
+    private val fiscalExclusionEnabled: Boolean
 ) : BillingChargeProvider {
 
     override fun upsertCharge(command: BillingChargeCommand): BillingChargeInfo {
@@ -87,17 +112,25 @@ class BillingOperationsService(
                     sourceId = command.sourceId,
                     concept = command.concept,
                     description = command.description.trim(),
+                    baseAmount = money(command.amount),
                     amount = money(command.amount),
                     currency = command.currency,
                     dueDate = command.dueDate,
                     serviceFrom = command.serviceFrom,
                     serviceTo = command.serviceTo,
+                    lateFeePercentage = command.lateFeePercentage,
+                    lateFeeEligible = command.lateFeeEligible,
+                    automaticDebitEligible = command.automaticDebitEligible,
+                    collectionChannel = resolveCollectionChannel(
+                        accountId = requireNotNull(account.id),
+                        concept = command.concept,
+                        dueDate = command.dueDate,
+                        eligible = command.automaticDebitEligible
+                    ),
                     createdAt = now,
                     updatedAt = now
                 )
             )
-        } else if (existing.status == BillingChargeStatus.PAID) {
-            existing
         } else {
             chargeRepository.save(
                 existing.copy(
@@ -106,12 +139,9 @@ class BillingOperationsService(
                     studentName = command.studentName.trim(),
                     concept = command.concept,
                     description = command.description.trim(),
-                    amount = money(command.amount),
                     currency = command.currency,
-                    dueDate = command.dueDate,
                     serviceFrom = command.serviceFrom,
                     serviceTo = command.serviceTo,
-                    status = BillingChargeStatus.OPEN,
                     updatedAt = now
                 )
             )
@@ -137,6 +167,10 @@ class BillingOperationsService(
         studentId: Long?,
         studentQuery: String?,
         profileStatus: BillingProfileStatus?,
+        fiscalDisposition: BillingChargeFiscalDisposition?,
+        overdue: Boolean?,
+        automaticDebitStatus: AutomaticDebitInstructionStatus?,
+        collectionChannel: BillingCollectionChannel?,
         page: Int,
         size: Int
     ): PageResponse<BillingChargeDto> {
@@ -145,6 +179,11 @@ class BillingOperationsService(
             studentId,
             normalizeStudentQuery(studentQuery).orEmpty(),
             profileStatus,
+            fiscalDisposition,
+            overdue,
+            LocalDate.now(BUSINESS_ZONE),
+            automaticDebitStatus,
+            collectionChannel,
             PageRequest.of(
                 page.coerceAtLeast(0),
                 size.coerceIn(1, 100),
@@ -159,6 +198,11 @@ class BillingOperationsService(
             totalPages = result.totalPages
         )
     }
+
+    @Transactional(readOnly = true)
+    fun getCharge(chargeId: Long): BillingChargeDto = chargeRepository.findById(chargeId)
+        .orElseThrow { ResourceNotFoundException("Billing charge $chargeId not found") }
+        .let(::toDto)
 
     @Transactional(readOnly = true)
     fun getProfile(accountId: Long): BillingProfileDto = profileRepository.findByAccountId(accountId)
@@ -186,9 +230,13 @@ class BillingOperationsService(
         return profileRepository.save(updated).toDto()
     }
 
-    @Transactional(readOnly = true)
     fun preview(request: PrepareBillingRunRequest): BillingRunPreviewDto {
-        val charges = resolveCharges(request)
+        val charges = resolveCharges(request).map { charge ->
+            lateFeeService.applyIfDue(
+                requireNotNull(charge.id),
+                BillingChargeAdjustmentSource.BILLING_RUN
+            )
+        }
         val items = charges.map { charge ->
             BillingRunPreviewItemDto(charge = toDto(charge), blockers = blockers(charge))
         }
@@ -215,7 +263,13 @@ class BillingOperationsService(
             throw ResourceConflictException("Idempotency-Key was already used with another billing run payload")
         }
 
-        val charges = resolveCharges(request)
+        val charges = resolveCharges(request).map { charge ->
+            lateFeeService.applyIfDue(
+                requireNotNull(charge.id),
+                BillingChargeAdjustmentSource.BILLING_RUN,
+                adminId
+            )
+        }
         if (charges.isEmpty()) {
             throw ValidationException("The billing run has no selected charges")
         }
@@ -264,25 +318,184 @@ class BillingOperationsService(
         idempotencyKey: String,
         request: RegisterChargePaymentRequest,
         adminId: Long
-    ): ChargePaymentResultDto {
+    ): ChargePaymentResultDto = registerChargePaymentInternal(
+        chargeId,
+        idempotencyKey,
+        request,
+        adminId,
+        allowAutomaticDebit = false
+    )
+
+    fun registerAutomaticDebitPayment(
+        chargeId: Long,
+        idempotencyKey: String,
+        request: RegisterChargePaymentRequest,
+        actorId: Long
+    ): ChargePaymentResultDto = registerChargePaymentInternal(
+        chargeId,
+        idempotencyKey,
+        request.copy(fiscalClosure = FiscalClosure.KEEP_PENDING, fiscalReason = null),
+        actorId,
+        allowAutomaticDebit = true
+    )
+
+    fun reverseAutomaticDebitPayment(paymentId: Long): BillingChargeDto {
+        val payment = paymentRepository.findByIdForUpdate(paymentId)
+            .orElseThrow { ResourceNotFoundException("Payment $paymentId not found") }
+        if (payment.status != PaymentStatus.PAID || payment.paymentMethod != PaymentMethod.AUTOMATIC_DEBIT) {
+            throw ResourceConflictException("Only a confirmed automatic debit payment can be reversed")
+        }
+        val allocation = allocationRepository.findByPaymentId(paymentId).singleOrNull()
+            ?: throw ResourceConflictException("Automatic debit payment $paymentId must have exactly one allocation")
+        val chargeId = requireNotNull(allocation.charge.id)
+        val charge = chargeRepository.findByIdForUpdate(chargeId)
+            .orElseThrow { ResourceNotFoundException("Billing charge $chargeId not found") }
+        val now = LocalDateTime.now()
+        paymentRepository.save(payment.copy(status = PaymentStatus.REVERSED, updatedAt = now))
+        val paidAmount = money((charge.paidAmount - allocation.amount).max(BigDecimal.ZERO))
+        val status = when {
+            paidAmount == charge.amount -> BillingChargeStatus.PAID
+            paidAmount > BigDecimal.ZERO -> BillingChargeStatus.PARTIALLY_PAID
+            else -> BillingChargeStatus.OPEN
+        }
+        val reopened = chargeRepository.save(
+            charge.copy(
+                paidAmount = paidAmount,
+                status = status,
+                paidAt = if (status == BillingChargeStatus.PAID) charge.paidAt else null,
+                updatedAt = now
+            )
+        )
+        notifySettlement(reopened, paymentId)
+        return toDto(reopened)
+    }
+
+    fun rectifyFiscalDecision(
+        chargeId: Long,
+        idempotencyKey: String,
+        request: RectifyFiscalDecisionRequest,
+        adminId: Long
+    ): BillingChargeDto {
         validateIdempotencyKey(idempotencyKey)
         val charge = chargeRepository.findByIdForUpdate(chargeId)
             .orElseThrow { ResourceNotFoundException("Billing charge $chargeId not found") }
-        allocationRepository.findByChargeId(chargeId).orElse(null)?.let { allocation ->
-            if (allocation.payment.creationKey == "$idempotencyKey:create") {
-                return ChargePaymentResultDto(toDto(charge), paymentService.get(requireNotNull(allocation.payment.id)))
-            }
-            throw ResourceConflictException("Billing charge $chargeId is already paid")
+        fiscalDecisionRepository.findByIdempotencyKey(idempotencyKey).orElse(null)?.let {
+            return toDto(charge)
         }
-        if (charge.status != BillingChargeStatus.OPEN) {
-            throw ResourceConflictException("Billing charge $chargeId cannot be paid from status ${charge.status}")
+        if (charge.status != BillingChargeStatus.PAID) {
+            throw ResourceConflictException("Fiscal treatment can only be rectified after the charge is fully paid")
+        }
+        if (request.reason.isBlank()) {
+            throw ValidationException("A reason is required to rectify fiscal treatment")
+        }
+        if (request.decision == FiscalClosure.EXCLUDE_CHARGE) {
+            if (!fiscalExclusionEnabled) {
+                throw ValidationException("Fiscal exclusion is disabled in this environment")
+            }
+            if (invoiceRepository.findByChargeId(chargeId).isPresent) {
+                throw ResourceConflictException("A charge with an invoice cannot be excluded from fiscal billing")
+            }
+        }
+        val now = LocalDateTime.now()
+        fiscalDecisionRepository.save(
+            BillingChargeFiscalDecision(
+                charge = charge,
+                decision = request.decision,
+                reason = request.reason.trim(),
+                decidedBy = adminId,
+                idempotencyKey = idempotencyKey,
+                createdAt = now
+            )
+        )
+        val updated = chargeRepository.save(
+            charge.copy(
+                fiscalDisposition = if (request.decision == FiscalClosure.EXCLUDE_CHARGE) {
+                    BillingChargeFiscalDisposition.EXCLUDED
+                } else {
+                    BillingChargeFiscalDisposition.PENDING
+                },
+                updatedAt = now
+            )
+        )
+        return toDto(updated)
+    }
+
+    private fun registerChargePaymentInternal(
+        chargeId: Long,
+        idempotencyKey: String,
+        request: RegisterChargePaymentRequest,
+        adminId: Long,
+        allowAutomaticDebit: Boolean
+    ): ChargePaymentResultDto {
+        validateIdempotencyKey(idempotencyKey)
+        val initiallyLocked = chargeRepository.findByIdForUpdate(chargeId)
+            .orElseThrow { ResourceNotFoundException("Billing charge $chargeId not found") }
+        paymentRepository.findByCreationKey("$idempotencyKey:create").orElse(null)?.let { payment ->
+            val allocation = allocationRepository.findByPaymentId(requireNotNull(payment.id))
+                .singleOrNull { it.charge.id == chargeId }
+            if (allocation != null) {
+                return ChargePaymentResultDto(
+                    toDto(initiallyLocked),
+                    paymentService.get(requireNotNull(payment.id))
+                )
+            }
+            throw ResourceConflictException("Idempotency-Key was already used for another charge")
+        }
+        if (initiallyLocked.status !in setOf(BillingChargeStatus.OPEN, BillingChargeStatus.PARTIALLY_PAID)) {
+            throw ResourceConflictException("Billing charge $chargeId cannot be paid from status ${initiallyLocked.status}")
+        }
+        if (!allowAutomaticDebit && request.confirmation.paymentMethod.name == "AUTOMATIC_DEBIT") {
+            throw ValidationException("AUTOMATIC_DEBIT payments can only be created by a debit instruction")
+        }
+        if (!allowAutomaticDebit && automaticDebitInstructionRepository.existsByChargeIdAndStatusIn(
+                chargeId,
+                MANUAL_PAYMENT_BLOCKING_DEBIT_STATUSES
+            )
+        ) {
+            throw ResourceConflictException("A debit instruction is in progress for billing charge $chargeId")
+        }
+
+        val charge = lateFeeService.applyIfDue(
+            chargeId,
+            if (allowAutomaticDebit) BillingChargeAdjustmentSource.AUTOMATIC_DEBIT
+            else BillingChargeAdjustmentSource.PAYMENT,
+            adminId
+        )
+        val paymentAmount = money(request.amount)
+        val outstanding = money(charge.amount - charge.paidAmount)
+        if (paymentAmount <= BigDecimal.ZERO) {
+            throw ValidationException("Payment amount must be greater than zero")
+        }
+        if (paymentAmount > outstanding) {
+            throw ValidationException("Payment amount cannot exceed outstanding balance $outstanding")
+        }
+        val settlesCharge = paymentAmount == outstanding
+        if (!settlesCharge && request.fiscalClosure == FiscalClosure.EXCLUDE_CHARGE) {
+            throw ValidationException("Partial payments must keep the charge pending for fiscal treatment")
+        }
+        val closure = if (settlesCharge) {
+            request.fiscalClosure
+                ?: throw ValidationException("fiscalClosure is required when the payment settles the charge")
+        } else {
+            FiscalClosure.KEEP_PENDING
+        }
+        if (closure == FiscalClosure.EXCLUDE_CHARGE) {
+            if (!fiscalExclusionEnabled) {
+                throw ValidationException("Fiscal exclusion is disabled in this environment")
+            }
+            if (request.fiscalReason.isNullOrBlank()) {
+                throw ValidationException("A reason is required to exclude a charge from fiscal billing")
+            }
+            if (invoiceRepository.findByChargeId(chargeId).isPresent) {
+                throw ResourceConflictException("A charge with an invoice cannot be excluded from fiscal billing")
+            }
         }
 
         val created = paymentService.create(
             idempotencyKey = "$idempotencyKey:create",
             request = CreatePaymentRequest(
                 studentId = charge.studentId,
-                amount = charge.amount,
+                amount = paymentAmount,
                 currency = charge.currency,
                 concept = charge.description,
                 dueDate = charge.dueDate,
@@ -298,13 +511,40 @@ class BillingOperationsService(
             adminId = adminId
         )
         val payment = paymentRepository.getReferenceById(confirmed.payment.id)
-        allocationRepository.save(PaymentAllocation(payment = payment, charge = charge, amount = money(charge.amount)))
-        val paidCharge = chargeRepository.save(
-            charge.copy(status = BillingChargeStatus.PAID, paidAt = LocalDateTime.now(), updatedAt = LocalDateTime.now())
-        )
-        settlementObservers.forEach { observer ->
-            observer.onChargePaid(paidCharge.sourceType, paidCharge.sourceId, confirmed.payment.id)
+        allocationRepository.save(PaymentAllocation(payment = payment, charge = charge, amount = paymentAmount))
+        val newPaidAmount = money(charge.paidAmount + paymentAmount)
+        val newStatus = if (newPaidAmount == charge.amount) {
+            BillingChargeStatus.PAID
+        } else {
+            BillingChargeStatus.PARTIALLY_PAID
         }
+        val now = LocalDateTime.now()
+        val paidCharge = chargeRepository.save(
+            charge.copy(
+                paidAmount = newPaidAmount,
+                status = newStatus,
+                fiscalDisposition = if (closure == FiscalClosure.EXCLUDE_CHARGE) {
+                    BillingChargeFiscalDisposition.EXCLUDED
+                } else {
+                    charge.fiscalDisposition
+                },
+                paidAt = if (newStatus == BillingChargeStatus.PAID) now else null,
+                updatedAt = now
+            )
+        )
+        if (settlesCharge) {
+            fiscalDecisionRepository.save(
+                BillingChargeFiscalDecision(
+                    charge = paidCharge,
+                    decision = closure,
+                    reason = request.fiscalReason?.trim()?.takeIf(String::isNotEmpty),
+                    decidedBy = adminId,
+                    idempotencyKey = "$idempotencyKey:fiscal",
+                    createdAt = now
+                )
+            )
+        }
+        notifySettlement(paidCharge, confirmed.payment.id)
         return ChargePaymentResultDto(toDto(paidCharge), confirmed)
     }
 
@@ -356,6 +596,11 @@ class BillingOperationsService(
         if (request.selectionMode != BillingSelectionMode.FILTERED && charges.size != request.chargeIds.distinct().size) {
             throw ResourceNotFoundException("One or more selected billing charges do not exist")
         }
+        request.filters.collectionChannel?.let { expectedChannel ->
+            if (charges.any { it.collectionChannel != expectedChannel }) {
+                throw ValidationException("Selected charges must belong to the $expectedChannel collection channel")
+            }
+        }
         return charges.distinctBy { it.id }.sortedWith(compareBy<BillingCharge> { it.dueDate }.thenBy { it.id })
     }
 
@@ -365,6 +610,11 @@ class BillingOperationsService(
             request.filters.studentId,
             normalizeStudentQuery(request.filters.studentQuery).orEmpty(),
             request.filters.profileStatus,
+            request.filters.fiscalDisposition,
+            request.filters.overdue,
+            LocalDate.now(BUSINESS_ZONE),
+            request.filters.automaticDebitStatus,
+            request.filters.collectionChannel,
             PageRequest.of(0, MAX_RUN_ITEMS, Sort.by(Sort.Order.asc("dueDate"), Sort.Order.asc("id")))
         )
         if (page.totalElements > MAX_RUN_ITEMS) {
@@ -372,13 +622,25 @@ class BillingOperationsService(
                 "The filtered billing run exceeds the maximum of $MAX_RUN_ITEMS charges; narrow the filters"
             )
         }
-        return page.content
+        return page.content.filter { it.fiscalDisposition != BillingChargeFiscalDisposition.EXCLUDED }
     }
 
     private fun blockers(charge: BillingCharge): List<String> = buildList {
         if (charge.status == BillingChargeStatus.CANCELLED) add("El cargo esta cancelado")
+        if (charge.fiscalDisposition == BillingChargeFiscalDisposition.EXCLUDED) {
+            add("El cargo fue excluido de la facturacion fiscal")
+        }
         if (charge.amount <= BigDecimal.ZERO) add("El monto debe ser positivo")
         if (invoiceRepository.findByChargeId(requireNotNull(charge.id)).isPresent) add("El cargo ya tiene una factura")
+        if (
+            charge.status != BillingChargeStatus.PAID &&
+            charge.collectionChannel == BillingCollectionChannel.REGULAR &&
+            charge.lateFeeEligible &&
+            charge.lateFeePercentage > BigDecimal.ZERO &&
+            charge.lateFeeAppliedAt == null
+        ) {
+            add("El cargo debe pagarse o alcanzar la instancia de recargo antes de facturarse")
+        }
         addAll(requireProfile(requireNotNull(charge.account.id)).missingFields())
     }
 
@@ -389,7 +651,12 @@ class BillingOperationsService(
         val chargeId = requireNotNull(charge.id)
         val profile = requireProfile(requireNotNull(charge.account.id))
         val invoice = invoiceRepository.findByChargeId(chargeId).orElse(null)
-        val allocation = allocationRepository.findByChargeId(chargeId).orElse(null)
+        val allocations = allocationRepository.findByChargeIdOrderByCreatedAtAsc(chargeId)
+        val latestAllocation = allocations.lastOrNull()
+        val automaticDebitStatus = automaticDebitInstructionRepository
+            .findByChargeIdOrderByCreatedAtDesc(chargeId)
+            .firstOrNull()
+            ?.status
         return BillingChargeDto(
             id = chargeId,
             accountId = requireNotNull(charge.account.id),
@@ -400,20 +667,63 @@ class BillingOperationsService(
             sourceId = charge.sourceId,
             concept = charge.concept,
             description = charge.description,
+            baseAmount = charge.baseAmount,
+            lateFeeAmount = money(charge.amount - charge.baseAmount),
             amount = charge.amount,
+            paidAmount = charge.paidAmount,
+            outstandingAmount = money((charge.amount - charge.paidAmount).max(BigDecimal.ZERO)),
             currency = charge.currency,
             dueDate = charge.dueDate,
             serviceFrom = charge.serviceFrom,
             serviceTo = charge.serviceTo,
             status = charge.status,
+            overdue = charge.status !in setOf(BillingChargeStatus.PAID, BillingChargeStatus.CANCELLED) &&
+                LocalDate.now(BUSINESS_ZONE).isAfter(charge.dueDate),
+            lateFeePercentage = charge.lateFeePercentage,
+            lateFeeEligible = charge.lateFeeEligible,
+            automaticDebitEligible = charge.automaticDebitEligible,
+            collectionChannel = charge.collectionChannel,
+            automaticDebitEnrolled = automaticDebitMandateRepository
+                .findByAccountIdAndIsDefaultTrueAndStatusIn(
+                    requireNotNull(charge.account.id),
+                    setOf(AutomaticDebitMandateStatus.ACTIVE)
+                )
+                .map { mandate -> !mandate.effectiveFrom.isAfter(charge.dueDate) }
+                .orElse(false),
+            fiscalDisposition = charge.fiscalDisposition,
+            automaticDebitStatus = automaticDebitStatus,
             profile = profile.toDto(),
             invoiceId = invoice?.id,
             invoiceStatus = invoice?.status,
-            paymentId = allocation?.payment?.id,
-            receiptNumber = allocation?.payment?.receiptNumber,
+            paymentId = latestAllocation?.payment?.id,
+            receiptNumber = latestAllocation?.payment?.receiptNumber,
+            payments = allocations.map { allocation ->
+                BillingChargePaymentDto(
+                    paymentId = requireNotNull(allocation.payment.id),
+                    amount = allocation.amount,
+                    paymentDate = allocation.payment.paymentDate,
+                    method = allocation.payment.paymentMethod,
+                    status = allocation.payment.status,
+                    receiptNumber = allocation.payment.receiptNumber
+                )
+            },
             createdAt = charge.createdAt,
             updatedAt = charge.updatedAt
         )
+    }
+
+    private fun notifySettlement(charge: BillingCharge, paymentId: Long?) {
+        val settlement = BillingChargeSettlement(
+            sourceType = charge.sourceType,
+            sourceId = charge.sourceId,
+            paymentId = paymentId,
+            baseAmount = charge.baseAmount,
+            lateFeeAmount = money(charge.amount - charge.baseAmount),
+            paidAmount = charge.paidAmount,
+            outstandingAmount = money((charge.amount - charge.paidAmount).max(BigDecimal.ZERO)),
+            status = charge.status.name
+        )
+        settlementObservers.forEach { it.onChargeSettlementChanged(settlement) }
     }
 
     private fun BillingProfile.toDto() = BillingProfileDto(
@@ -483,6 +793,10 @@ class BillingOperationsService(
             request.filters.studentId,
             normalizeStudentQuery(request.filters.studentQuery),
             request.filters.profileStatus,
+            request.filters.fiscalDisposition,
+            request.filters.overdue,
+            request.filters.automaticDebitStatus,
+            request.filters.collectionChannel,
             request.issueDate,
             request.amountTreatment
         ).joinToString("|")
@@ -491,9 +805,35 @@ class BillingOperationsService(
             .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
     }
 
+    private fun resolveCollectionChannel(
+        accountId: Long,
+        concept: String,
+        dueDate: LocalDate,
+        eligible: Boolean
+    ): BillingCollectionChannel {
+        if (!eligible) return BillingCollectionChannel.REGULAR
+        val mandate = automaticDebitMandateRepository.findByAccountIdAndIsDefaultTrueAndStatusIn(
+            accountId,
+            setOf(AutomaticDebitMandateStatus.ACTIVE)
+        ).orElse(null) ?: return BillingCollectionChannel.REGULAR
+        if (mandate.effectiveFrom.isAfter(dueDate)) return BillingCollectionChannel.REGULAR
+        if (concept == "TUITION_ENROLLMENT" && mandate.scope != AutomaticDebitScope.INSTALLMENTS_AND_ENROLLMENT) {
+            return BillingCollectionChannel.REGULAR
+        }
+        return BillingCollectionChannel.AUTOMATIC_DEBIT
+    }
+
     private companion object {
         const val MAX_STUDENT_QUERY_LENGTH = 100
         const val MAX_RUN_ITEMS = 1000
+        val BUSINESS_ZONE: ZoneId = ZoneId.of("America/Argentina/Buenos_Aires")
+        val MANUAL_PAYMENT_BLOCKING_DEBIT_STATUSES = setOf(
+            AutomaticDebitInstructionStatus.READY_FOR_PROCESSING,
+            AutomaticDebitInstructionStatus.SUBMITTED,
+            AutomaticDebitInstructionStatus.UNKNOWN,
+            AutomaticDebitInstructionStatus.ACCOUNTING_RESOLUTION_REQUIRED,
+            AutomaticDebitInstructionStatus.CREDIT_NOTE_REQUIRED
+        )
     }
 
     private fun normalizeStudentQuery(query: String?): String? {
