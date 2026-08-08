@@ -2,6 +2,7 @@ package com.sigep.payments.application.service
 
 import com.sigep.payments.application.dto.ConfirmPaymentRequest
 import com.sigep.payments.application.dto.CreatePaymentRequest
+import com.sigep.payments.application.dto.RegisterPaymentReceiptRequest
 import com.sigep.payments.domain.model.BillingOutboxEventType
 import com.sigep.payments.domain.model.Payment
 import com.sigep.payments.domain.model.PaymentMethod
@@ -131,6 +132,45 @@ class PaymentApplicationServiceTest {
         assertEquals(first, repeated)
         assertNotNull(repeated.receipt)
         verify(exactly = 1) { receiptRepository.save(any()) }
+    }
+
+    @Test
+    fun `receipt only workflow confirms payment without creating invoice or fiscal outbox`() {
+        var storedPayment = pendingPayment()
+        var storedReceipt: PaymentReceipt? = null
+        every { paymentRepository.existsByExternalReference(any()) } returns false
+        every { paymentRepository.findByCreationKey("receipt-only:create") } returns Optional.empty()
+        every { paymentRepository.save(any()) } answers {
+            storedPayment = firstArg<Payment>().copy(id = 1L)
+            storedPayment
+        }
+        every { paymentRepository.findByIdForUpdate(1L) } answers { Optional.of(storedPayment) }
+        every { receiptRepository.save(any()) } answers {
+            storedReceipt = firstArg<PaymentReceipt>().copy(id = 10L)
+            storedReceipt!!
+        }
+        every { receiptRepository.findByPaymentId(1L) } answers { Optional.ofNullable(storedReceipt) }
+        every { invoiceRepository.findByPaymentId(1L) } returns Optional.empty()
+
+        val result = service.registerReceipt(
+            "receipt-only",
+            RegisterPaymentReceiptRequest(
+                payment = CreatePaymentRequest(
+                    studentId = 20L,
+                    amount = BigDecimal("45000.00"),
+                    concept = "Cuota julio",
+                    dueDate = LocalDate.of(2026, 7, 10)
+                ),
+                confirmation = confirmation()
+            ),
+            adminId = 99L
+        )
+
+        assertEquals(PaymentStatus.PAID, result.payment.status)
+        assertEquals("X", result.receipt?.documentType)
+        assertEquals(null, result.invoice)
+        verify(exactly = 0) { invoiceRepository.save(any()) }
+        verify(exactly = 0) { outboxRepository.save(any()) }
     }
 
     private fun emptyDetailDependencies(paymentId: Long) {

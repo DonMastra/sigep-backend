@@ -3,7 +3,7 @@
 ## Estado actual de estructura de Base de Datos (SiGEP)
 
 **Fecha de relevamiento:** 2026-05-31  
-**Ultima actualizacion:** 2026-07-28 (incluye alcance V18 de cargos y ejecuciones manuales)
+**Ultima actualizacion:** 2026-08-07 (incluye V22-V24: parcialidad, mora y debito factura-primero)
 **Entorno auditado:** `sigep_db` (PostgreSQL 15), validado contra codigo Kotlin actual y migraciones SQL.
 
 ## 1) Fuente de verdad operativa
@@ -103,6 +103,31 @@ Orden de prioridad:
 - `fiscal_invoices` puede referenciar exactamente un pago legacy o un cargo.
 - La configuracion del primer cliente fuerza `rg_5866_applicable=false`.
 
+### Cambios de V22 a V24
+
+- V22 agrega `base_amount`, `paid_amount`, `PARTIALLY_PAID` y `fiscal_disposition` a
+  `billing_charges`; elimina la unicidad por cargo de `payment_allocations` y crea
+  `billing_charge_fiscal_decisions`. El ledger de matricula replica pagado y recargo.
+- V23 agrega al plan `monthly_due_day`, `late_fee_percentage`, elegibilidad de debito para cuota y
+  matricula, y guarda la instantanea en cada cargo. `billing_charge_adjustments` conserva base,
+  porcentaje, importe, fecha efectiva, origen y reversa del unico recargo activo.
+- V24 agrega `billing_charges.collection_channel` y crea `automatic_debit_mandates`,
+  `automatic_debit_instructions` y `automatic_debit_events`. La adhesion es por cuenta y guarda
+  procesadora, tipo de instrumento, alcance, vigencia, referencia opaca y etiqueta enmascarada.
+  Cada instruccion referencia obligatoriamente una factura fiscal autorizada y persiste presentacion,
+  resultado y resolucion contable manual. No existen columnas para PAN, CVV, token de navegador,
+  CBU completo ni archivos de exportacion.
+- `billing_charges.amount` sigue siendo el total compatible; `base_amount` es capital y la diferencia
+  es recargo. `paid_amount <= amount` y el saldo se deriva como `amount - paid_amount`.
+- La primera version de V24 nunca fue promovida; por eso el script fue corregido directamente y
+  no requiere una migracion compensatoria.
+- V1-V24 se reprodujeron en orden numerico sobre PostgreSQL 15 Alpine descartable el 2026-08-07.
+  Un fixture creado luego de V18 con cargo de 100 e imputacion confirmada de 40 fue migrado por V22
+  a `PARTIALLY_PAID`, `paid_amount=40`, saldo 60 y `fiscal_disposition=PENDING`; V24 agrego
+  `collection_channel=REGULAR` y las tres tablas de debito. Se verifico `invoice_id NOT NULL`,
+  `processing_date NOT NULL`, cero columnas PAN/CVV/CBU/token/export y cero tablas de exportacion.
+  El contenedor descartable se elimino al terminar.
+
 ### PK por modulo
 - Modulos generales (`users`, `students`, `courses`, `staff`, `scheduling`, `tuition`, etc.): **BIGINT**.
 - Modulo exams (`exams`, `exam_submissions`, `exam_grade_history`): **UUID** en PK.
@@ -125,7 +150,8 @@ Orden de prioridad:
 - `billing_charges.account_id` -> `billing_accounts.id` (BIGINT, `ON DELETE RESTRICT`)
 - `billing_charges.student_id` -> `students.id` (BIGINT, nullable)
 - `payment_allocations.payment_id` -> `payments.id` (BIGINT, `ON DELETE RESTRICT`)
-- `payment_allocations.charge_id` -> `billing_charges.id` (BIGINT, unico, `ON DELETE RESTRICT`)
+- `payment_allocations.charge_id` -> `billing_charges.id` (BIGINT, no unico, `ON DELETE RESTRICT`);
+  la unicidad vigente es `(payment_id, charge_id)` para permitir varios pagos por cargo.
 - `billing_runs.requested_by` -> `users.id` (BIGINT, `ON DELETE RESTRICT`)
 - `billing_run_items.run_id` -> `billing_runs.id` (BIGINT, `ON DELETE RESTRICT`)
 - `billing_run_items.charge_id` -> `billing_charges.id` (BIGINT, `ON DELETE RESTRICT`)

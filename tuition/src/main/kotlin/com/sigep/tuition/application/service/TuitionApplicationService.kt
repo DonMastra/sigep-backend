@@ -568,7 +568,7 @@ class TuitionApplicationService(
                 grossAmount = application.feePlan.monthlyFee,
                 discountAmount = appliedDiscount.amount,
                 netAmount = (application.feePlan.monthlyFee - appliedDiscount.amount).normalizeMoney(),
-                dueDate = LocalDate.of(academicYear, index + 1, 20),
+                dueDate = LocalDate.of(academicYear, index + 1, application.feePlan.monthlyDueDay),
                 status = TuitionLedgerStatus.PENDING,
                 createdAt = now,
                 updatedAt = now
@@ -620,7 +620,13 @@ class TuitionApplicationService(
                 },
                 receiverName = "${guardian.firstName} ${guardian.lastName}".trim(),
                 receiverAddress = guardian.address,
-                receiverDocumentNumber = guardian.documentNumber
+                receiverDocumentNumber = guardian.documentNumber,
+                lateFeePercentage = application.feePlan.lateFeePercentage,
+                lateFeeEligible = entry.concept == TuitionLedgerConcept.MONTHLY_FEE,
+                automaticDebitEligible = when (entry.concept) {
+                    TuitionLedgerConcept.TUITION_ENROLLMENT -> application.feePlan.automaticDebitEnrollment
+                    TuitionLedgerConcept.MONTHLY_FEE -> application.feePlan.automaticDebitMonthly
+                }
             )
         )
     }
@@ -730,7 +736,7 @@ class TuitionApplicationService(
 
         val year = application.academicYear.startDate.year
         val normalized = monthly.mapIndexed { index, entry ->
-            entry.id to entry.copy(dueDate = LocalDate.of(year, index + 1, 20))
+            entry.id to entry.copy(dueDate = LocalDate.of(year, index + 1, application.feePlan.monthlyDueDay))
         }.toMap()
         return entries.map { normalized[it.id] ?: it }
     }
@@ -746,6 +752,10 @@ class TuitionApplicationService(
         enrollmentFee = enrollmentFee,
         monthlyFee = monthlyFee,
         installments = installments,
+        monthlyDueDay = monthlyDueDay,
+        lateFeePercentage = lateFeePercentage,
+        automaticDebitMonthly = automaticDebitMonthly,
+        automaticDebitEnrollment = automaticDebitEnrollment,
         currency = currency,
         validFrom = validFrom,
         validTo = validTo,
@@ -774,6 +784,10 @@ class TuitionApplicationService(
         grossAmount = grossAmount,
         discountAmount = discountAmount,
         netAmount = netAmount,
+        paidAmount = paidAmount,
+        lateFeeAmount = lateFeeAmount,
+        totalAmount = netAmount + lateFeeAmount,
+        outstandingAmount = (netAmount + lateFeeAmount - paidAmount).max(BigDecimal.ZERO),
         dueDate = dueDate,
         status = status,
         billingReference = billingReference,
