@@ -7,13 +7,14 @@ import com.sigep.tuition.domain.model.TuitionApplicationStatus
 import com.sigep.tuition.domain.model.TuitionDiscount
 import com.sigep.tuition.domain.model.TuitionFeePlan
 import com.sigep.tuition.domain.model.TuitionFeePlanStatus
+import com.sigep.tuition.domain.model.TuitionEnrollmentFeePolicy
+import com.sigep.tuition.domain.model.TuitionEnrollmentFeePolicyStatus
+import com.sigep.tuition.domain.model.TuitionPlacementAssessment
 import com.sigep.tuition.domain.model.TuitionLedgerConcept
 import com.sigep.tuition.domain.model.TuitionLedgerEntry
 import com.sigep.tuition.domain.model.TuitionLedgerStatus
 import com.sigep.tuition.domain.model.TuitionLevel
 import com.sigep.tuition.domain.model.TuitionLevelProgression
-import com.sigep.tuition.domain.model.TuitionSeatReservation
-import com.sigep.tuition.domain.model.TuitionSeatReservationStatus
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
@@ -21,7 +22,6 @@ import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import org.springframework.stereotype.Repository
 import java.time.LocalDate
-import java.time.LocalDateTime
 import java.util.Optional
 
 @Repository
@@ -59,6 +59,25 @@ interface TuitionFeePlanRepository : JpaRepository<TuitionFeePlan, Long> {
         @Param("status") status: TuitionFeePlanStatus = TuitionFeePlanStatus.ACTIVE,
         @Param("date") date: LocalDate = LocalDate.now()
     ): List<TuitionFeePlan>
+}
+
+@Repository
+interface TuitionEnrollmentFeePolicyRepository : JpaRepository<TuitionEnrollmentFeePolicy, Long> {
+    @Query(
+        """
+        SELECT p FROM TuitionEnrollmentFeePolicy p
+        WHERE p.status = :status
+        AND p.validFrom <= :date
+        AND (p.validTo IS NULL OR p.validTo >= :date)
+        ORDER BY p.defaultPolicy DESC, p.validFrom DESC, p.id DESC
+        """
+    )
+    fun findActiveCandidates(
+        @Param("status") status: TuitionEnrollmentFeePolicyStatus = TuitionEnrollmentFeePolicyStatus.ACTIVE,
+        @Param("date") date: LocalDate = LocalDate.now()
+    ): List<TuitionEnrollmentFeePolicy>
+
+    fun findByDefaultPolicyTrue(): List<TuitionEnrollmentFeePolicy>
 }
 
 @Repository
@@ -101,35 +120,8 @@ interface TuitionApplicationRepository : JpaRepository<TuitionApplication, Long>
 }
 
 @Repository
-interface TuitionSeatReservationRepository : JpaRepository<TuitionSeatReservation, Long> {
-    fun findByApplicationId(applicationId: Long): Optional<TuitionSeatReservation>
-
-    @Query(
-        """
-        SELECT COALESCE(SUM(r.quantity), 0)
-        FROM TuitionSeatReservation r
-        WHERE r.courseId = :courseId
-        AND r.status = :status
-        AND r.expiresAt > :now
-        """
-    )
-    fun countActiveReservedSeats(
-        @Param("courseId") courseId: Long,
-        @Param("status") status: TuitionSeatReservationStatus = TuitionSeatReservationStatus.ACTIVE,
-        @Param("now") now: LocalDateTime = LocalDateTime.now()
-    ): Long
-
-    @Query(
-        """
-        SELECT r FROM TuitionSeatReservation r
-        WHERE r.status = :status
-        AND r.expiresAt < :now
-        """
-    )
-    fun findExpiredActiveReservations(
-        @Param("status") status: TuitionSeatReservationStatus = TuitionSeatReservationStatus.ACTIVE,
-        @Param("now") now: LocalDateTime = LocalDateTime.now()
-    ): List<TuitionSeatReservation>
+interface TuitionPlacementAssessmentRepository : JpaRepository<TuitionPlacementAssessment, Long> {
+    fun findByApplicationId(applicationId: Long): Optional<TuitionPlacementAssessment>
 }
 
 @Repository

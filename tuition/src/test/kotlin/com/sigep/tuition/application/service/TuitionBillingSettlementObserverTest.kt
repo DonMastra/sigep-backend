@@ -1,6 +1,8 @@
 package com.sigep.tuition.application.service
 
 import com.sigep.common.application.service.BillingChargeSettlement
+import com.sigep.common.application.service.StudentProfileInfo
+import com.sigep.common.application.service.StudentProfileProvider
 import com.sigep.tuition.domain.model.TuitionAcademicYear
 import com.sigep.tuition.domain.model.TuitionAcademicYearStatus
 import com.sigep.tuition.domain.model.TuitionApplication
@@ -29,10 +31,11 @@ class TuitionBillingSettlementObserverTest {
 
     private val ledgerRepository = mockk<TuitionLedgerEntryRepository>()
     private val applicationRepository = mockk<TuitionApplicationRepository>()
-    private val observer = TuitionBillingSettlementObserver(ledgerRepository, applicationRepository)
+    private val studentProfileProvider = mockk<StudentProfileProvider>()
+    private val observer = TuitionBillingSettlementObserver(ledgerRepository, applicationRepository, studentProfileProvider)
 
     @Test
-    fun `paid enrollment charge marks ledger paid and application ready`() {
+    fun `paid enrollment charge creates student and waits for placement`() {
         val application = application()
         val entry = TuitionLedgerEntry(
             id = 55L,
@@ -48,6 +51,7 @@ class TuitionBillingSettlementObserverTest {
         every { ledgerRepository.findById(55L) } returns Optional.of(entry)
         every { ledgerRepository.save(capture(savedLedger)) } answers { savedLedger.captured }
         every { applicationRepository.save(capture(savedApplication)) } answers { savedApplication.captured }
+        every { studentProfileProvider.createStudentForTuition(10L, any()) } returns studentInfo()
 
         observer.onChargeSettlementChanged(
             BillingChargeSettlement(
@@ -64,7 +68,8 @@ class TuitionBillingSettlementObserverTest {
 
         assertEquals(TuitionLedgerStatus.PAID, savedLedger.captured.status)
         assertEquals("PAYMENT-900", savedLedger.captured.billingReference)
-        assertEquals(TuitionApplicationStatus.READY_FOR_ADMIN_APPROVAL, savedApplication.captured.status)
+        assertEquals(20L, savedApplication.captured.studentId)
+        assertEquals(TuitionApplicationStatus.ENROLLED_PENDING_PLACEMENT, savedApplication.captured.status)
     }
 
     @Test
@@ -118,7 +123,84 @@ class TuitionBillingSettlementObserverTest {
         verify(exactly = 0) { applicationRepository.save(any()) }
     }
 
-    private fun application(): TuitionApplication {
+    @Test
+    fun `payment reversal before assignment reopens the application`() {
+        val application = application(
+            status = TuitionApplicationStatus.READY_FOR_ACADEMIC_ASSIGNMENT,
+            studentId = 20L
+        )
+        val entry = TuitionLedgerEntry(
+            id = 55L,
+            application = application,
+            concept = TuitionLedgerConcept.TUITION_ENROLLMENT,
+            grossAmount = BigDecimal("10000.00"),
+            netAmount = BigDecimal("10000.00"),
+            paidAmount = BigDecimal("10000.00"),
+            dueDate = LocalDate.of(2027, 2, 20),
+            status = TuitionLedgerStatus.PAID
+        )
+        val savedApplication = slot<TuitionApplication>()
+        every { ledgerRepository.findById(55L) } returns Optional.of(entry)
+        every { ledgerRepository.save(any()) } answers { firstArg() }
+        every { applicationRepository.save(capture(savedApplication)) } answers { savedApplication.captured }
+
+        observer.onChargeSettlementChanged(
+            BillingChargeSettlement(
+                sourceType = "TUITION_LEDGER",
+                sourceId = 55L,
+                paymentId = 900L,
+                baseAmount = BigDecimal("10000.00"),
+                lateFeeAmount = BigDecimal.ZERO,
+                paidAmount = BigDecimal.ZERO,
+                outstandingAmount = BigDecimal("10000.00"),
+                status = "REVERSED"
+            )
+        )
+
+        assertEquals(TuitionApplicationStatus.PAYMENT_PENDING, savedApplication.captured.status)
+        assertEquals(20L, savedApplication.captured.studentId)
+    }
+
+    @Test
+    fun `payment reversal after assignment preserves enrollment history`() {
+        val application = application(status = TuitionApplicationStatus.APPROVED, studentId = 20L)
+            .copy(enrollmentId = 300L)
+        val entry = TuitionLedgerEntry(
+            id = 55L,
+            application = application,
+            concept = TuitionLedgerConcept.TUITION_ENROLLMENT,
+            grossAmount = BigDecimal("10000.00"),
+            netAmount = BigDecimal("10000.00"),
+            paidAmount = BigDecimal("10000.00"),
+            dueDate = LocalDate.of(2027, 2, 20),
+            status = TuitionLedgerStatus.PAID
+        )
+        val savedApplication = slot<TuitionApplication>()
+        every { ledgerRepository.findById(55L) } returns Optional.of(entry)
+        every { ledgerRepository.save(any()) } answers { firstArg() }
+        every { applicationRepository.save(capture(savedApplication)) } answers { savedApplication.captured }
+
+        observer.onChargeSettlementChanged(
+            BillingChargeSettlement(
+                sourceType = "TUITION_LEDGER",
+                sourceId = 55L,
+                paymentId = 900L,
+                baseAmount = BigDecimal("10000.00"),
+                lateFeeAmount = BigDecimal.ZERO,
+                paidAmount = BigDecimal.ZERO,
+                outstandingAmount = BigDecimal("10000.00"),
+                status = "REVERSED"
+            )
+        )
+
+        assertEquals(TuitionApplicationStatus.APPROVED, savedApplication.captured.status)
+        assertEquals(300L, savedApplication.captured.enrollmentId)
+    }
+
+    private fun application(
+        status: TuitionApplicationStatus = TuitionApplicationStatus.PAYMENT_PENDING,
+        studentId: Long? = null
+    ): TuitionApplication {
         val year = TuitionAcademicYear(
             id = 1L,
             name = "2027",
@@ -143,7 +225,6 @@ class TuitionBillingSettlementObserverTest {
             name = "Plan",
             segment = TuitionSegment.TEENS,
             level = level,
-            enrollmentFee = BigDecimal("10000.00"),
             monthlyFee = BigDecimal("20000.00"),
             installments = 10,
             validFrom = LocalDate.of(2027, 1, 1),
@@ -152,14 +233,36 @@ class TuitionBillingSettlementObserverTest {
         return TuitionApplication(
             id = 123L,
             guardianUserId = 10L,
+            studentId = studentId,
             studentFirstName = "Jane",
             studentLastName = "Doe",
+            studentEmail = "jane@example.com",
+            studentDocumentNumber = "12345678",
+            studentDateOfBirth = LocalDate.of(2012, 1, 1),
+            studentAddress = "Main 123",
+            studentPhoneNumber = "1111",
+            studentEmergencyContact = "Parent",
             academicYear = year,
-            requestedLevel = level,
-            requestedCourseId = 99L,
+            assignedLevel = level,
+            assignedCourseId = 99L,
             applicationType = TuitionApplicationType.NEW_STUDENT,
-            status = TuitionApplicationStatus.PAYMENT_PENDING,
+            status = status,
             feePlan = plan
         )
     }
+
+    private fun studentInfo() = StudentProfileInfo(
+        id = 20L,
+        guardianId = 10L,
+        firstName = "Jane",
+        lastName = "Doe",
+        email = "jane@example.com",
+        documentNumber = "12345678",
+        dateOfBirth = LocalDate.of(2012, 1, 1),
+        address = "Main 123",
+        phoneNumber = "1111",
+        emergencyContact = "Parent",
+        currentLevel = "PENDING_PLACEMENT",
+        active = true
+    )
 }

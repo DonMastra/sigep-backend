@@ -8,27 +8,32 @@ import com.sigep.common.application.exception.ValidationException
 import com.sigep.tuition.application.dto.CreateTuitionAcademicYearRequest
 import com.sigep.tuition.application.dto.CreateTuitionDiscountRequest
 import com.sigep.tuition.application.dto.CreateTuitionFeePlanRequest
+import com.sigep.tuition.application.dto.CreateTuitionEnrollmentFeePolicyRequest
 import com.sigep.tuition.application.dto.CreateTuitionLevelProgressionRequest
 import com.sigep.tuition.application.dto.CreateTuitionLevelRequest
 import com.sigep.tuition.application.dto.TuitionAcademicYearDto
 import com.sigep.tuition.application.dto.TuitionDiscountDto
 import com.sigep.tuition.application.dto.TuitionFeePlanDto
+import com.sigep.tuition.application.dto.TuitionEnrollmentFeePolicyDto
 import com.sigep.tuition.application.dto.TuitionLevelDto
 import com.sigep.tuition.application.dto.TuitionLevelProgressionDto
 import com.sigep.tuition.application.dto.UpdateTuitionAcademicYearRequest
 import com.sigep.tuition.application.dto.UpdateTuitionDiscountRequest
 import com.sigep.tuition.application.dto.UpdateTuitionFeePlanRequest
+import com.sigep.tuition.application.dto.UpdateTuitionEnrollmentFeePolicyRequest
 import com.sigep.tuition.application.dto.UpdateTuitionLevelProgressionRequest
 import com.sigep.tuition.application.dto.UpdateTuitionLevelRequest
 import com.sigep.tuition.domain.model.TuitionAcademicYear
 import com.sigep.tuition.domain.model.TuitionAcademicYearStatus
 import com.sigep.tuition.domain.model.TuitionDiscount
 import com.sigep.tuition.domain.model.TuitionFeePlan
+import com.sigep.tuition.domain.model.TuitionEnrollmentFeePolicy
 import com.sigep.tuition.domain.model.TuitionLevel
 import com.sigep.tuition.domain.model.TuitionLevelProgression
 import com.sigep.tuition.domain.repository.TuitionAcademicYearRepository
 import com.sigep.tuition.domain.repository.TuitionDiscountRepository
 import com.sigep.tuition.domain.repository.TuitionFeePlanRepository
+import com.sigep.tuition.domain.repository.TuitionEnrollmentFeePolicyRepository
 import com.sigep.tuition.domain.repository.TuitionLevelProgressionRepository
 import com.sigep.tuition.domain.repository.TuitionLevelRepository
 import org.springframework.data.domain.PageRequest
@@ -45,6 +50,7 @@ class TuitionCatalogService(
     private val levelRepository: TuitionLevelRepository,
     private val progressionRepository: TuitionLevelProgressionRepository,
     private val feePlanRepository: TuitionFeePlanRepository,
+    private val enrollmentFeePolicyRepository: TuitionEnrollmentFeePolicyRepository,
     private val discountRepository: TuitionDiscountRepository
 ) {
 
@@ -241,13 +247,11 @@ class TuitionCatalogService(
                 name = request.name.trim(),
                 segment = request.segment,
                 level = level,
-                enrollmentFee = request.enrollmentFee,
                 monthlyFee = request.monthlyFee,
                 installments = request.installments,
                 monthlyDueDay = request.monthlyDueDay,
                 lateFeePercentage = request.lateFeePercentage,
                 automaticDebitMonthly = request.automaticDebitMonthly,
-                automaticDebitEnrollment = request.automaticDebitEnrollment,
                 currency = request.currency.uppercase(),
                 validFrom = request.validFrom,
                 validTo = request.validTo,
@@ -273,13 +277,11 @@ class TuitionCatalogService(
                 name = request.name?.trim() ?: existing.name,
                 segment = segment,
                 level = level,
-                enrollmentFee = request.enrollmentFee ?: existing.enrollmentFee,
                 monthlyFee = request.monthlyFee ?: existing.monthlyFee,
                 installments = request.installments ?: existing.installments,
                 monthlyDueDay = request.monthlyDueDay ?: existing.monthlyDueDay,
                 lateFeePercentage = request.lateFeePercentage ?: existing.lateFeePercentage,
                 automaticDebitMonthly = request.automaticDebitMonthly ?: existing.automaticDebitMonthly,
-                automaticDebitEnrollment = request.automaticDebitEnrollment ?: existing.automaticDebitEnrollment,
                 currency = request.currency?.uppercase() ?: existing.currency,
                 validFrom = validFrom,
                 validTo = validTo,
@@ -294,6 +296,76 @@ class TuitionCatalogService(
             throw ResourceNotFoundException("Tuition fee plan not found with id: $id")
         }
         feePlanRepository.deleteById(id)
+    }
+
+    fun listEnrollmentFeePolicies(page: Int, size: Int): PageResponse<TuitionEnrollmentFeePolicyDto> {
+        val pageable = PageRequest.of(page.coerceAtLeast(0), size.coerceIn(1, 100), Sort.by(Sort.Direction.DESC, "createdAt"))
+        return enrollmentFeePolicyRepository.findAll(pageable).toPageResponse { it.toDto() }
+    }
+
+    fun createEnrollmentFeePolicy(request: CreateTuitionEnrollmentFeePolicyRequest): TuitionEnrollmentFeePolicyDto {
+        validateValidity(request.validFrom, request.validTo)
+        val now = LocalDateTime.now()
+        if (request.defaultPolicy) {
+            clearDefaultEnrollmentPolicies(now)
+        }
+        return enrollmentFeePolicyRepository.save(
+            TuitionEnrollmentFeePolicy(
+                name = request.name.trim(),
+                amount = request.amount,
+                currency = request.currency.uppercase(),
+                paymentDueDays = request.paymentDueDays,
+                automaticDebitEligible = request.automaticDebitEligible,
+                validFrom = request.validFrom,
+                validTo = request.validTo,
+                status = request.status,
+                defaultPolicy = request.defaultPolicy,
+                createdAt = now,
+                updatedAt = now
+            )
+        ).toDto()
+    }
+
+    fun updateEnrollmentFeePolicy(id: Long, request: UpdateTuitionEnrollmentFeePolicyRequest): TuitionEnrollmentFeePolicyDto {
+        val existing = enrollmentFeePolicyRepository.findById(id)
+            .orElseThrow { ResourceNotFoundException("Enrollment fee policy not found with id: $id") }
+        val validFrom = request.validFrom ?: existing.validFrom
+        val validTo = request.validTo ?: existing.validTo
+        validateValidity(validFrom, validTo)
+        val now = LocalDateTime.now()
+        if (request.defaultPolicy == true) {
+            clearDefaultEnrollmentPolicies(now, exceptId = id)
+        }
+        return enrollmentFeePolicyRepository.save(
+            existing.copy(
+                name = request.name?.trim() ?: existing.name,
+                amount = request.amount ?: existing.amount,
+                currency = request.currency?.uppercase() ?: existing.currency,
+                paymentDueDays = request.paymentDueDays ?: existing.paymentDueDays,
+                automaticDebitEligible = request.automaticDebitEligible ?: existing.automaticDebitEligible,
+                validFrom = validFrom,
+                validTo = validTo,
+                status = request.status ?: existing.status,
+                defaultPolicy = request.defaultPolicy ?: existing.defaultPolicy,
+                updatedAt = now
+            )
+        ).toDto()
+    }
+
+    fun deleteEnrollmentFeePolicy(id: Long) {
+        if (!enrollmentFeePolicyRepository.existsById(id)) {
+            throw ResourceNotFoundException("Enrollment fee policy not found with id: $id")
+        }
+        enrollmentFeePolicyRepository.deleteById(id)
+    }
+
+    private fun clearDefaultEnrollmentPolicies(now: LocalDateTime, exceptId: Long? = null) {
+        val cleared = enrollmentFeePolicyRepository.findByDefaultPolicyTrue()
+            .filter { it.id != exceptId }
+            .map { enrollmentFeePolicyRepository.save(it.copy(defaultPolicy = false, updatedAt = now)) }
+        if (cleared.isNotEmpty()) {
+            enrollmentFeePolicyRepository.flush()
+        }
     }
 
     fun listDiscounts(page: Int, size: Int): PageResponse<TuitionDiscountDto> {
@@ -465,17 +537,30 @@ class TuitionCatalogService(
         segment = segment,
         levelId = level?.id,
         levelCode = level?.code,
-        enrollmentFee = enrollmentFee,
         monthlyFee = monthlyFee,
         installments = installments,
         monthlyDueDay = monthlyDueDay,
         lateFeePercentage = lateFeePercentage,
         automaticDebitMonthly = automaticDebitMonthly,
-        automaticDebitEnrollment = automaticDebitEnrollment,
         currency = currency,
         validFrom = validFrom,
         validTo = validTo,
         status = status,
+        createdAt = createdAt,
+        updatedAt = updatedAt
+    )
+
+    private fun TuitionEnrollmentFeePolicy.toDto() = TuitionEnrollmentFeePolicyDto(
+        id = id!!,
+        name = name,
+        amount = amount,
+        currency = currency,
+        paymentDueDays = paymentDueDays,
+        automaticDebitEligible = automaticDebitEligible,
+        validFrom = validFrom,
+        validTo = validTo,
+        status = status,
+        defaultPolicy = defaultPolicy,
         createdAt = createdAt,
         updatedAt = updatedAt
     )

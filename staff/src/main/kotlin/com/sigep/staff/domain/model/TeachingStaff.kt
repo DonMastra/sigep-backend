@@ -67,8 +67,7 @@ data class TeachingStaff(
     @Column(nullable = false)
     val emergencyContactPhone: String,
 
-    @Lob
-    @Column(name = "photo_data")
+    @Column(name = "photo_data", columnDefinition = "BYTEA")
     val photoData: ByteArray? = null,
 
     @Column(name = "photo_content_type", length = 100)
