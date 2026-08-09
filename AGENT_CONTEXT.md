@@ -20,7 +20,7 @@ La API debe soportar una gestion academica privada:
 
 - Administracion de usuarios, docentes, guardianes y estudiantes.
 - Oferta academica con cursos publicados y cursos administrados.
-- Matriculacion como proceso: solicitud, reserva de vacante, cargo y pago inicial, y aprobacion administrativa.
+- Matriculacion como proceso: solicitud minima del tutor, cargo/pago de matricula, nivelacion y asignacion administrativa.
 - Inscripcion y seguimiento academico de estudiantes.
 - Asistencia a clases y sesiones.
 - Gestion de materiales por curso.
@@ -245,22 +245,26 @@ Responsabilidades:
 - Niveles y progresiones.
 - Planes de cuota y descuentos/becas.
 - Solicitudes de matriculacion por guardian.
-- Reserva temporal de vacante.
+- Politica independiente para el importe y vencimiento de matricula.
+- Nivelacion auditable previa a la asignacion academica.
 - Ledger academico para matricula inicial y cuotas mensuales, sincronizado con cargos.
-- Aprobacion administrativa que confirma reserva, activa guardian si corresponde, crea estudiante nuevo y genera `Enrollment`.
+- Asignacion administrativa que valida cupo y progresion, crea `Enrollment` y recien entonces genera cuotas.
 
 Contrato QA adicional:
 
-- `GUARDIAN` puede leer ciclos abiertos, niveles activos, planes vigentes y cursos publicados;
-  la escritura de catalogos permanece exclusiva de `ADMIN`.
+- `GUARDIAN` envia solo tipo y datos del estudiante; no elige ciclo, nivel, curso ni plan.
+  La escritura y asignacion de catalogos permanece exclusiva de `ADMIN`.
 - `TuitionLevel.courseLevel` es el mapeo explicito al enum de cursos. Se mantienen los
   respaldos legacy `A1 -> BEGINNER` y `A2 -> ELEMENTARY` cuando el catalogo aun no tiene
   valor.
-- `PASS_PREVIOUS_LEVEL` bloquea una progresion no aprobada; `ADMIN_APPROVAL` marca
-  `requiresAdminOverride` y exige nota administrativa no vacia al aprobar.
-- El ledger genera la matricula y cuotas de enero a diciembre del mismo ciclo lectivo
-  (maximo 12 vencimientos). Cada entrada economica se sincroniza con un cargo, pero el
-  ledger nunca debe interpretarse como factura fiscal.
+- El pago total de matricula crea al estudiante con nivel tecnico `PENDING_PLACEMENT`; pagos
+  parciales y reversiones anteriores a la asignacion mantienen el proceso bloqueado.
+- `PASS_PREVIOUS_LEVEL` y cualquier diferencia respecto del nivel recomendado exigen una
+  justificacion administrativa. Sin cupo, la solicitud queda `WAITLISTED` sin crear enrollment.
+- El ledger genera cuotas desde el mes de asignacion, nunca antes del inicio del plan o del
+  ciclo, y se detiene en el primer limite entre fin del plan, fin del ciclo y cantidad maxima
+  de cuotas. El primer vencimiento nunca queda antes de la fecha de asignacion. Cada entrada
+  se sincroniza con un cargo, pero el ledger nunca es una factura fiscal.
 
 Limites de `tuition`:
 
@@ -345,7 +349,7 @@ Estado: planificado. Se espera que cubra:
 - Si se modifica logica de negocio, agregar tests de servicio.
 - Si se modifica seguridad, revisar roles y flujo JWT.
 - Si se modifica scheduling, validar disponibilidad, asignacion, desasignacion y conflictos.
-- Si se modifica tuition, validar estados, reserva de cupo, ledger/cargos, ownership de guardian y aprobacion admin.
+- Si se modifica tuition, validar estados, cupo al asignar, ledger/cargos, ownership de guardian y asignacion admin.
 
 ## Skills Locales para Agentes
 

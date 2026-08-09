@@ -3,7 +3,7 @@
 ## Estado actual de estructura de Base de Datos (SiGEP)
 
 **Fecha de relevamiento:** 2026-05-31  
-**Ultima actualizacion:** 2026-08-07 (incluye V22-V24: parcialidad, mora y debito factura-primero)
+**Ultima actualizacion:** 2026-08-08 (incluye V25: solicitud, matricula, nivelacion y asignacion separadas)
 **Entorno auditado:** `sigep_db` (PostgreSQL 15), validado contra codigo Kotlin actual y migraciones SQL.
 
 ## 1) Fuente de verdad operativa
@@ -16,17 +16,20 @@ Orden de prioridad:
 
 ## 2) Snapshot estructural actual
 
-### Tablas detectadas/modeladas: 42
-`billing_accounts`, `billing_charges`, `billing_outbox`, `billing_profiles`, `billing_run_items`,
-`billing_runs`, `classrooms`, `course_attendance`, `course_certificates`, `course_materials`,
-`course_sessions`, `courses`, `enrollments`, `exam_grade_history`, `exam_submissions`, `exams`,
+### Tablas detectadas/modeladas: 47
+`automatic_debit_events`, `automatic_debit_instructions`, `automatic_debit_mandates`,
+`billing_accounts`, `billing_charge_adjustments`, `billing_charge_fiscal_decisions`,
+`billing_charges`, `billing_outbox`, `billing_profiles`, `billing_run_items`, `billing_runs`,
+`classrooms`, `course_attendance`, `course_certificates`, `course_materials`, `course_sessions`,
+`courses`, `enrollments`, `exam_grade_history`, `exam_submissions`, `exams`,
 `fiscal_invoice_attempts`, `fiscal_invoice_taxes`, `fiscal_invoice_vat_subtotals`,
-`fiscal_invoices`, `non_teaching_staff`, `notifications`, `payment_allocations`,
-`payment_receipts`, `payments`, `registration_requests`, `reservations`, `schedule_slots`,
-`session_exceptions`, `staff_attendance`, `students`, `teaching_staff`,
-`tuition_academic_years`, `tuition_applications`, `tuition_discounts`, `tuition_fee_plans`,
+`fiscal_invoices`, `non_teaching_staff`, `payment_allocations`, `payment_receipts`, `payments`,
+`registration_requests`, `reservations`, `schedule_slots`, `session_exceptions`,
+`staff_attendance`, `students`, `teaching_staff`,
+`tuition_academic_years`, `tuition_applications`, `tuition_discounts`,
+`tuition_enrollment_fee_policies`, `tuition_fee_plans`, `tuition_placement_assessments`,
 `tuition_ledger_entries`, `tuition_level_progression`, `tuition_levels`,
-`tuition_seat_reservations`, `users`, `voucher_sequences`.
+`users`, `voucher_sequences`.
 
 ### Cambios de V12 (Scheduling)
 - Se elimina tabla legacy `course_schedules`.
@@ -45,10 +48,9 @@ Orden de prioridad:
   - `tuition_fee_plans`
   - `tuition_discounts`
   - `tuition_applications`
-  - `tuition_seat_reservations`
   - `tuition_ledger_entries`
 - `tuition_level_progression` usa indice unico parcial `uq_tuition_progression_active_from` para permitir una sola progresion activa por nivel origen.
-- `tuition_seat_reservations` reserva una vacante por solicitud antes de crear `enrollments`.
+- V25 elimina `tuition_seat_reservations`; el cupo se valida exclusivamente durante la asignacion administrativa.
 - `tuition_ledger_entries` modela deuda academica; V18 sincroniza cada entrada con un
   `billing_charge`. Tuition no emite CAE ni almacena datos de tarjeta.
 
@@ -128,6 +130,20 @@ Orden de prioridad:
   `processing_date NOT NULL`, cero columnas PAN/CVV/CBU/token/export y cero tablas de exportacion.
   El contenedor descartable se elimino al terminar.
 
+### Cambios de V25
+
+- `tuition_enrollment_fee_policies` independiza importe, vencimiento y elegibilidad de debito
+  de la matricula respecto del plan de cuotas. Un indice unico parcial permite una sola politica
+  predeterminada.
+- `tuition_applications` permite ciclo, nivel, curso y plan nulos hasta la asignacion y referencia
+  la politica aplicada. Se agregan estados de nivelacion, asignacion y lista de espera.
+- `tuition_placement_assessments` audita resultado, nivel recomendado, evaluador, notas y fecha.
+- Las aplicaciones historicas conservan sus referencias y reciben una politica migrada desde
+  el plan seleccionado. El 2026-08-08 se reconstruyo la base local desde cero y se reprodujeron
+  V1-V25 en orden: quedaron 47 tablas, sin `tuition_seat_reservations`, sin columnas
+  `requested_*` y con los ocho estados nuevos como unica restriccion valida. El arranque posterior
+  con `ddl-auto=validate` y `/actuator/health` confirmo JPA, PostgreSQL y Redis en estado `UP`.
+
 ### PK por modulo
 - Modulos generales (`users`, `students`, `courses`, `staff`, `scheduling`, `tuition`, etc.): **BIGINT**.
 - Modulo exams (`exams`, `exam_submissions`, `exam_grade_history`): **UUID** en PK.
@@ -140,7 +156,8 @@ Orden de prioridad:
 - `exam_grade_history.changed_by` -> `users.id` (BIGINT)
 - `tuition_applications.guardian_user_id` -> `users.id` (BIGINT)
 - `tuition_applications.student_id` -> `students.id` (BIGINT, nullable)
-- `tuition_applications.requested_course_id` -> `courses.id` (BIGINT)
+- `tuition_applications.assigned_level_id` -> `tuition_levels.id` (BIGINT, nullable hasta la asignacion)
+- `tuition_applications.assigned_course_id` -> `courses.id` (BIGINT, nullable hasta la asignacion)
 - `tuition_applications.enrollment_id` -> `enrollments.id` (BIGINT, nullable)
 - `tuition_discounts.student_id` -> `students.id` (BIGINT, nullable)
 - `tuition_ledger_entries.student_id` -> `students.id` (BIGINT, nullable)
@@ -196,6 +213,7 @@ Orden de prioridad:
 | V18 | `scripts/migrations/V18__create_billing_accounts_charges_and_runs.sql` | cuentas, perfiles, cargos, imputaciones y ejecuciones manuales |
 | V19 | `scripts/migrations/V19__repair_tuition_ledger_statuses.sql` | normalizacion de estados heredados del ledger de matriculacion |
 | V20 | `scripts/migrations/V20__repair_hibernate_tuition_ledger_status_constraint.sql` | reemplazo del `CHECK` legacy generado por Hibernate y correccion del valor por defecto |
+| V25 | `scripts/migrations/V25__separate_tuition_request_placement_and_assignment.sql` | politica de matricula, nivelacion y referencias academicas opcionales hasta la asignacion |
 
 ## 4) Validacion ejecutada en BD (2026-05-31)
 
@@ -273,12 +291,14 @@ Orden de prioridad:
 
 ### Tuition
 - `POST /api/v1/tuition/applications` crea solicitudes de matriculacion para guardian autenticado.
-- `POST /api/v1/tuition/applications/{id}/reserve-seat` crea la reserva, el ledger de matricula
-  inicial y un `billing_charge` idempotente.
+- `POST /api/v1/tuition/applications/{id}/enrollment-charge` aplica una politica independiente y
+  crea el ledger/cargo de matricula idempotente.
 - `POST /api/v1/billing/charges/{id}/payments` crea/imputa el pago y recibo X; el observer de
-  tuition marca el ledger `PAID` y habilita la revision administrativa.
-- `PUT /api/v1/tuition/applications/{id}/approve` confirma la reserva, activa guardian, crea
-  estudiante/enrollment y materializa ledger/cargos de cuotas.
+  tuition marca el ledger `PAID`, crea el estudiante pendiente de nivelacion y bloquea la
+  asignacion si el pago se revierte.
+- `PUT /api/v1/tuition/applications/{id}/placement` registra la entrevista o su dispensa.
+- `PUT /api/v1/tuition/applications/{id}/assignment` valida cupo y progresion, crea `Enrollment`
+  y materializa ledger/cargos de cuotas.
 
 ## 7) Scripts operativos de validacion
 
@@ -288,6 +308,8 @@ Orden de prioridad:
 - `scripts/migrations/V17__add_fiscal_tax_breakdown.sql` -> domicilio y desglose impositivo.
 - `scripts/migrations/V18__create_billing_accounts_charges_and_runs.sql` -> cuentas, perfiles,
   cargos, imputaciones y ejecuciones manuales de facturas.
+- `scripts/migrations/V25__separate_tuition_request_placement_and_assignment.sql` -> separacion
+  de solicitud, politica de matricula, nivelacion y asignacion academica; elimina la reserva legacy.
 - `scripts/validate-db-schema.sql` -> validacion de esquema de `users`.
 - `scripts/validate-db-schema.sh` -> validacion por consola (psql).
 
@@ -318,8 +340,10 @@ Orden de prioridad:
       esos defaults como salvaguarda adicional cuando `ddl-auto=update` esta activo en `dev`.
 
 6. **Ledger y cargos**:
-   - Las cuotas mensuales se generan/normalizan para enero-diciembre del año de inicio del
-     ciclo lectivo (hasta 12 filas). La normalizacion de DTO no reescribe filas historicas.
+   - Las cuotas mensuales se generan desde el mes de asignacion, sin deuda retroactiva, y se
+     limitan por inicio/fin del plan, inicio/fin del ciclo y `installments`. Si el vencimiento
+     nominal del primer mes ya paso, esa primera cuota vence en la fecha de asignacion.
+     No se reescriben filas historicas y este cambio no requiere una migracion de esquema.
 
 ## 9) Comandos de auditoria rapida
 

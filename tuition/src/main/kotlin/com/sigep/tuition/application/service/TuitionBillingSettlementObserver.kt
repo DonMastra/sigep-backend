@@ -4,6 +4,8 @@ import com.sigep.common.application.exception.ResourceConflictException
 import com.sigep.common.application.exception.ResourceNotFoundException
 import com.sigep.common.application.service.BillingChargeSettlementObserver
 import com.sigep.common.application.service.BillingChargeSettlement
+import com.sigep.common.application.service.StudentProfileCreateRequest
+import com.sigep.common.application.service.StudentProfileProvider
 import com.sigep.tuition.domain.model.TuitionApplicationStatus
 import com.sigep.tuition.domain.model.TuitionLedgerConcept
 import com.sigep.tuition.domain.model.TuitionLedgerStatus
@@ -16,7 +18,8 @@ import java.time.LocalDateTime
 @Service
 class TuitionBillingSettlementObserver(
     private val ledgerEntryRepository: TuitionLedgerEntryRepository,
-    private val applicationRepository: TuitionApplicationRepository
+    private val applicationRepository: TuitionApplicationRepository,
+    private val studentProfileProvider: StudentProfileProvider
 ) : BillingChargeSettlementObserver {
 
     @Transactional
@@ -49,25 +52,54 @@ class TuitionBillingSettlementObserver(
         if (
             entry.concept == TuitionLedgerConcept.TUITION_ENROLLMENT &&
             ledgerStatus == TuitionLedgerStatus.PAID &&
-            application.status in setOf(
-                TuitionApplicationStatus.SEAT_RESERVED,
-                TuitionApplicationStatus.PAYMENT_PENDING
-            )
+            application.status == TuitionApplicationStatus.PAYMENT_PENDING
         ) {
+            val studentId = application.studentId ?: studentProfileProvider.createStudentForTuition(
+                guardianUserId = application.guardianUserId,
+                request = StudentProfileCreateRequest(
+                    firstName = requireNotNull(application.studentFirstName) { "studentFirstName is required" },
+                    lastName = requireNotNull(application.studentLastName) { "studentLastName is required" },
+                    email = requireNotNull(application.studentEmail) { "studentEmail is required" },
+                    documentNumber = requireNotNull(application.studentDocumentNumber) { "studentDocumentNumber is required" },
+                    dateOfBirth = requireNotNull(application.studentDateOfBirth) { "studentDateOfBirth is required" },
+                    address = requireNotNull(application.studentAddress) { "studentAddress is required" },
+                    phoneNumber = requireNotNull(application.studentPhoneNumber) { "studentPhoneNumber is required" },
+                    emergencyContact = requireNotNull(application.studentEmergencyContact) { "studentEmergencyContact is required" },
+                    medicalNotes = application.studentMedicalNotes,
+                    currentLevel = PENDING_PLACEMENT_LEVEL
+                )
+            ).id
             applicationRepository.save(
                 application.copy(
-                    status = TuitionApplicationStatus.READY_FOR_ADMIN_APPROVAL,
+                    studentId = studentId,
+                    status = TuitionApplicationStatus.ENROLLED_PENDING_PLACEMENT,
                     updatedAt = now
                 )
             )
         } else if (
             entry.concept == TuitionLedgerConcept.TUITION_ENROLLMENT &&
             ledgerStatus != TuitionLedgerStatus.PAID &&
-            application.status == TuitionApplicationStatus.READY_FOR_ADMIN_APPROVAL
+            application.status in setOf(
+                TuitionApplicationStatus.ENROLLED_PENDING_PLACEMENT,
+                TuitionApplicationStatus.READY_FOR_ACADEMIC_ASSIGNMENT,
+                TuitionApplicationStatus.WAITLISTED
+            )
         ) {
             applicationRepository.save(
                 application.copy(
                     status = TuitionApplicationStatus.PAYMENT_PENDING,
+                    warningMessage = "El pago de matricula fue revertido o quedo incompleto; la asignacion academica permanece bloqueada.",
+                    updatedAt = now
+                )
+            )
+        } else if (
+            entry.concept == TuitionLedgerConcept.TUITION_ENROLLMENT &&
+            ledgerStatus != TuitionLedgerStatus.PAID &&
+            application.status == TuitionApplicationStatus.APPROVED
+        ) {
+            applicationRepository.save(
+                application.copy(
+                    warningMessage = "El pago de matricula fue revertido luego de la asignacion. Revisar la deuda sin eliminar al estudiante ni su historial.",
                     updatedAt = now
                 )
             )
@@ -76,5 +108,6 @@ class TuitionBillingSettlementObserver(
 
     private companion object {
         const val BILLING_SOURCE_TYPE = "TUITION_LEDGER"
+        const val PENDING_PLACEMENT_LEVEL = "PENDING_PLACEMENT"
     }
 }

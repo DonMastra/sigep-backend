@@ -18,8 +18,8 @@ La documentacion refleja la base de cargos y preparacion manual de facturacion a
 - Staff docente y no docente, asistencia de personal y resolucion batch de docentes.
 - Examenes presenciales, submissions, calificaciones, historial de cambios y analitica de docentes.
 - Scheduling operativo para aulas, slots y reservas.
-- Flujo QA de matriculacion para `GUARDIAN` y `ADMIN`: catalogos, cursos publicados, reserva de
-  vacante, cargo/pago inicial, aprobacion y ledger de enero a diciembre del ciclo.
+- Flujo de matriculacion para `GUARDIAN`, `TEACHER` y `ADMIN`: solicitud minima, politica y
+  pago de matricula, nivelacion, asignacion con cupo y ledger de cuotas posterior.
 - Alta/edicion de docentes con cuenta `TEACHER` enlazada, asignacion exacta de cursos y foto
   multipart persistida en PostgreSQL.
 - Asistencia por sesion real con nombres de estudiantes y payload bulk idempotente.
@@ -271,6 +271,8 @@ Migraciones del cierre QA:
   decisiones fiscales auditadas.
 - `V23__add_late_fee_policies_and_adjustments.sql`: politica por plan, snapshot y recargo unico.
 - `V24__create_automatic_debit_foundation.sql`: mandatos, instrucciones y eventos sanitizados.
+- `V25__separate_tuition_request_placement_and_assignment.sql`: politica de matricula,
+  nivelacion y asignacion academica posterior al pago.
 
 Validarlas en una base descartable o transaccion revertida antes de aplicarlas al contenedor
 actual; no se ejecutan automaticamente durante esta implementacion.
