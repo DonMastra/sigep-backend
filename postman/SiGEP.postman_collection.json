@@ -121,6 +121,10 @@
       "value": "1"
     },
     {
+      "key": "tuitionEnrollmentFeePolicyId",
+      "value": "1"
+    },
+    {
       "key": "tuitionDiscountId",
       "value": "1"
     },
@@ -1709,7 +1713,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"academicYearId\": {{tuitionAcademicYearId}},\n  \"name\": \"Teen Plan {{tuitionRunId}}\",\n  \"segment\": \"TEENS\",\n  \"levelId\": {{tuitionLevelId}},\n  \"enrollmentFee\": 25000.00,\n  \"monthlyFee\": 55000.00,\n  \"installments\": 9,\n  \"currency\": \"ARS\",\n  \"validFrom\": \"2026-01-01\",\n  \"validTo\": \"2026-12-31\",\n  \"status\": \"ACTIVE\"\n}"
+                  "raw": "{\n  \"academicYearId\": {{tuitionAcademicYearId}},\n  \"name\": \"Teen Plan {{tuitionRunId}}\",\n  \"segment\": \"TEENS\",\n  \"levelId\": {{tuitionLevelId}},\n  \"monthlyFee\": 55000.00,\n  \"installments\": 9,\n  \"monthlyDueDay\": 10,\n  \"lateFeePercentage\": 5.00,\n  \"automaticDebitMonthly\": true,\n  \"currency\": \"ARS\",\n  \"validFrom\": \"2026-01-01\",\n  \"validTo\": \"2026-12-31\",\n  \"status\": \"ACTIVE\"\n}"
                 }
               }
             },
@@ -1787,12 +1791,12 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"academicYearId\": {{tuitionAcademicYearId}},\n  \"requestedLevelId\": {{tuitionLevelId}},\n  \"requestedCourseId\": {{tuitionCourseId}},\n  \"feePlanId\": {{tuitionFeePlanId}},\n  \"applicationType\": \"NEW_STUDENT\",\n  \"studentFirstName\": \"Alumno\",\n  \"studentLastName\": \"Tuition {{tuitionRunId}}\",\n  \"studentEmail\": \"tuition.{{tuitionRunId}}@example.com\",\n  \"studentDocumentNumber\": \"TUI-{{tuitionRunId}}\",\n  \"studentDateOfBirth\": \"2012-05-10\",\n  \"studentAddress\": \"Calle Tuition 123\",\n  \"studentPhoneNumber\": \"+54-11-5555-0101\",\n  \"studentEmergencyContact\": \"Tutor +54-11-5555-0102\",\n  \"studentMedicalNotes\": \"Sin observaciones\"\n}"
+                  "raw": "{\n  \"applicationType\": \"NEW_STUDENT\",\n  \"studentFirstName\": \"Alumno\",\n  \"studentLastName\": \"Tuition {{tuitionRunId}}\",\n  \"studentEmail\": \"tuition.{{tuitionRunId}}@example.com\",\n  \"studentDocumentNumber\": \"TUI-{{tuitionRunId}}\",\n  \"studentDateOfBirth\": \"2012-05-10\",\n  \"studentAddress\": \"Calle Tuition 123\",\n  \"studentPhoneNumber\": \"+54-11-5555-0101\",\n  \"studentEmergencyContact\": \"Tutor +54-11-5555-0102\",\n  \"studentMedicalNotes\": \"Sin observaciones\"\n}"
                 }
               }
             },
             {
-              "name": "10 - Reserve Seat",
+              "name": "10 - Create Enrollment Charge",
               "event": [
                 {
                   "listen": "test",
@@ -1807,16 +1811,26 @@
               ],
               "request": {
                 "method": "POST",
-                "url": "{{baseUrl}}/api/v1/tuition/applications/{{tuitionApplicationId}}/reserve-seat",
+                "url": "{{baseUrl}}/api/v1/tuition/applications/{{tuitionApplicationId}}/enrollment-charge",
                 "auth": {
                   "type": "bearer",
                   "bearer": [
                     {
                       "key": "token",
-                      "value": "{{guardianToken}}",
+                      "value": "{{adminToken}}",
                       "type": "string"
                     }
                   ]
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"enrollmentFeePolicyId\": {{tuitionEnrollmentFeePolicyId}}\n}"
                 }
               }
             },
@@ -1838,10 +1852,10 @@
               }
             },
             {
-              "name": "13 - Admin List Ready Applications",
+              "name": "13 - Admin List Pending Payment Applications",
               "request": {
                 "method": "GET",
-                "url": "{{baseUrl}}/api/v1/tuition/applications?status=READY_FOR_ADMIN_APPROVAL&page=0&limit=20",
+                "url": "{{baseUrl}}/api/v1/tuition/applications?status=PAYMENT_PENDING&page=0&limit=20",
                 "auth": {
                   "type": "bearer",
                   "bearer": [
@@ -1855,7 +1869,7 @@
               }
             },
             {
-              "name": "14 - Approve Application (Save enrollment/student)",
+              "name": "14 - Get Application Detail",
               "event": [
                 {
                   "listen": "test",
@@ -1871,8 +1885,8 @@
                 }
               ],
               "request": {
-                "method": "PUT",
-                "url": "{{baseUrl}}/api/v1/tuition/applications/{{tuitionApplicationId}}/approve",
+                "method": "GET",
+                "url": "{{baseUrl}}/api/v1/tuition/applications/{{tuitionApplicationId}}",
                 "auth": {
                   "type": "bearer",
                   "bearer": [
@@ -1882,16 +1896,6 @@
                       "type": "string"
                     }
                   ]
-                },
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
-                  }
-                ],
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"adminNotes\": \"Approved from Postman smoke flow\"\n}"
                 }
               }
             },

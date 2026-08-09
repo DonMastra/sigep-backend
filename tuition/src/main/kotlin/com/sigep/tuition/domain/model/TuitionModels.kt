@@ -1,7 +1,6 @@
 package com.sigep.tuition.domain.model
 
 import com.sigep.common.domain.AggregateRoot
-import jakarta.persistence.CascadeType
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.EnumType
@@ -166,9 +165,6 @@ data class TuitionFeePlan(
     @JoinColumn(name = "level_id")
     val level: TuitionLevel? = null,
 
-    @Column(name = "enrollment_fee", nullable = false, precision = 12, scale = 2)
-    val enrollmentFee: BigDecimal,
-
     @Column(name = "monthly_fee", nullable = false, precision = 12, scale = 2)
     val monthlyFee: BigDecimal,
 
@@ -184,9 +180,6 @@ data class TuitionFeePlan(
     @Column(name = "automatic_debit_monthly", nullable = false)
     val automaticDebitMonthly: Boolean = true,
 
-    @Column(name = "automatic_debit_enrollment", nullable = false)
-    val automaticDebitEnrollment: Boolean = false,
-
     @Column(nullable = false, length = 3)
     val currency: String = "ARS",
 
@@ -199,6 +192,54 @@ data class TuitionFeePlan(
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     val status: TuitionFeePlanStatus = TuitionFeePlanStatus.ACTIVE,
+
+    @Column(name = "created_at", nullable = false)
+    val createdAt: LocalDateTime = LocalDateTime.now(),
+
+    @Column(name = "updated_at", nullable = false)
+    val updatedAt: LocalDateTime = LocalDateTime.now()
+) : AggregateRoot
+
+@Entity
+@Table(
+    name = "tuition_enrollment_fee_policies",
+    indexes = [
+        Index(name = "idx_tuition_enrollment_policy_status", columnList = "status"),
+        Index(name = "idx_tuition_enrollment_policy_validity", columnList = "valid_from,valid_to")
+    ]
+)
+data class TuitionEnrollmentFeePolicy(
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    val id: Long? = null,
+
+    @Column(nullable = false, length = 120)
+    val name: String,
+
+    @Column(nullable = false, precision = 12, scale = 2)
+    val amount: BigDecimal,
+
+    @Column(nullable = false, length = 3)
+    val currency: String = "ARS",
+
+    @Column(name = "payment_due_days", nullable = false)
+    val paymentDueDays: Int = 3,
+
+    @Column(name = "automatic_debit_eligible", nullable = false)
+    val automaticDebitEligible: Boolean = false,
+
+    @Column(name = "valid_from", nullable = false)
+    val validFrom: LocalDate,
+
+    @Column(name = "valid_to")
+    val validTo: LocalDate? = null,
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    val status: TuitionEnrollmentFeePolicyStatus = TuitionEnrollmentFeePolicyStatus.ACTIVE,
+
+    @Column(name = "default_policy", nullable = false)
+    val defaultPolicy: Boolean = false,
 
     @Column(name = "created_at", nullable = false)
     val createdAt: LocalDateTime = LocalDateTime.now(),
@@ -267,7 +308,7 @@ data class TuitionDiscount(
     indexes = [
         Index(name = "idx_tuition_application_guardian", columnList = "guardian_user_id"),
         Index(name = "idx_tuition_application_student", columnList = "student_id"),
-        Index(name = "idx_tuition_application_course", columnList = "requested_course_id"),
+        Index(name = "idx_tuition_application_assigned_course", columnList = "assigned_course_id"),
         Index(name = "idx_tuition_application_status", columnList = "status"),
         Index(name = "idx_tuition_application_year", columnList = "academic_year_id")
     ]
@@ -311,15 +352,15 @@ data class TuitionApplication(
     val studentMedicalNotes: String? = null,
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "academic_year_id", nullable = false)
-    val academicYear: TuitionAcademicYear,
+    @JoinColumn(name = "academic_year_id")
+    val academicYear: TuitionAcademicYear? = null,
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "requested_level_id", nullable = false)
-    val requestedLevel: TuitionLevel,
+    @JoinColumn(name = "assigned_level_id")
+    val assignedLevel: TuitionLevel? = null,
 
-    @Column(name = "requested_course_id", nullable = false)
-    val requestedCourseId: Long,
+    @Column(name = "assigned_course_id")
+    val assignedCourseId: Long? = null,
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
@@ -330,8 +371,12 @@ data class TuitionApplication(
     val status: TuitionApplicationStatus = TuitionApplicationStatus.SUBMITTED,
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "fee_plan_id", nullable = false)
-    val feePlan: TuitionFeePlan,
+    @JoinColumn(name = "fee_plan_id")
+    val feePlan: TuitionFeePlan? = null,
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "enrollment_fee_policy_id")
+    val enrollmentFeePolicy: TuitionEnrollmentFeePolicy? = null,
 
     @Column(name = "enrollment_id")
     val enrollmentId: Long? = null,
@@ -368,37 +413,40 @@ data class TuitionApplication(
 
 @Entity
 @Table(
-    name = "tuition_seat_reservations",
+    name = "tuition_placement_assessments",
     indexes = [
-        Index(name = "idx_tuition_seat_course", columnList = "course_id"),
-        Index(name = "idx_tuition_seat_status", columnList = "status"),
-        Index(name = "idx_tuition_seat_expires", columnList = "expires_at")
+        Index(name = "idx_tuition_placement_status", columnList = "status"),
+        Index(name = "idx_tuition_placement_level", columnList = "recommended_level_id")
     ],
     uniqueConstraints = [
-        UniqueConstraint(name = "uq_tuition_seat_application", columnNames = ["application_id"])
+        UniqueConstraint(name = "uq_tuition_placement_application", columnNames = ["application_id"])
     ]
 )
-data class TuitionSeatReservation(
+data class TuitionPlacementAssessment(
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     val id: Long? = null,
 
-    @OneToOne(fetch = FetchType.LAZY, cascade = [CascadeType.MERGE])
+    @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "application_id", nullable = false, unique = true)
     val application: TuitionApplication,
 
-    @Column(name = "course_id", nullable = false)
-    val courseId: Long,
-
-    @Column(nullable = false)
-    val quantity: Int = 1,
-
-    @Column(name = "expires_at", nullable = false)
-    val expiresAt: LocalDateTime,
-
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
-    val status: TuitionSeatReservationStatus = TuitionSeatReservationStatus.ACTIVE,
+    val status: TuitionPlacementStatus,
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "recommended_level_id")
+    val recommendedLevel: TuitionLevel? = null,
+
+    @Column(name = "evaluator_user_id", nullable = false)
+    val evaluatorUserId: Long,
+
+    @Column(length = 2000)
+    val notes: String? = null,
+
+    @Column(name = "assessed_at", nullable = false)
+    val assessedAt: LocalDateTime = LocalDateTime.now(),
 
     @Column(name = "created_at", nullable = false)
     val createdAt: LocalDateTime = LocalDateTime.now(),
@@ -473,19 +521,19 @@ enum class TuitionAcademicYearStatus { DRAFT, OPEN, CLOSED }
 enum class TuitionSegment { CHILDREN, TEENS, ADULTS }
 enum class TuitionProgressionRule { PASS_PREVIOUS_LEVEL, ADMIN_APPROVAL }
 enum class TuitionFeePlanStatus { ACTIVE, INACTIVE }
+enum class TuitionEnrollmentFeePolicyStatus { ACTIVE, INACTIVE }
 enum class TuitionDiscountType { SCHOLARSHIP, DISCOUNT }
 enum class TuitionApplicationType { NEW_STUDENT, REGULAR_PROMOTION, ADDITIONAL_STUDENT }
 enum class TuitionApplicationStatus {
-    DRAFT,
     SUBMITTED,
-    SEAT_RESERVED,
     PAYMENT_PENDING,
-    READY_FOR_ADMIN_APPROVAL,
+    ENROLLED_PENDING_PLACEMENT,
+    READY_FOR_ACADEMIC_ASSIGNMENT,
+    WAITLISTED,
     APPROVED,
     REJECTED,
-    CANCELLED,
-    EXPIRED
+    CANCELLED
 }
-enum class TuitionSeatReservationStatus { ACTIVE, CONFIRMED, RELEASED, EXPIRED }
+enum class TuitionPlacementStatus { PENDING, COMPLETED, WAIVED }
 enum class TuitionLedgerConcept { TUITION_ENROLLMENT, MONTHLY_FEE }
 enum class TuitionLedgerStatus { PENDING, PARTIALLY_PAID, PAID, CANCELLED }

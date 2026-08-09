@@ -5,11 +5,12 @@ import com.sigep.tuition.domain.model.TuitionApplicationStatus
 import com.sigep.tuition.domain.model.TuitionApplicationType
 import com.sigep.tuition.domain.model.TuitionDiscountType
 import com.sigep.tuition.domain.model.TuitionFeePlanStatus
+import com.sigep.tuition.domain.model.TuitionEnrollmentFeePolicyStatus
 import com.sigep.tuition.domain.model.TuitionLedgerConcept
 import com.sigep.tuition.domain.model.TuitionLedgerStatus
 import com.sigep.tuition.domain.model.TuitionProgressionRule
-import com.sigep.tuition.domain.model.TuitionSeatReservationStatus
 import com.sigep.tuition.domain.model.TuitionSegment
+import com.sigep.tuition.domain.model.TuitionPlacementStatus
 import jakarta.validation.constraints.DecimalMin
 import jakarta.validation.constraints.DecimalMax
 import jakarta.validation.constraints.Email
@@ -137,13 +138,11 @@ data class TuitionFeePlanDto(
     val segment: TuitionSegment?,
     val levelId: Long?,
     val levelCode: String?,
-    val enrollmentFee: BigDecimal,
     val monthlyFee: BigDecimal,
     val installments: Int,
     val monthlyDueDay: Int,
     val lateFeePercentage: BigDecimal,
     val automaticDebitMonthly: Boolean,
-    val automaticDebitEnrollment: Boolean,
     val currency: String,
     val validFrom: LocalDate,
     val validTo: LocalDate?,
@@ -157,13 +156,11 @@ data class CreateTuitionFeePlanRequest(
     @field:NotBlank @field:Size(max = 120) val name: String,
     val segment: TuitionSegment? = null,
     val levelId: Long? = null,
-    @field:DecimalMin("0.00") val enrollmentFee: BigDecimal,
     @field:DecimalMin("0.00") val monthlyFee: BigDecimal,
     @field:Min(1) @field:Max(24) val installments: Int,
     @field:Min(1) @field:Max(28) val monthlyDueDay: Int = 20,
     @field:DecimalMin("0.00") @field:DecimalMax("100.00") val lateFeePercentage: BigDecimal = BigDecimal.ZERO,
     val automaticDebitMonthly: Boolean = true,
-    val automaticDebitEnrollment: Boolean = false,
     @field:Size(min = 3, max = 3) val currency: String = "ARS",
     @field:NotNull val validFrom: LocalDate,
     val validTo: LocalDate? = null,
@@ -174,17 +171,54 @@ data class UpdateTuitionFeePlanRequest(
     @field:Size(max = 120) val name: String? = null,
     val segment: TuitionSegment? = null,
     val levelId: Long? = null,
-    @field:DecimalMin("0.00") val enrollmentFee: BigDecimal? = null,
     @field:DecimalMin("0.00") val monthlyFee: BigDecimal? = null,
     @field:Min(1) @field:Max(24) val installments: Int? = null,
     @field:Min(1) @field:Max(28) val monthlyDueDay: Int? = null,
     @field:DecimalMin("0.00") @field:DecimalMax("100.00") val lateFeePercentage: BigDecimal? = null,
     val automaticDebitMonthly: Boolean? = null,
-    val automaticDebitEnrollment: Boolean? = null,
     @field:Size(min = 3, max = 3) val currency: String? = null,
     val validFrom: LocalDate? = null,
     val validTo: LocalDate? = null,
     val status: TuitionFeePlanStatus? = null
+)
+
+data class TuitionEnrollmentFeePolicyDto(
+    val id: Long,
+    val name: String,
+    val amount: BigDecimal,
+    val currency: String,
+    val paymentDueDays: Int,
+    val automaticDebitEligible: Boolean,
+    val validFrom: LocalDate,
+    val validTo: LocalDate?,
+    val status: TuitionEnrollmentFeePolicyStatus,
+    val defaultPolicy: Boolean,
+    val createdAt: LocalDateTime,
+    val updatedAt: LocalDateTime
+)
+
+data class CreateTuitionEnrollmentFeePolicyRequest(
+    @field:NotBlank @field:Size(max = 120) val name: String,
+    @field:DecimalMin("0.01") val amount: BigDecimal,
+    @field:Size(min = 3, max = 3) val currency: String = "ARS",
+    @field:Min(0) @field:Max(90) val paymentDueDays: Int = 3,
+    val automaticDebitEligible: Boolean = false,
+    @field:NotNull val validFrom: LocalDate,
+    val validTo: LocalDate? = null,
+    val status: TuitionEnrollmentFeePolicyStatus = TuitionEnrollmentFeePolicyStatus.ACTIVE,
+    val defaultPolicy: Boolean = false
+)
+
+data class UpdateTuitionEnrollmentFeePolicyRequest(
+    @field:Size(max = 120) val name: String? = null,
+    @field:DecimalMin("0.01") val amount: BigDecimal? = null,
+    @field:Size(min = 3, max = 3) val currency: String? = null,
+    @field:Min(0) @field:Max(90) val paymentDueDays: Int? = null,
+    val automaticDebitEligible: Boolean? = null,
+    val validFrom: LocalDate? = null,
+    val validTo: LocalDate? = null,
+    val status: TuitionEnrollmentFeePolicyStatus? = null,
+    val defaultPolicy: Boolean? = null
 )
 
 data class TuitionDiscountDto(
@@ -238,21 +272,22 @@ data class TuitionApplicationDto(
     val studentLastName: String?,
     val studentEmail: String?,
     val studentDocumentNumber: String?,
-    val academicYearId: Long,
-    val academicYearName: String,
-    val requestedLevelId: Long,
-    val requestedLevelCode: String,
-    val requestedLevelName: String,
-    val requestedCourseId: Long,
+    val assignedAcademicYearId: Long?,
+    val assignedAcademicYearName: String?,
+    val assignedLevelId: Long?,
+    val assignedLevelCode: String?,
+    val assignedLevelName: String?,
+    val assignedCourseId: Long?,
     val applicationType: TuitionApplicationType,
     val status: TuitionApplicationStatus,
-    val feePlan: TuitionFeePlanDto,
+    val feePlan: TuitionFeePlanDto?,
+    val enrollmentFeePolicy: TuitionEnrollmentFeePolicyDto?,
+    val placement: TuitionPlacementAssessmentDto?,
     val enrollmentId: Long?,
     val warningMessage: String?,
     val progressionRule: TuitionProgressionRule?,
     val requiresAdminOverride: Boolean,
     val adminNotes: String?,
-    val seatReservation: TuitionSeatReservationDto?,
     val ledgerEntries: List<TuitionLedgerEntryDto>,
     val submittedAt: LocalDateTime,
     val approvedAt: LocalDateTime?,
@@ -262,10 +297,6 @@ data class TuitionApplicationDto(
 )
 
 data class CreateTuitionApplicationRequest(
-    @field:NotNull val academicYearId: Long,
-    @field:NotNull val requestedLevelId: Long,
-    @field:NotNull val requestedCourseId: Long,
-    val feePlanId: Long? = null,
     @field:NotNull val applicationType: TuitionApplicationType,
     val studentId: Long? = null,
     @field:Size(min = 1, max = 100) val studentFirstName: String? = null,
@@ -279,20 +310,41 @@ data class CreateTuitionApplicationRequest(
     val studentMedicalNotes: String? = null
 )
 
+data class CreateTuitionEnrollmentChargeRequest(
+    val enrollmentFeePolicyId: Long? = null
+)
+
+data class TuitionPlacementRequest(
+    @field:NotNull val status: TuitionPlacementStatus,
+    val recommendedLevelId: Long? = null,
+    @field:Size(max = 2000) val notes: String? = null
+)
+
+data class TuitionAcademicAssignmentRequest(
+    @field:NotNull val academicYearId: Long,
+    @field:NotNull val levelId: Long,
+    @field:NotNull val courseId: Long,
+    @field:NotNull val feePlanId: Long,
+    @field:Size(max = 1000) val adminNotes: String? = null
+)
+
+data class TuitionPlacementAssessmentDto(
+    val id: Long,
+    val applicationId: Long,
+    val status: TuitionPlacementStatus,
+    val recommendedLevelId: Long?,
+    val recommendedLevelCode: String?,
+    val recommendedLevelName: String?,
+    val evaluatorUserId: Long,
+    val notes: String?,
+    val assessedAt: LocalDateTime,
+    val createdAt: LocalDateTime,
+    val updatedAt: LocalDateTime
+)
+
 data class TuitionDecisionRequest(
     @field:Size(max = 1000)
     val adminNotes: String? = null
-)
-
-data class TuitionSeatReservationDto(
-    val id: Long,
-    val applicationId: Long,
-    val courseId: Long,
-    val quantity: Int,
-    val expiresAt: LocalDateTime,
-    val status: TuitionSeatReservationStatus,
-    val createdAt: LocalDateTime,
-    val updatedAt: LocalDateTime
 )
 
 data class TuitionLedgerEntryDto(

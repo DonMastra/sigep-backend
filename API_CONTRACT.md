@@ -328,7 +328,8 @@ Nota: la asignacion de aula/horario se maneja con reservas en `scheduling`; los 
 inscripciones `ACTIVE`; `totalEnrollments` incluye todas las inscripciones. El codigo de
 curso admite de 1 a 50 caracteres alfanumericos, espacios, guion, guion bajo y punto, con
 unicidad insensible a mayusculas. Publicar no exige una matricula minima, pero si docente,
-reserva, estado valido y disponibilidad.
+reserva, estado valido y disponibilidad. `durationHours` es la carga horaria total planificada
+del curso, no la duracion de cada clase.
 
 ## Enrollments
 
@@ -348,9 +349,9 @@ Base: `/api/v1/enrollments`
 
 Base: `/api/v1/tuition`
 
-Tuition gestiona matriculacion como proceso previo a la inscripcion academica final. `Enrollment`
-se crea solo cuando admin aprueba una solicitud `READY_FOR_ADMIN_APPROVAL`. Los movimientos
-economicos se sincronizan con cargos persistentes del modulo `payments`.
+Tuition separa la solicitud del tutor, el cobro de matricula, la nivelacion y la asignacion
+academica final. El tutor no elige ciclo, nivel, curso ni plan. `Enrollment` y los cargos de
+cuotas se crean juntos cuando ADMIN asigna una solicitud ya matriculada y nivelada.
 
 ### Guardian flow
 
@@ -358,15 +359,17 @@ economicos se sincronizan con cargos persistentes del modulo `payments`.
 |---|---|---|---|
 | POST | `/applications` | GUARDIAN | Crea solicitud `SUBMITTED` para alumno nuevo, adicional o regular. |
 | GET | `/my-applications` | GUARDIAN | Lista solicitudes del guardian autenticado. |
-| POST | `/applications/{id}/reserve-seat` | GUARDIAN | Reserva una vacante, genera el ledger de matricula y crea/idempotentemente actualiza el cargo de facturacion. |
 
 ### Admin flow
 
 | Metodo | Ruta | Roles | Descripcion |
 |---|---|---|---|
-| GET | `/applications?status=&academicYearId=` | ADMIN | Lista solicitudes con filtros. |
-| PUT | `/applications/{id}/approve` | ADMIN | Exige matricula `PAID`; confirma reserva, activa guardian, crea estudiante/enrollment y cargos de cuotas. |
-| PUT | `/applications/{id}/reject` | ADMIN | Rechaza solicitud, libera cupo y cancela ledger/cargos abiertos. |
+| GET | `/applications?status=&academicYearId=` | ADMIN | Lista solicitudes con filtros; las nuevas no tienen ciclo hasta la asignacion. |
+| GET | `/applications/{id}` | ADMIN, TEACHER | Detalle con matricula, nivelacion, asignacion y ledger. |
+| POST | `/applications/{id}/enrollment-charge` | ADMIN | Aplica una politica de matricula activa y crea el ledger/cargo idempotente. |
+| PUT | `/applications/{id}/placement` | ADMIN, TEACHER | Registra nivelacion `COMPLETED` o `WAIVED`; exige matricula totalmente paga. |
+| PUT | `/applications/{id}/assignment` | ADMIN | Asigna ciclo, nivel, curso y plan; valida pago, nivelacion, cupo y progresion, crea `Enrollment` y cuotas. |
+| PUT | `/applications/{id}/reject` | ADMIN | Rechaza una solicitud sin pagos confirmados y cancela ledger/cargos abiertos. |
 
 ### Admin catalogs
 
@@ -383,6 +386,8 @@ economicos se sincronizan con cargos persistentes del modulo `payments`.
 | GET | `/fee-plans` | ADMIN, GUARDIAN | Lista planes vigentes filtrables por ciclo/nivel/segmento. |
 | POST | `/fee-plans` | ADMIN | Crea plan de cuota. |
 | PUT/DELETE | `/fee-plans/{id}` | ADMIN | Actualiza o elimina plan. |
+| GET/POST | `/enrollment-fee-policies` | ADMIN | Lista o crea politicas independientes para la matricula. |
+| PUT/DELETE | `/enrollment-fee-policies/{id}` | ADMIN | Actualiza o elimina una politica; solo puede existir una predeterminada. |
 | GET/POST | `/discounts` | ADMIN | Lista o crea descuentos/becas. |
 | PUT/DELETE | `/discounts/{id}` | ADMIN | Actualiza o elimina descuento/beca. |
 
@@ -393,17 +398,17 @@ type TuitionAcademicYearStatus = 'DRAFT' | 'OPEN' | 'CLOSED';
 type TuitionSegment = 'CHILDREN' | 'TEENS' | 'ADULTS';
 type TuitionApplicationType = 'NEW_STUDENT' | 'REGULAR_PROMOTION' | 'ADDITIONAL_STUDENT';
 type TuitionApplicationStatus =
-  | 'DRAFT'
   | 'SUBMITTED'
-  | 'SEAT_RESERVED'
   | 'PAYMENT_PENDING'
-  | 'READY_FOR_ADMIN_APPROVAL'
+  | 'ENROLLED_PENDING_PLACEMENT'
+  | 'READY_FOR_ACADEMIC_ASSIGNMENT'
+  | 'WAITLISTED'
   | 'APPROVED'
   | 'REJECTED'
-  | 'CANCELLED'
-  | 'EXPIRED';
+  | 'CANCELLED';
 type TuitionLedgerConcept = 'TUITION_ENROLLMENT' | 'MONTHLY_FEE';
 type TuitionLedgerStatus = 'PENDING' | 'PARTIALLY_PAID' | 'PAID' | 'CANCELLED';
+type TuitionPlacementStatus = 'PENDING' | 'COMPLETED' | 'WAIVED';
 
 type TuitionProgressionRule = 'PASS_PREVIOUS_LEVEL' | 'ADMIN_APPROVAL';
 ```
@@ -412,10 +417,6 @@ Solicitud:
 
 ```ts
 interface CreateTuitionApplicationRequest {
-  academicYearId: number;
-  requestedLevelId: number;
-  requestedCourseId: number;
-  feePlanId?: number;
   applicationType: TuitionApplicationType;
   studentId?: number;
   studentFirstName?: string;
@@ -432,20 +433,22 @@ interface CreateTuitionApplicationRequest {
 
 Notas:
 
-- `REGULAR_PROMOTION` requiere `studentId`; si no hay correlacion clara de nivel, la solicitud queda `SUBMITTED` con `warningMessage`.
-- Para alumno nuevo sin `studentId`, los campos snapshot del estudiante son obligatorios.
-- `requestedLevel.courseLevel` debe coincidir con el `CourseLevel` del curso solicitado.
-  Como compatibilidad, el backend resuelve `A1 -> BEGINNER` y `A2 -> ELEMENTARY`, y usa
-  `requestedLevel.code` como respaldo si el catalogo legacy aun no tiene `courseLevel`.
-- La reserva descuenta cupos solo dentro de `tuition`; `Enrollment` real se crea al aprobar.
-- El pago se registra por `POST /api/v1/billing/charges/{chargeId}/payments`. La imputacion
-  actualiza el ledger a `PAID`, guarda `billingReference=PAYMENT-{paymentId}` y lleva la
-  solicitud a `READY_FOR_ADMIN_APPROVAL` cuando corresponde a la matricula inicial.
-- `PASS_PREVIOUS_LEVEL` bloquea si el estudiante regular no aprobo el nivel de origen o
-  solicita un destino diferente. `ADMIN_APPROVAL` deja `requiresAdminOverride=true` y el
-  endpoint de aprobacion exige `adminNotes` no vacio.
-- Las entradas `MONTHLY_FEE` se generan de enero a diciembre del año de inicio del ciclo
-  (como maximo 12 cuotas), aunque la solicitud o reserva se cree durante otro mes.
+- `REGULAR_PROMOTION` requiere un `studentId` propio del guardian. Los demas tipos requieren
+  el snapshot completo, pero no crean la fila `students` al enviar la solicitud.
+- Un pago parcial mantiene `PAYMENT_PENDING`. Al completar la matricula, el observer crea al
+  estudiante con nivel tecnico `PENDING_PLACEMENT` y pasa a `ENROLLED_PENDING_PLACEMENT`.
+- El pago se registra por `POST /api/v1/billing/charges/{chargeId}/payments` y actualiza importes
+  y `billingReference=PAYMENT-{paymentId}`. Una reversion previa a la asignacion vuelve a
+  `PAYMENT_PENDING`; si el alumno ya fue asignado conserva su historial y deja una advertencia.
+- La asignacion exige nivelacion terminada o dispensada. Si el nivel final difiere del recomendado
+  o se fuerza una progresion, ADMIN debe justificarlo en `adminNotes`.
+- La validacion de cupo y la creacion de `Enrollment` ocurren en la asignacion. Sin cupo la
+  solicitud queda `WAITLISTED` y no genera inscripcion ni cuotas.
+- Las entradas `MONTHLY_FEE` se generan recien al asignar y comienzan en el mes de esa
+  asignacion, nunca antes del inicio del plan o del ciclo. Se detienen en el primer limite entre
+  fin del plan, fin del ciclo y `installments`, que representa la cantidad maxima por estudiante.
+  El primer vencimiento nunca puede ser anterior a la fecha de asignacion. Su debito proviene
+  del plan mensual; la matricula usa su politica independiente.
 
 ## Course Sessions
 

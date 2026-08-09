@@ -6,16 +6,19 @@ import com.sigep.security.application.annotation.RequireAdmin
 import com.sigep.tuition.application.dto.CreateTuitionAcademicYearRequest
 import com.sigep.tuition.application.dto.CreateTuitionDiscountRequest
 import com.sigep.tuition.application.dto.CreateTuitionFeePlanRequest
+import com.sigep.tuition.application.dto.CreateTuitionEnrollmentFeePolicyRequest
 import com.sigep.tuition.application.dto.CreateTuitionLevelProgressionRequest
 import com.sigep.tuition.application.dto.CreateTuitionLevelRequest
 import com.sigep.tuition.application.dto.TuitionAcademicYearDto
 import com.sigep.tuition.application.dto.TuitionDiscountDto
 import com.sigep.tuition.application.dto.TuitionFeePlanDto
+import com.sigep.tuition.application.dto.TuitionEnrollmentFeePolicyDto
 import com.sigep.tuition.application.dto.TuitionLevelDto
 import com.sigep.tuition.application.dto.TuitionLevelProgressionDto
 import com.sigep.tuition.application.dto.UpdateTuitionAcademicYearRequest
 import com.sigep.tuition.application.dto.UpdateTuitionDiscountRequest
 import com.sigep.tuition.application.dto.UpdateTuitionFeePlanRequest
+import com.sigep.tuition.application.dto.UpdateTuitionEnrollmentFeePolicyRequest
 import com.sigep.tuition.application.dto.UpdateTuitionLevelProgressionRequest
 import com.sigep.tuition.application.dto.UpdateTuitionLevelRequest
 import com.sigep.tuition.application.service.TuitionCatalogService
@@ -153,6 +156,40 @@ class TuitionCatalogController(
     fun deleteFeePlan(@PathVariable id: Long): ResponseEntity<ApiResponse<Unit>> {
         tuitionCatalogService.deleteFeePlan(id)
         return ResponseEntity.ok(ApiResponse.successNoContent("Tuition fee plan deleted"))
+    }
+
+    @GetMapping("/enrollment-fee-policies")
+    @RequireAdmin
+    fun listEnrollmentFeePolicies(
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "50") limit: Int
+    ): ResponseEntity<ApiResponse<PageResponse<TuitionEnrollmentFeePolicyDto>>> =
+        ResponseEntity.ok(ApiResponse.success(tuitionCatalogService.listEnrollmentFeePolicies(page, limit)))
+
+    @PostMapping("/enrollment-fee-policies")
+    @RequireAdmin
+    fun createEnrollmentFeePolicy(
+        @Valid @RequestBody request: CreateTuitionEnrollmentFeePolicyRequest
+    ): ResponseEntity<ApiResponse<TuitionEnrollmentFeePolicyDto>> =
+        ResponseEntity.status(HttpStatus.CREATED).body(
+            ApiResponse.success(tuitionCatalogService.createEnrollmentFeePolicy(request), "Enrollment fee policy created")
+        )
+
+    @PutMapping("/enrollment-fee-policies/{id}")
+    @RequireAdmin
+    fun updateEnrollmentFeePolicy(
+        @PathVariable id: Long,
+        @Valid @RequestBody request: UpdateTuitionEnrollmentFeePolicyRequest
+    ): ResponseEntity<ApiResponse<TuitionEnrollmentFeePolicyDto>> =
+        ResponseEntity.ok(
+            ApiResponse.success(tuitionCatalogService.updateEnrollmentFeePolicy(id, request), "Enrollment fee policy updated")
+        )
+
+    @DeleteMapping("/enrollment-fee-policies/{id}")
+    @RequireAdmin
+    fun deleteEnrollmentFeePolicy(@PathVariable id: Long): ResponseEntity<ApiResponse<Unit>> {
+        tuitionCatalogService.deleteEnrollmentFeePolicy(id)
+        return ResponseEntity.ok(ApiResponse.successNoContent("Enrollment fee policy deleted"))
     }
 
     @GetMapping("/discounts")
