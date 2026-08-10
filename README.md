@@ -273,6 +273,8 @@ Migraciones del cierre QA:
 - `V24__create_automatic_debit_foundation.sql`: mandatos, instrucciones y eventos sanitizados.
 - `V25__separate_tuition_request_placement_and_assignment.sql`: politica de matricula,
   nivelacion y asignacion academica posterior al pago.
+- `V26__convert_teaching_staff_photo_to_bytea.sql`: reconciliacion segura de
+  `teaching_staff.photo_data` desde el tipo legacy `OID` al `BYTEA` esperado por JPA.
 
 Validarlas en una base descartable o transaccion revertida antes de aplicarlas al contenedor
 actual; no se ejecutan automaticamente durante esta implementacion.
