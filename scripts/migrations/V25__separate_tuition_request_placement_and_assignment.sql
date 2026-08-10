@@ -122,8 +122,20 @@ ALTER TABLE tuition_applications
     ALTER COLUMN assigned_level_id DROP NOT NULL,
     ALTER COLUMN assigned_course_id DROP NOT NULL;
 
-ALTER INDEX IF EXISTS idx_tuition_application_course
-    RENAME TO idx_tuition_application_assigned_course;
+-- Hibernate may already have created the target index from the current entity
+-- while the legacy requested-course index still exists. Rename only when the
+-- target is absent; otherwise remove the superseded legacy index.
+DO $$
+BEGIN
+    IF to_regclass('public.idx_tuition_application_course') IS NOT NULL
+       AND to_regclass('public.idx_tuition_application_assigned_course') IS NULL THEN
+        ALTER INDEX idx_tuition_application_course
+            RENAME TO idx_tuition_application_assigned_course;
+    ELSIF to_regclass('public.idx_tuition_application_course') IS NOT NULL
+       AND to_regclass('public.idx_tuition_application_assigned_course') IS NOT NULL THEN
+        DROP INDEX idx_tuition_application_course;
+    END IF;
+END $$;
 
 ALTER TABLE tuition_fee_plans
     DROP COLUMN IF EXISTS enrollment_fee,

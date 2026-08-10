@@ -19,8 +19,8 @@ spring:
   jpa:
     open-in-view: false
     hibernate:
-      # QA keeps schema bootstrap tolerant until the existing SQL migrations are complete.
-      ddl-auto: ${JPA_DDL_AUTO:update}
+      # QA schema is managed through the reviewed SQL migrations in scripts/migrations.
+      ddl-auto: ${JPA_DDL_AUTO:validate}
     show-sql: false
     properties:
       hibernate:

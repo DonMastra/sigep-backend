@@ -3,7 +3,7 @@
 ## Estado actual de estructura de Base de Datos (SiGEP)
 
 **Fecha de relevamiento:** 2026-05-31  
-**Ultima actualizacion:** 2026-08-08 (incluye V25: solicitud, matricula, nivelacion y asignacion separadas)
+**Ultima actualizacion:** 2026-08-10 (incluye V26: foto docente normalizada a BYTEA)
 **Entorno auditado:** `sigep_db` (PostgreSQL 15), validado contra codigo Kotlin actual y migraciones SQL.
 
 ## 1) Fuente de verdad operativa
@@ -58,7 +58,9 @@ Orden de prioridad:
 
 - `teaching_staff.linked_user_id` enlaza un docente con una cuenta `users` activa de rol
   `TEACHER`; `photo_data`, `photo_content_type` y `photo_filename` almacenan la foto en
-  PostgreSQL. El indice parcial evita dos docentes con la misma cuenta.
+  PostgreSQL. V26 garantiza que `photo_data` use `BYTEA`, en concordancia con la entidad JPA,
+  y falla de forma explicita si encuentra fotos legacy que requieran una conversion dirigida.
+  El indice parcial evita dos docentes con la misma cuenta.
 - `courses.teacher_id` pasa a ser nullable y `uk_courses_code_ci` garantiza codigo unico
   sin distinguir mayusculas.
 - `tuition_levels.course_level` explicita el mapeo al nivel de cursos; la migracion conserva
@@ -144,6 +146,14 @@ Orden de prioridad:
   `requested_*` y con los ocho estados nuevos como unica restriccion valida. El arranque posterior
   con `ddl-auto=validate` y `/actuator/health` confirmo JPA, PostgreSQL y Redis en estado `UP`.
 
+### Cambios de V26
+
+- Normaliza `teaching_staff.photo_data` desde el tipo legacy `OID` a `BYTEA` cuando la columna
+  no contiene fotos. La migracion es reejecutable si la columna ya esta en `BYTEA` y se detiene
+  antes de modificar datos cuando detecta contenido legacy.
+- QA deja de usar Hibernate como modificador de esquema: `render.yaml` y el fallback de
+  `application-qa.yml` configuran `JPA_DDL_AUTO=validate`.
+
 ### PK por modulo
 - Modulos generales (`users`, `students`, `courses`, `staff`, `scheduling`, `tuition`, etc.): **BIGINT**.
 - Modulo exams (`exams`, `exam_submissions`, `exam_grade_history`): **UUID** en PK.
@@ -214,6 +224,7 @@ Orden de prioridad:
 | V19 | `scripts/migrations/V19__repair_tuition_ledger_statuses.sql` | normalizacion de estados heredados del ledger de matriculacion |
 | V20 | `scripts/migrations/V20__repair_hibernate_tuition_ledger_status_constraint.sql` | reemplazo del `CHECK` legacy generado por Hibernate y correccion del valor por defecto |
 | V25 | `scripts/migrations/V25__separate_tuition_request_placement_and_assignment.sql` | politica de matricula, nivelacion y referencias academicas opcionales hasta la asignacion |
+| V26 | `scripts/migrations/V26__convert_teaching_staff_photo_to_bytea.sql` | normalizacion segura de la foto docente legacy desde `OID` a `BYTEA` |
 
 ## 4) Validacion ejecutada en BD (2026-05-31)
 
