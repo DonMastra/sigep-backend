@@ -34,7 +34,7 @@ class RedisConfig : CachingConfigurer {
         private val log = LoggerFactory.getLogger(RedisConfig::class.java)
     }
 
-    private fun redisObjectMapper(): ObjectMapper = ObjectMapper().apply {
+    internal fun redisObjectMapper(): ObjectMapper = ObjectMapper().apply {
         registerKotlinModule()
         registerModule(JavaTimeModule())
         disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
@@ -49,6 +49,17 @@ class RedisConfig : CachingConfigurer {
             .allowIfSubType("java.util.")
             .allowIfSubType("java.math.")
             .allowIfSubType("java.time.")
+            // EVERYTHING also emits type ids for boxed nullable values. Keep this
+            // allowlist explicit instead of trusting the complete java.lang package.
+            .allowIfSubType(String::class.java)
+            .allowIfSubType(Boolean::class.javaObjectType)
+            .allowIfSubType(Byte::class.javaObjectType)
+            .allowIfSubType(Short::class.javaObjectType)
+            .allowIfSubType(Int::class.javaObjectType)
+            .allowIfSubType(Long::class.javaObjectType)
+            .allowIfSubType(Float::class.javaObjectType)
+            .allowIfSubType(Double::class.javaObjectType)
+            .allowIfSubType(Char::class.javaObjectType)
             .build()
         activateDefaultTyping(ptv, ObjectMapper.DefaultTyping.EVERYTHING, JsonTypeInfo.As.PROPERTY)
     }
@@ -96,7 +107,7 @@ class RedisConfig : CachingConfigurer {
     override fun errorHandler(): CacheErrorHandler = object : CacheErrorHandler {
 
         override fun handleCacheGetError(e: RuntimeException, cache: Cache, key: Any) {
-            log.warn("[Cache] GET error en '{}' key='{}' — cache miss graceful ({})", cache.name, key, e.message)
+            log.warn("[Cache] GET error en '{}' key='{}' - cache miss graceful ({})", cache.name, key, e.message)
             // No re-throw: Spring interpreta esto como cache miss y ejecuta el méthodo real
         }
 
