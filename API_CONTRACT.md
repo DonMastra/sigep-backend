@@ -255,7 +255,9 @@ Base: `/api/v1/students`
 | GET | `/guardian/{guardianId}` | ADMIN, TEACHER, GUARDIAN | Estudiantes asociados a guardian. |
 | POST | `/` | ADMIN | Crea estudiante. |
 | POST | `/self-registration` | GUARDIAN | Crea estudiante vinculado al guardian autenticado. |
+| POST | `/identity-match` | ADMIN, GUARDIAN | Detecta coincidencias antes de crear; para GUARDIAN no revela datos de un estudiante ajeno. |
 | PUT | `/{id}` | ADMIN | Actualiza estudiante. |
+| PUT | `/{id}/guardian` | ADMIN | Vincula o reasigna el unico tutor vigente; exige `guardianId` y `reason` y genera auditoria. |
 | DELETE | `/{id}` | ADMIN | Elimina estudiante. |
 | POST | `/{id}/photo` | ADMIN | Sube foto multipart con parte `file`. |
 | GET | `/{id}/photo` | ADMIN, TEACHER, GUARDIAN | Descarga imagen. |
@@ -277,6 +279,8 @@ interface StudentDto {
   firstName: string;
   lastName: string;
   email: string;
+  documentType: 'DNI' | 'PASSPORT' | 'NATIONAL_ID' | 'NO_DOCUMENT' | 'IN_PROCESS';
+  documentCountry: string;
   phoneNumber?: string;
   dateOfBirth?: string;
   address?: string;
@@ -292,6 +296,16 @@ interface StudentDto {
   updatedAt?: string;
 }
 ```
+
+La identidad documental se compara por `(documentCountry, documentType, normalizedDocumentNumber)`.
+Para `AR + DNI` se eliminan separadores y se completa a 8 digitos; pasaporte y documento
+nacional extranjero se comparan en mayusculas y sin separadores. `NO_DOCUMENT` e `IN_PROCESS`
+no llevan numero ni participan de la unicidad documental. El email de un estudiante no es una
+clave de identidad y puede repetirse, especialmente para menores.
+
+`POST /identity-match` devuelve `NONE`, `OWNED`, `UNASSIGNED` o `VERIFICATION_REQUIRED`.
+GUARDIAN solo recibe `studentId` y nombre para un estudiante ya vinculado a su propia cuenta;
+cualquier coincidencia ajena se reduce a `VERIFICATION_REQUIRED`.
 
 ## Courses
 
@@ -353,17 +367,18 @@ Tuition separa la solicitud del tutor, el cobro de matricula, la nivelacion y la
 academica final. El tutor no elige ciclo, nivel, curso ni plan. `Enrollment` y los cargos de
 cuotas se crean juntos cuando ADMIN asigna una solicitud ya matriculada y nivelada.
 
-### Guardian flow
+### Flujo unificado ADMIN / GUARDIAN
 
 | Metodo | Ruta | Roles | Descripcion |
 |---|---|---|---|
-| POST | `/applications` | GUARDIAN | Crea solicitud `SUBMITTED` para alumno nuevo, adicional o regular. |
+| POST | `/applications` | ADMIN, GUARDIAN | Resuelve o crea el estudiante y crea una solicitud `SUBMITTED`; exige `Idempotency-Key`. |
 | GET | `/my-applications` | GUARDIAN | Lista solicitudes del guardian autenticado. |
 
 ### Admin flow
 
 | Metodo | Ruta | Roles | Descripcion |
 |---|---|---|---|
+| POST | `/applications` | ADMIN, GUARDIAN | ADMIN informa `actingForGuardianUserId`; ambos actores usan el mismo agregado y reglas. |
 | GET | `/applications?status=&academicYearId=` | ADMIN | Lista solicitudes con filtros; las nuevas no tienen ciclo hasta la asignacion. |
 | GET | `/applications/{id}` | ADMIN, TEACHER | Detalle con matricula, nivelacion, asignacion y ledger. |
 | POST | `/applications/{id}/enrollment-charge` | ADMIN | Aplica una politica de matricula activa y crea el ledger/cargo idempotente. |
@@ -397,6 +412,9 @@ Enums principales:
 type TuitionAcademicYearStatus = 'DRAFT' | 'OPEN' | 'CLOSED';
 type TuitionSegment = 'CHILDREN' | 'TEENS' | 'ADULTS';
 type TuitionApplicationType = 'NEW_STUDENT' | 'REGULAR_PROMOTION' | 'ADDITIONAL_STUDENT';
+type TuitionStudentMode = 'EXISTING' | 'NEW';
+type TuitionApplicationOrigin = 'ADMIN' | 'GUARDIAN';
+type TuitionStudentResolution = 'EXISTING' | 'CREATED';
 type TuitionApplicationStatus =
   | 'SUBMITTED'
   | 'PAYMENT_PENDING'
@@ -418,10 +436,14 @@ Solicitud:
 ```ts
 interface CreateTuitionApplicationRequest {
   applicationType: TuitionApplicationType;
+  actingForGuardianUserId?: number; // obligatorio para ADMIN
+  studentMode?: TuitionStudentMode;
   studentId?: number;
   studentFirstName?: string;
   studentLastName?: string;
   studentEmail?: string;
+  studentDocumentType?: 'DNI' | 'PASSPORT' | 'NATIONAL_ID' | 'NO_DOCUMENT' | 'IN_PROCESS';
+  studentDocumentCountry?: string;
   studentDocumentNumber?: string;
   studentDateOfBirth?: string;
   studentAddress?: string;
@@ -433,10 +455,16 @@ interface CreateTuitionApplicationRequest {
 
 Notas:
 
-- `REGULAR_PROMOTION` requiere un `studentId` propio del guardian. Los demas tipos requieren
-  el snapshot completo, pero no crean la fila `students` al enviar la solicitud.
-- Un pago parcial mantiene `PAYMENT_PENDING`. Al completar la matricula, el observer crea al
-  estudiante con nivel tecnico `PENDING_PLACEMENT` y pasa a `ENROLLED_PENDING_PLACEMENT`.
+- `Idempotency-Key` debe tener 8 a 128 caracteres. Repetir la misma clave, actor y payload
+  devuelve la solicitud existente; reutilizarla para otro payload responde `409 IDEMPOTENCY_KEY_REUSED`.
+- `REGULAR_PROMOTION` requiere `studentMode=EXISTING`. Los demas tipos permiten reutilizar
+  `studentId` o enviar el perfil completo. La identidad y el unico vinculo tutor-estudiante se
+  resuelven transaccionalmente antes de persistir la solicitud y antes de cualquier cargo.
+- ADMIN opera en nombre de un tutor activo mediante `actingForGuardianUserId`; la solicitud
+  conserva `actorUserId`, `guardianUserId`, `origin` y `studentResolution`.
+- GUARDIAN no puede vincularse a una coincidencia ajena: recibe `422 STUDENT_MATCH_REQUIRES_VERIFICATION`.
+- Un pago parcial mantiene `PAYMENT_PENDING`. Al completar la matricula, el observer solo marca
+  el ledger y pasa a `ENROLLED_PENDING_PLACEMENT`; nunca crea tarde una segunda fila `students`.
 - El pago se registra por `POST /api/v1/billing/charges/{chargeId}/payments` y actualiza importes
   y `billingReference=PAYMENT-{paymentId}`. Una reversion previa a la asignacion vuelve a
   `PAYMENT_PENDING`; si el alumno ya fue asignado conserva su historial y deja una advertencia.
@@ -449,6 +477,16 @@ Notas:
   fin del plan, fin del ciclo y `installments`, que representa la cantidad maxima por estudiante.
   El primer vencimiento nunca puede ser anterior a la fecha de asignacion. Su debito proviene
   del plan mensual; la matricula usa su politica independiente.
+
+### Alta e invitacion administrativa de tutores
+
+| Metodo | Ruta | Roles | Descripcion |
+|---|---|---|---|
+| POST | `/api/v1/admin/guardians` | ADMIN | Crea tutor `ACTIVE` con clave inicial o `INVITE` con token de 48 horas. |
+| POST | `/api/v1/auth/guardian-invitations/accept` | Publico | Consume una vez el token y define una clave de al menos 12 caracteres. |
+
+El token de invitacion se devuelve una sola vez al ADMIN; en base solo se guarda SHA-256.
+Este camino no reemplaza `POST /auth/register` ni el circuito existente de aprobacion.
 
 ## Course Sessions
 

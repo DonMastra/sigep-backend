@@ -165,7 +165,12 @@ Orden de prioridad:
 - `exam_submissions.graded_by` -> `users.id` (BIGINT)
 - `exam_grade_history.changed_by` -> `users.id` (BIGINT)
 - `tuition_applications.guardian_user_id` -> `users.id` (BIGINT)
-- `tuition_applications.student_id` -> `students.id` (BIGINT, nullable)
+- `tuition_applications.actor_user_id` -> `users.id` (BIGINT)
+- `tuition_applications.student_id` -> `students.id` (BIGINT, resuelto antes del cargo)
+- `students.guardian_id` -> `users.id` (BIGINT, nullable; un unico tutor vigente)
+- `student_guardian_link_events.student_id` -> `students.id` (BIGINT)
+- `student_guardian_link_events.guardian_user_id` -> `users.id` (BIGINT, nullable)
+- `guardian_invitations.user_id` -> `users.id` (BIGINT, unico)
 - `tuition_applications.assigned_level_id` -> `tuition_levels.id` (BIGINT, nullable hasta la asignacion)
 - `tuition_applications.assigned_course_id` -> `courses.id` (BIGINT, nullable hasta la asignacion)
 - `tuition_applications.enrollment_id` -> `enrollments.id` (BIGINT, nullable)
@@ -225,6 +230,19 @@ Orden de prioridad:
 | V20 | `scripts/migrations/V20__repair_hibernate_tuition_ledger_status_constraint.sql` | reemplazo del `CHECK` legacy generado por Hibernate y correccion del valor por defecto |
 | V25 | `scripts/migrations/V25__separate_tuition_request_placement_and_assignment.sql` | politica de matricula, nivelacion y referencias academicas opcionales hasta la asignacion |
 | V26 | `scripts/migrations/V26__convert_teaching_staff_photo_to_bytea.sql` | normalizacion segura de la foto docente legacy desde `OID` a `BYTEA` |
+| V27 | `scripts/migrations/V27__unify_guardian_student_tuition_identity.sql` | identidad documental normalizada, email no unico, auditoria tutor-estudiante, invitaciones, actor/origen/idempotencia de matriculacion y FKs |
+
+### Validacion V27 en Neon QA (2026-08-12)
+
+- Base y rama verificadas: `sigep_qa` / `sigep-qa`.
+- Se vaciaron las 47 tablas preexistentes con `TRUNCATE ... RESTART IDENTITY CASCADE` y
+  comprobacion posterior de cero filas; se conservo el esquema.
+- V27 finalizo con `COMMIT` y dejo 49 tablas publicas, incluidas
+  `student_guardian_link_events` y `guardian_invitations`.
+- Se verificaron 3 columnas nuevas de identidad en `students`, 6 controles nuevos en
+  `tuition_applications`, 6 indices unicos requeridos y 10 FKs principales.
+- `students.email` quedo sin constraint de unicidad. `students`, `users`,
+  `tuition_applications`, `billing_charges` y `payments` permanecieron con cero filas.
 
 ## 4) Validacion ejecutada en BD (2026-05-31)
 
@@ -274,7 +292,9 @@ Orden de prioridad:
 - Agrega `billing_accounts`, `billing_profiles`, `billing_charges`, `payment_allocations`,
   `billing_runs` y `billing_run_items`.
 - Permite que `fiscal_invoices` se origine en un pago legacy o en un cargo, exactamente uno.
-- Hace `payments.student_id` nullable para cobrar la matricula antes de crear el estudiante.
+- Hizo `payments.student_id` nullable para compatibilidad con el flujo historico que cobraba antes
+  de crear al estudiante. Desde V27 el estudiante se resuelve antes del cargo, aunque la columna
+  conserva nullabilidad para registros y circuitos legacy.
 - Migra el ledger `MOCK_PENDING/MOCK_PAID` a `PENDING/PAID` y renombra
   `mock_reference` a `billing_reference`.
 - Fija `rg_5866_applicable=false` mediante constraint para el primer cliente.
@@ -301,12 +321,13 @@ Orden de prioridad:
   - `reservations` (asignacion a `COURSE` o `SESSION`)
 
 ### Tuition
-- `POST /api/v1/tuition/applications` crea solicitudes de matriculacion para guardian autenticado.
+- `POST /api/v1/tuition/applications` resuelve o crea `students` antes del cargo y sirve tanto a
+  ADMIN como a GUARDIAN. Persiste actor, tutor representado, origen, resolucion e idempotencia.
 - `POST /api/v1/tuition/applications/{id}/enrollment-charge` aplica una politica independiente y
   crea el ledger/cargo de matricula idempotente.
 - `POST /api/v1/billing/charges/{id}/payments` crea/imputa el pago y recibo X; el observer de
-  tuition marca el ledger `PAID`, crea el estudiante pendiente de nivelacion y bloquea la
-  asignacion si el pago se revierte.
+  tuition marca el ledger `PAID` sobre el estudiante ya resuelto y bloquea la asignacion si el
+  pago se revierte.
 - `PUT /api/v1/tuition/applications/{id}/placement` registra la entrevista o su dispensa.
 - `PUT /api/v1/tuition/applications/{id}/assignment` valida cupo y progresion, crea `Enrollment`
   y materializa ledger/cargos de cuotas.
@@ -321,6 +342,8 @@ Orden de prioridad:
   cargos, imputaciones y ejecuciones manuales de facturas.
 - `scripts/migrations/V25__separate_tuition_request_placement_and_assignment.sql` -> separacion
   de solicitud, politica de matricula, nivelacion y asignacion academica; elimina la reserva legacy.
+- `scripts/migrations/V27__unify_guardian_student_tuition_identity.sql` -> identidad y vinculo
+  tutor-estudiante, invitaciones administrativas y controles de matriculacion unificados.
 - `scripts/validate-db-schema.sql` -> validacion de esquema de `users`.
 - `scripts/validate-db-schema.sh` -> validacion por consola (psql).
 

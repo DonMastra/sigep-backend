@@ -143,3 +143,38 @@ data class RefreshTokenRequest @JsonCreator constructor(
     val refreshToken: String
 )
 
+enum class AdminGuardianActivationMode { ACTIVE, INVITE }
+
+data class AdminCreateGuardianRequest(
+    @field:NotBlank @field:Size(min = 3, max = 50)
+    val username: String,
+    @field:NotBlank @field:Email
+    val email: String,
+    @field:NotBlank
+    val firstName: String,
+    @field:NotBlank
+    val lastName: String,
+    val activationMode: AdminGuardianActivationMode,
+    @field:Size(min = 12, max = 100)
+    val initialPassword: String? = null,
+    val phoneNumber: String? = null,
+    val address: String? = null,
+    val dateOfBirth: LocalDate? = null,
+    val documentNumber: String? = null,
+    val emergencyContact: String? = null
+)
+
+data class AdminCreateGuardianResponse(
+    val user: UserDto,
+    val activationMode: AdminGuardianActivationMode,
+    val invitationToken: String? = null,
+    val invitationExpiresAt: LocalDateTime? = null
+)
+
+data class AcceptGuardianInvitationRequest(
+    @field:NotBlank
+    val token: String,
+    @field:NotBlank @field:Size(min = 12, max = 100)
+    val password: String
+)
+

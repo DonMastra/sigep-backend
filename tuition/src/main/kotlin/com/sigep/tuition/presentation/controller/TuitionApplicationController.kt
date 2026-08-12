@@ -5,6 +5,7 @@ import com.sigep.common.application.dto.PageResponse
 import com.sigep.common.application.exception.UnauthorizedException
 import com.sigep.security.application.annotation.RequireAdmin
 import com.sigep.security.application.annotation.RequireAdminOrTeacher
+import com.sigep.security.application.annotation.RequireAdminOrGuardian
 import com.sigep.security.application.annotation.RequireGuardian
 import com.sigep.tuition.application.dto.CreateTuitionApplicationRequest
 import com.sigep.tuition.application.dto.CreateTuitionEnrollmentChargeRequest
@@ -28,6 +29,7 @@ import org.springframework.web.bind.annotation.PutMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
+import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RestController
 
 @RestController
@@ -39,14 +41,17 @@ class TuitionApplicationController(
 ) {
 
     @PostMapping("/applications")
-    @RequireGuardian
-    @Operation(summary = "Create tuition application", description = "Creates a submitted tuition application for the authenticated guardian")
+    @RequireAdminOrGuardian
+    @Operation(summary = "Create tuition application", description = "Creates the same idempotent tuition aggregate for ADMIN or GUARDIAN")
     fun createApplication(
         @Valid @RequestBody request: CreateTuitionApplicationRequest,
+        @RequestHeader("Idempotency-Key") idempotencyKey: String,
         httpRequest: HttpServletRequest
     ): ResponseEntity<ApiResponse<TuitionApplicationDto>> {
-        val guardianId = httpRequest.requireUserId()
-        val application = tuitionApplicationService.createApplication(guardianId, request)
+        val actorUserId = httpRequest.requireUserId()
+        val actorRole = httpRequest.getAttribute("userRole") as? String
+            ?: throw UnauthorizedException("Token invalid or missing userRole")
+        val application = tuitionApplicationService.createApplication(actorUserId, actorRole, idempotencyKey, request)
         return ResponseEntity
             .status(HttpStatus.CREATED)
             .body(ApiResponse.success(application, "Tuition application created"))

@@ -3,6 +3,8 @@ package com.sigep.tuition.application.dto
 import com.sigep.tuition.domain.model.TuitionAcademicYearStatus
 import com.sigep.tuition.domain.model.TuitionApplicationStatus
 import com.sigep.tuition.domain.model.TuitionApplicationType
+import com.sigep.tuition.domain.model.TuitionApplicationOrigin
+import com.sigep.tuition.domain.model.TuitionStudentResolution
 import com.sigep.tuition.domain.model.TuitionDiscountType
 import com.sigep.tuition.domain.model.TuitionFeePlanStatus
 import com.sigep.tuition.domain.model.TuitionEnrollmentFeePolicyStatus
@@ -267,7 +269,10 @@ data class UpdateTuitionDiscountRequest(
 data class TuitionApplicationDto(
     val id: Long,
     val guardianUserId: Long,
+    val actorUserId: Long,
+    val origin: TuitionApplicationOrigin,
     val studentId: Long?,
+    val studentResolution: TuitionStudentResolution,
     val studentFirstName: String?,
     val studentLastName: String?,
     val studentEmail: String?,
@@ -293,15 +298,20 @@ data class TuitionApplicationDto(
     val approvedAt: LocalDateTime?,
     val approvedBy: Long?,
     val createdAt: LocalDateTime,
-    val updatedAt: LocalDateTime
+    val updatedAt: LocalDateTime,
+    val version: Long
 )
 
 data class CreateTuitionApplicationRequest(
     @field:NotNull val applicationType: TuitionApplicationType,
+    val actingForGuardianUserId: Long? = null,
+    val studentMode: TuitionStudentMode? = null,
     val studentId: Long? = null,
     @field:Size(min = 1, max = 100) val studentFirstName: String? = null,
     @field:Size(min = 1, max = 100) val studentLastName: String? = null,
     @field:Email val studentEmail: String? = null,
+    @field:Pattern(regexp = "^[A-Za-z_]+$") val studentDocumentType: String? = "DNI",
+    @field:Pattern(regexp = "^[A-Za-z]{2}$") val studentDocumentCountry: String? = "AR",
     val studentDocumentNumber: String? = null,
     @field:Past val studentDateOfBirth: LocalDate? = null,
     val studentAddress: String? = null,
@@ -309,6 +319,8 @@ data class CreateTuitionApplicationRequest(
     val studentEmergencyContact: String? = null,
     val studentMedicalNotes: String? = null
 )
+
+enum class TuitionStudentMode { EXISTING, NEW }
 
 data class CreateTuitionEnrollmentChargeRequest(
     val enrollmentFeePolicyId: Long? = null
