@@ -1,8 +1,6 @@
 package com.sigep.tuition.application.service
 
 import com.sigep.common.application.service.BillingChargeSettlement
-import com.sigep.common.application.service.StudentProfileInfo
-import com.sigep.common.application.service.StudentProfileProvider
 import com.sigep.tuition.domain.model.TuitionAcademicYear
 import com.sigep.tuition.domain.model.TuitionAcademicYearStatus
 import com.sigep.tuition.domain.model.TuitionApplication
@@ -31,11 +29,10 @@ class TuitionBillingSettlementObserverTest {
 
     private val ledgerRepository = mockk<TuitionLedgerEntryRepository>()
     private val applicationRepository = mockk<TuitionApplicationRepository>()
-    private val studentProfileProvider = mockk<StudentProfileProvider>()
-    private val observer = TuitionBillingSettlementObserver(ledgerRepository, applicationRepository, studentProfileProvider)
+    private val observer = TuitionBillingSettlementObserver(ledgerRepository, applicationRepository)
 
     @Test
-    fun `paid enrollment charge creates student and waits for placement`() {
+    fun `paid enrollment charge keeps resolved student and waits for placement`() {
         val application = application()
         val entry = TuitionLedgerEntry(
             id = 55L,
@@ -51,7 +48,6 @@ class TuitionBillingSettlementObserverTest {
         every { ledgerRepository.findById(55L) } returns Optional.of(entry)
         every { ledgerRepository.save(capture(savedLedger)) } answers { savedLedger.captured }
         every { applicationRepository.save(capture(savedApplication)) } answers { savedApplication.captured }
-        every { studentProfileProvider.createStudentForTuition(10L, any()) } returns studentInfo()
 
         observer.onChargeSettlementChanged(
             BillingChargeSettlement(
@@ -199,7 +195,7 @@ class TuitionBillingSettlementObserverTest {
 
     private fun application(
         status: TuitionApplicationStatus = TuitionApplicationStatus.PAYMENT_PENDING,
-        studentId: Long? = null
+        studentId: Long? = 20L
     ): TuitionApplication {
         val year = TuitionAcademicYear(
             id = 1L,
@@ -251,18 +247,4 @@ class TuitionBillingSettlementObserverTest {
         )
     }
 
-    private fun studentInfo() = StudentProfileInfo(
-        id = 20L,
-        guardianId = 10L,
-        firstName = "Jane",
-        lastName = "Doe",
-        email = "jane@example.com",
-        documentNumber = "12345678",
-        dateOfBirth = LocalDate.of(2012, 1, 1),
-        address = "Main 123",
-        phoneNumber = "1111",
-        emergencyContact = "Parent",
-        currentLevel = "PENDING_PLACEMENT",
-        active = true
-    )
 }

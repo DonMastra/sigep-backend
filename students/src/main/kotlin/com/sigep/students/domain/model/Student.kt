@@ -6,7 +6,13 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 
 @Entity
-@Table(name = "students")
+@Table(
+    name = "students",
+    indexes = [
+        Index(name = "idx_students_guardian", columnList = "guardian_id"),
+        Index(name = "idx_students_document_identity", columnList = "document_country,document_type,normalized_document_number")
+    ]
+)
 data class Student(
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -18,7 +24,7 @@ data class Student(
     @Column(nullable = false)
     val lastName: String,
 
-    @Column(unique = true, nullable = false)
+    @Column(nullable = false)
     val email: String,
 
     @Column(nullable = false)
@@ -33,8 +39,18 @@ data class Student(
     @Column(nullable = false)
     val emergencyContact: String,
 
-    @Column(nullable = false)
-    val documentNumber: String,
+    @Enumerated(EnumType.STRING)
+    @Column(name = "document_type", nullable = false, length = 30)
+    val documentType: StudentDocumentType = StudentDocumentType.DNI,
+
+    @Column(name = "document_country", nullable = false, length = 2)
+    val documentCountry: String = "AR",
+
+    @Column(name = "document_number", length = 50)
+    val documentNumber: String? = null,
+
+    @Column(name = "normalized_document_number", length = 50)
+    val normalizedDocumentNumber: String? = null,
 
     /** Referencia al User con rol GUARDIAN. Nullable: un estudiante puede no tener tutor registrado. */
     @Column(nullable = true)
@@ -61,5 +77,13 @@ data class Student(
     @Column(nullable = false)
     val updatedAt: LocalDateTime = LocalDateTime.now()
 ) : AggregateRoot
+
+enum class StudentDocumentType {
+    DNI,
+    PASSPORT,
+    NATIONAL_ID,
+    NO_DOCUMENT,
+    IN_PROCESS
+}
 
 

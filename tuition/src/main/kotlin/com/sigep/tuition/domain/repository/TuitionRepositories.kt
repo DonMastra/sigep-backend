@@ -4,6 +4,7 @@ import com.sigep.tuition.domain.model.TuitionAcademicYear
 import com.sigep.tuition.domain.model.TuitionAcademicYearStatus
 import com.sigep.tuition.domain.model.TuitionApplication
 import com.sigep.tuition.domain.model.TuitionApplicationStatus
+import com.sigep.tuition.domain.model.TuitionApplicationType
 import com.sigep.tuition.domain.model.TuitionDiscount
 import com.sigep.tuition.domain.model.TuitionFeePlan
 import com.sigep.tuition.domain.model.TuitionFeePlanStatus
@@ -102,6 +103,13 @@ interface TuitionDiscountRepository : JpaRepository<TuitionDiscount, Long> {
 
 @Repository
 interface TuitionApplicationRepository : JpaRepository<TuitionApplication, Long> {
+    fun findByIdempotencyKey(idempotencyKey: String): Optional<TuitionApplication>
+    fun findFirstByGuardianUserIdAndStudentIdAndApplicationTypeAndStatusIn(
+        guardianUserId: Long,
+        studentId: Long,
+        applicationType: TuitionApplicationType,
+        statuses: Collection<TuitionApplicationStatus>
+    ): Optional<TuitionApplication>
     fun findByGuardianUserId(guardianUserId: Long, pageable: Pageable): Page<TuitionApplication>
     fun findByStatus(status: TuitionApplicationStatus, pageable: Pageable): Page<TuitionApplication>
 

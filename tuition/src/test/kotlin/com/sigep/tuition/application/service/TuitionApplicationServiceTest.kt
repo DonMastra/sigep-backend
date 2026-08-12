@@ -9,6 +9,8 @@ import com.sigep.common.application.service.GuardianAccountInfo
 import com.sigep.common.application.service.GuardianAccountProvider
 import com.sigep.common.application.service.StudentProfileInfo
 import com.sigep.common.application.service.StudentProfileProvider
+import com.sigep.common.application.service.StudentProfileResolution
+import com.sigep.common.application.service.StudentProfileResolutionType
 import com.sigep.tuition.application.dto.CreateTuitionApplicationRequest
 import com.sigep.tuition.application.dto.CreateTuitionEnrollmentChargeRequest
 import com.sigep.tuition.application.dto.TuitionAcademicAssignmentRequest
@@ -72,13 +74,20 @@ class TuitionApplicationServiceTest {
         every { placementRepository.findByApplicationId(any()) } returns Optional.empty()
         every { ledgerRepository.findByApplicationId(any()) } returns emptyList()
         every { studentProvider.getStudentProfile(any()) } returns studentInfo()
+        every { applicationRepository.findByIdempotencyKey(any()) } returns Optional.empty()
+        every {
+            applicationRepository.findFirstByGuardianUserIdAndStudentIdAndApplicationTypeAndStatusIn(any(), any(), any(), any())
+        } returns Optional.empty()
+        every {
+            studentProvider.resolveStudentForTuition(any(), any(), any(), any(), any())
+        } returns StudentProfileResolution(studentInfo(), StudentProfileResolutionType.CREATED)
     }
 
     @Test
     fun `guardian request does not assign academic catalog values`() {
         every { applicationRepository.save(any()) } answers { firstArg<TuitionApplication>().copy(id = 100) }
 
-        val result = service.createApplication(10, newStudentRequest())
+        val result = service.createApplication(10, "GUARDIAN", "test-key-123", newStudentRequest())
 
         assertEquals(TuitionApplicationStatus.SUBMITTED, result.status)
         assertNull(result.assignedAcademicYearId)
@@ -86,6 +95,23 @@ class TuitionApplicationServiceTest {
         assertNull(result.assignedCourseId)
         verify(exactly = 0) { academicYearRepository.findById(any()) }
         verify(exactly = 0) { courseProvider.getCourseSeatAvailability(any()) }
+    }
+
+    @Test
+    fun `same idempotency key and payload returns existing application without duplicating student`() {
+        var persisted: TuitionApplication? = null
+        every { applicationRepository.findByIdempotencyKey("retry-key-123") } answers { Optional.ofNullable(persisted) }
+        every { applicationRepository.save(any()) } answers {
+            persisted = firstArg<TuitionApplication>().copy(id = 100)
+            persisted!!
+        }
+
+        val first = service.createApplication(10, "GUARDIAN", "retry-key-123", newStudentRequest())
+        val retry = service.createApplication(10, "GUARDIAN", "retry-key-123", newStudentRequest())
+
+        assertEquals(first.id, retry.id)
+        verify(exactly = 1) { studentProvider.resolveStudentForTuition(any(), any(), any(), any(), any()) }
+        verify(exactly = 1) { applicationRepository.save(any()) }
     }
 
     @Test
@@ -260,5 +286,20 @@ class TuitionApplicationServiceTest {
         status = "ACTIVE",
         active = true
     )
-    private fun studentInfo() = StudentProfileInfo(20, 10, "Jane", "Doe", "jane@example.com", "123", LocalDate.of(2012, 1, 1), "Main", "111", "Parent", "PENDING_PLACEMENT", true)
+    private fun studentInfo() = StudentProfileInfo(
+        id = 20,
+        guardianId = 10,
+        firstName = "Jane",
+        lastName = "Doe",
+        email = "jane@example.com",
+        documentType = "DNI",
+        documentCountry = "AR",
+        documentNumber = "12345678",
+        dateOfBirth = LocalDate.of(2012, 1, 1),
+        address = "Main",
+        phoneNumber = "111",
+        emergencyContact = "Parent",
+        currentLevel = "PENDING_PLACEMENT",
+        active = true
+    )
 }

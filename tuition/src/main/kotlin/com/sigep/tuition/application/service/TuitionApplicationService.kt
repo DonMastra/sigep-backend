@@ -6,11 +6,14 @@ import com.sigep.common.application.exception.ForbiddenException
 import com.sigep.common.application.exception.ResourceConflictException
 import com.sigep.common.application.exception.ResourceNotFoundException
 import com.sigep.common.application.exception.ValidationException
+import com.sigep.common.application.exception.UnprocessableEntityException
 import com.sigep.common.application.service.CourseEnrollmentCommandProvider
 import com.sigep.common.application.service.BillingChargeCommand
 import com.sigep.common.application.service.BillingChargeProvider
 import com.sigep.common.application.service.GuardianAccountProvider
 import com.sigep.common.application.service.StudentProfileProvider
+import com.sigep.common.application.service.StudentProfileCreateRequest
+import com.sigep.common.application.service.StudentProfileResolutionType
 import com.sigep.tuition.application.dto.CreateTuitionApplicationRequest
 import com.sigep.tuition.application.dto.CreateTuitionEnrollmentChargeRequest
 import com.sigep.tuition.application.dto.TuitionAcademicAssignmentRequest
@@ -21,11 +24,14 @@ import com.sigep.tuition.application.dto.TuitionFeePlanDto
 import com.sigep.tuition.application.dto.TuitionLedgerEntryDto
 import com.sigep.tuition.application.dto.TuitionPlacementAssessmentDto
 import com.sigep.tuition.application.dto.TuitionPlacementRequest
+import com.sigep.tuition.application.dto.TuitionStudentMode
 import com.sigep.tuition.domain.model.TuitionAcademicYear
 import com.sigep.tuition.domain.model.TuitionAcademicYearStatus
 import com.sigep.tuition.domain.model.TuitionApplication
 import com.sigep.tuition.domain.model.TuitionApplicationStatus
 import com.sigep.tuition.domain.model.TuitionApplicationType
+import com.sigep.tuition.domain.model.TuitionApplicationOrigin
+import com.sigep.tuition.domain.model.TuitionStudentResolution
 import com.sigep.tuition.domain.model.TuitionDiscount
 import com.sigep.tuition.domain.model.TuitionFeePlan
 import com.sigep.tuition.domain.model.TuitionFeePlanStatus
@@ -58,6 +64,8 @@ import java.math.RoundingMode
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.YearMonth
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
 
 @Service
 @Transactional
@@ -79,24 +87,118 @@ class TuitionApplicationService(
 
     private val logger = LoggerFactory.getLogger(TuitionApplicationService::class.java)
 
-    fun createApplication(guardianUserId: Long, request: CreateTuitionApplicationRequest): TuitionApplicationDto {
-        val guardian = guardianAccountProvider.getGuardianAccount(guardianUserId)
-            ?: throw ForbiddenException("Only GUARDIAN users can create tuition applications")
+    fun createApplication(
+        actorUserId: Long,
+        actorRole: String,
+        idempotencyKey: String,
+        request: CreateTuitionApplicationRequest
+    ): TuitionApplicationDto {
+        val normalizedKey = idempotencyKey.trim()
+        if (normalizedKey.length !in 8..128) {
+            throw ValidationException(
+                message = "Idempotency-Key must contain 8 to 128 characters",
+                code = "INVALID_IDEMPOTENCY_KEY",
+                field = "Idempotency-Key"
+            )
+        }
 
-        validateStudentInput(guardianUserId, request)
+        val isAdmin = actorRole == "ADMIN"
+        val isGuardian = actorRole == "GUARDIAN"
+        if (!isAdmin && !isGuardian) {
+            throw ForbiddenException("Only ADMIN or GUARDIAN users can create tuition applications")
+        }
+        val guardianUserId = if (isAdmin) {
+            request.actingForGuardianUserId
+                ?: throw ValidationException(
+                    message = "actingForGuardianUserId is required for ADMIN",
+                    code = "GUARDIAN_REQUIRED",
+                    field = "actingForGuardianUserId"
+                )
+        } else {
+            if (request.actingForGuardianUserId != null && request.actingForGuardianUserId != actorUserId) {
+                throw ForbiddenException("GUARDIAN cannot create an application for another guardian")
+            }
+            actorUserId
+        }
+
+        val guardian = guardianAccountProvider.getGuardianAccount(guardianUserId)
+            ?: throw ValidationException("Guardian account not found", code = "GUARDIAN_NOT_ACTIVE")
+        if (!guardian.active || guardian.status != "ACTIVE") {
+            throw ValidationException("Guardian account must be active", code = "GUARDIAN_NOT_ACTIVE")
+        }
+
+        val fingerprint = applicationFingerprint(guardianUserId, request)
+        applicationRepository.findByIdempotencyKey(normalizedKey).orElse(null)?.let { existing ->
+            if (existing.requestFingerprint != fingerprint || existing.actorUserId != actorUserId) {
+                throw ResourceConflictException(
+                    message = "Idempotency key was already used with a different request",
+                    code = "IDEMPOTENCY_KEY_REUSED",
+                    field = "Idempotency-Key"
+                )
+            }
+            return existing.toDto()
+        }
+
+        val mode = request.studentMode ?: if (request.studentId != null) TuitionStudentMode.EXISTING else TuitionStudentMode.NEW
+        if (request.applicationType == TuitionApplicationType.REGULAR_PROMOTION && mode != TuitionStudentMode.EXISTING) {
+            throw ValidationException(
+                message = "Regular promotion requires an existing student",
+                code = "STUDENT_NOT_RESOLVED",
+                field = "studentMode"
+            )
+        }
+        val studentRequest = if (mode == TuitionStudentMode.NEW) buildStudentProfileRequest(request) else null
+        val resolution = studentProfileProvider.resolveStudentForTuition(
+            guardianUserId = guardianUserId,
+            actorUserId = actorUserId,
+            actorIsAdmin = isAdmin,
+            existingStudentId = if (mode == TuitionStudentMode.EXISTING) request.studentId else null,
+            request = studentRequest
+        )
+        val student = resolution.profile
+
+        val openStatuses = setOf(
+            TuitionApplicationStatus.SUBMITTED,
+            TuitionApplicationStatus.PAYMENT_PENDING,
+            TuitionApplicationStatus.ENROLLED_PENDING_PLACEMENT,
+            TuitionApplicationStatus.READY_FOR_ACADEMIC_ASSIGNMENT,
+            TuitionApplicationStatus.WAITLISTED
+        )
+        applicationRepository.findFirstByGuardianUserIdAndStudentIdAndApplicationTypeAndStatusIn(
+            guardianUserId,
+            student.id,
+            request.applicationType,
+            openStatuses
+        ).orElse(null)?.let {
+            throw ResourceConflictException(
+                message = "An active tuition application already exists for this student",
+                code = "TUITION_APPLICATION_ALREADY_EXISTS",
+                field = "studentId"
+            )
+        }
+
         val now = LocalDateTime.now()
 
         val application = TuitionApplication(
             guardianUserId = guardian.id,
-            studentId = request.studentId,
-            studentFirstName = request.studentFirstName?.trim(),
-            studentLastName = request.studentLastName?.trim(),
-            studentEmail = request.studentEmail?.trim(),
-            studentDocumentNumber = request.studentDocumentNumber?.trim(),
-            studentDateOfBirth = request.studentDateOfBirth,
-            studentAddress = request.studentAddress?.trim(),
-            studentPhoneNumber = request.studentPhoneNumber?.trim(),
-            studentEmergencyContact = request.studentEmergencyContact?.trim(),
+            actorUserId = actorUserId,
+            origin = if (isAdmin) TuitionApplicationOrigin.ADMIN else TuitionApplicationOrigin.GUARDIAN,
+            studentId = student.id,
+            studentResolution = if (resolution.type == StudentProfileResolutionType.CREATED) {
+                TuitionStudentResolution.CREATED
+            } else {
+                TuitionStudentResolution.EXISTING
+            },
+            idempotencyKey = normalizedKey,
+            requestFingerprint = fingerprint,
+            studentFirstName = student.firstName,
+            studentLastName = student.lastName,
+            studentEmail = student.email,
+            studentDocumentNumber = student.documentNumber,
+            studentDateOfBirth = student.dateOfBirth,
+            studentAddress = student.address,
+            studentPhoneNumber = student.phoneNumber,
+            studentEmergencyContact = student.emergencyContact,
             studentMedicalNotes = request.studentMedicalNotes?.trim(),
             applicationType = request.applicationType,
             status = TuitionApplicationStatus.SUBMITTED,
@@ -106,7 +208,7 @@ class TuitionApplicationService(
         )
 
         val saved = applicationRepository.save(application)
-        logger.info("Tuition application {} created for guardian {}", saved.id, guardianUserId)
+        logger.info("Tuition application {} created by {} for guardian {} and student {}", saved.id, actorUserId, guardianUserId, student.id)
         return saved.toDto()
     }
 
@@ -115,6 +217,13 @@ class TuitionApplicationService(
         request: CreateTuitionEnrollmentChargeRequest
     ): TuitionApplicationDto {
         val application = getApplication(applicationId)
+        if (application.studentId == null) {
+            throw UnprocessableEntityException(
+                message = "Student identity must be resolved before creating the enrollment charge",
+                code = "STUDENT_NOT_RESOLVED",
+                field = "studentId"
+            )
+        }
         if (application.status !in setOf(TuitionApplicationStatus.SUBMITTED, TuitionApplicationStatus.PAYMENT_PENDING)) {
             throw BusinessException("Enrollment charge cannot be created from status ${application.status}")
         }
@@ -408,39 +517,60 @@ class TuitionApplicationService(
         return application
     }
 
-    private fun validateStudentInput(guardianUserId: Long, request: CreateTuitionApplicationRequest) {
-        when (request.applicationType) {
-            TuitionApplicationType.REGULAR_PROMOTION -> {
-                val studentId = request.studentId
-                    ?: throw ValidationException("studentId is required for REGULAR_PROMOTION", field = "studentId")
-                if (!studentProfileProvider.validateGuardianOwnsStudent(guardianUserId, studentId)) {
-                    throw ForbiddenException("Guardian does not own student $studentId")
-                }
-            }
-
-            TuitionApplicationType.NEW_STUDENT,
-            TuitionApplicationType.ADDITIONAL_STUDENT -> {
-                if (request.studentId != null) {
-                    if (!studentProfileProvider.validateGuardianOwnsStudent(guardianUserId, request.studentId)) {
-                        throw ForbiddenException("Guardian does not own student ${request.studentId}")
-                    }
-                    return
-                }
-                val missing = listOfNotNull(
-                    "studentFirstName".takeIf { request.studentFirstName.isNullOrBlank() },
-                    "studentLastName".takeIf { request.studentLastName.isNullOrBlank() },
-                    "studentEmail".takeIf { request.studentEmail.isNullOrBlank() },
-                    "studentDocumentNumber".takeIf { request.studentDocumentNumber.isNullOrBlank() },
-                    "studentDateOfBirth".takeIf { request.studentDateOfBirth == null },
-                    "studentAddress".takeIf { request.studentAddress.isNullOrBlank() },
-                    "studentPhoneNumber".takeIf { request.studentPhoneNumber.isNullOrBlank() },
-                    "studentEmergencyContact".takeIf { request.studentEmergencyContact.isNullOrBlank() }
-                )
-                if (missing.isNotEmpty()) {
-                    throw ValidationException("Missing student fields for new tuition application", missing)
-                }
-            }
+    private fun buildStudentProfileRequest(request: CreateTuitionApplicationRequest): StudentProfileCreateRequest {
+        val documentType = request.studentDocumentType?.trim()?.uppercase() ?: "DNI"
+        val documentCountry = request.studentDocumentCountry?.trim()?.uppercase() ?: "AR"
+        val documentMayBeEmpty = documentType in setOf("NO_DOCUMENT", "IN_PROCESS")
+        val missing = listOfNotNull(
+            "studentFirstName".takeIf { request.studentFirstName.isNullOrBlank() },
+            "studentLastName".takeIf { request.studentLastName.isNullOrBlank() },
+            "studentEmail".takeIf { request.studentEmail.isNullOrBlank() },
+            "studentDocumentNumber".takeIf { !documentMayBeEmpty && request.studentDocumentNumber.isNullOrBlank() },
+            "studentDateOfBirth".takeIf { request.studentDateOfBirth == null },
+            "studentAddress".takeIf { request.studentAddress.isNullOrBlank() },
+            "studentPhoneNumber".takeIf { request.studentPhoneNumber.isNullOrBlank() },
+            "studentEmergencyContact".takeIf { request.studentEmergencyContact.isNullOrBlank() }
+        )
+        if (missing.isNotEmpty()) {
+            throw ValidationException("Missing student fields for new tuition application", missing)
         }
+        return StudentProfileCreateRequest(
+            firstName = requireNotNull(request.studentFirstName).trim(),
+            lastName = requireNotNull(request.studentLastName).trim(),
+            email = requireNotNull(request.studentEmail).trim(),
+            documentType = documentType,
+            documentCountry = documentCountry,
+            documentNumber = request.studentDocumentNumber?.trim(),
+            dateOfBirth = requireNotNull(request.studentDateOfBirth),
+            address = requireNotNull(request.studentAddress).trim(),
+            phoneNumber = requireNotNull(request.studentPhoneNumber).trim(),
+            emergencyContact = requireNotNull(request.studentEmergencyContact).trim(),
+            medicalNotes = request.studentMedicalNotes?.trim(),
+            currentLevel = "PENDING_PLACEMENT"
+        )
+    }
+
+    private fun applicationFingerprint(guardianUserId: Long, request: CreateTuitionApplicationRequest): String {
+        val canonical = listOf(
+            guardianUserId,
+            request.applicationType.name,
+            request.studentMode?.name.orEmpty(),
+            request.studentId?.toString().orEmpty(),
+            request.studentFirstName?.trim().orEmpty(),
+            request.studentLastName?.trim().orEmpty(),
+            request.studentEmail?.trim()?.lowercase().orEmpty(),
+            request.studentDocumentType?.trim()?.uppercase().orEmpty(),
+            request.studentDocumentCountry?.trim()?.uppercase().orEmpty(),
+            request.studentDocumentNumber?.trim()?.uppercase().orEmpty(),
+            request.studentDateOfBirth?.toString().orEmpty(),
+            request.studentAddress?.trim().orEmpty(),
+            request.studentPhoneNumber?.trim().orEmpty(),
+            request.studentEmergencyContact?.trim().orEmpty(),
+            request.studentMedicalNotes?.trim().orEmpty()
+        ).joinToString("|")
+        return MessageDigest.getInstance("SHA-256")
+            .digest(canonical.toByteArray(StandardCharsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
     }
 
     private fun evaluateProgression(application: TuitionApplication, requestedLevel: TuitionLevel): ProgressionEvaluation {
@@ -715,7 +845,10 @@ class TuitionApplicationService(
         return TuitionApplicationDto(
             id = id!!,
             guardianUserId = guardianUserId,
+            actorUserId = actorUserId,
+            origin = origin,
             studentId = studentId,
+            studentResolution = studentResolution,
             studentFirstName = studentFirstName,
             studentLastName = studentLastName,
             studentEmail = studentEmail,
@@ -741,7 +874,8 @@ class TuitionApplicationService(
             approvedAt = approvedAt,
             approvedBy = approvedBy,
             createdAt = createdAt,
-            updatedAt = updatedAt
+            updatedAt = updatedAt,
+            version = version
         )
     }
 

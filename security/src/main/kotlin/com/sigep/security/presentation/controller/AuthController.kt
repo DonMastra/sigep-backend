@@ -33,6 +33,13 @@ class AuthController(
             .body(ApiResponse.success(user, "Registro creado. Pendiente de aprobacion administrativa."))
     }
 
+    @PostMapping("/guardian-invitations/accept")
+    @Operation(summary = "Aceptar invitacion de tutor", description = "Activa una cuenta GUARDIAN invitada por ADMIN y define su clave")
+    fun acceptGuardianInvitation(
+        @Valid @RequestBody request: AcceptGuardianInvitationRequest
+    ): ResponseEntity<ApiResponse<UserDto>> =
+        ResponseEntity.ok(ApiResponse.success(authService.acceptGuardianInvitation(request), "Guardian invitation accepted"))
+
     @GetMapping("/registration-status")
     @Operation(summary = "Consultar estado de registro", description = "Retorna el estado de cuenta para flujo de login")
     fun registrationStatus(@RequestParam username: String): ResponseEntity<ApiResponse<RegistrationStatusResponseDto>> {

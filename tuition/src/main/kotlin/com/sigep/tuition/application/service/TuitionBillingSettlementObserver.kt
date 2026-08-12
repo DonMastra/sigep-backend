@@ -4,8 +4,6 @@ import com.sigep.common.application.exception.ResourceConflictException
 import com.sigep.common.application.exception.ResourceNotFoundException
 import com.sigep.common.application.service.BillingChargeSettlementObserver
 import com.sigep.common.application.service.BillingChargeSettlement
-import com.sigep.common.application.service.StudentProfileCreateRequest
-import com.sigep.common.application.service.StudentProfileProvider
 import com.sigep.tuition.domain.model.TuitionApplicationStatus
 import com.sigep.tuition.domain.model.TuitionLedgerConcept
 import com.sigep.tuition.domain.model.TuitionLedgerStatus
@@ -18,8 +16,7 @@ import java.time.LocalDateTime
 @Service
 class TuitionBillingSettlementObserver(
     private val ledgerEntryRepository: TuitionLedgerEntryRepository,
-    private val applicationRepository: TuitionApplicationRepository,
-    private val studentProfileProvider: StudentProfileProvider
+    private val applicationRepository: TuitionApplicationRepository
 ) : BillingChargeSettlementObserver {
 
     @Transactional
@@ -54,21 +51,12 @@ class TuitionBillingSettlementObserver(
             ledgerStatus == TuitionLedgerStatus.PAID &&
             application.status == TuitionApplicationStatus.PAYMENT_PENDING
         ) {
-            val studentId = application.studentId ?: studentProfileProvider.createStudentForTuition(
-                guardianUserId = application.guardianUserId,
-                request = StudentProfileCreateRequest(
-                    firstName = requireNotNull(application.studentFirstName) { "studentFirstName is required" },
-                    lastName = requireNotNull(application.studentLastName) { "studentLastName is required" },
-                    email = requireNotNull(application.studentEmail) { "studentEmail is required" },
-                    documentNumber = requireNotNull(application.studentDocumentNumber) { "studentDocumentNumber is required" },
-                    dateOfBirth = requireNotNull(application.studentDateOfBirth) { "studentDateOfBirth is required" },
-                    address = requireNotNull(application.studentAddress) { "studentAddress is required" },
-                    phoneNumber = requireNotNull(application.studentPhoneNumber) { "studentPhoneNumber is required" },
-                    emergencyContact = requireNotNull(application.studentEmergencyContact) { "studentEmergencyContact is required" },
-                    medicalNotes = application.studentMedicalNotes,
-                    currentLevel = PENDING_PLACEMENT_LEVEL
+            val studentId = application.studentId
+                ?: throw ResourceConflictException(
+                    message = "Student must be resolved before enrollment payment",
+                    code = "STUDENT_NOT_RESOLVED",
+                    field = "studentId"
                 )
-            ).id
             applicationRepository.save(
                 application.copy(
                     studentId = studentId,
@@ -108,6 +96,5 @@ class TuitionBillingSettlementObserver(
 
     private companion object {
         const val BILLING_SOURCE_TYPE = "TUITION_LEDGER"
-        const val PENDING_PLACEMENT_LEVEL = "PENDING_PLACEMENT"
     }
 }

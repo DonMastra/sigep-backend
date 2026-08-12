@@ -7,10 +7,14 @@ import com.sigep.common.application.exception.ForbiddenException
 import com.sigep.students.application.dto.CreateStudentRequest
 import com.sigep.students.application.dto.GuardianStudentRegistrationRequest
 import com.sigep.students.application.dto.StudentDto
+import com.sigep.students.application.dto.StudentIdentityMatchDto
+import com.sigep.students.application.dto.StudentIdentityMatchRequest
+import com.sigep.students.application.dto.LinkStudentGuardianRequest
 import com.sigep.students.application.dto.UpdateStudentRequest
 import com.sigep.students.application.service.StudentService
 import com.sigep.security.application.annotation.RequireAdmin
 import com.sigep.security.application.annotation.RequireAdminOrTeacher
+import com.sigep.security.application.annotation.RequireAdminOrGuardian
 import com.sigep.security.application.annotation.RequireGuardian
 import com.sigep.security.application.annotation.RequireStaffOrGuardian
 import com.sigep.students.application.dto.StudentDetailDto
@@ -113,8 +117,11 @@ class StudentController(
     @PostMapping
     @RequireAdmin
     @Operation(summary = "Create student", description = "Create a new student (Admin only)")
-    fun createStudent(@Valid @RequestBody request: CreateStudentRequest): ResponseEntity<ApiResponse<StudentDto>> {
-        val student = studentService.createStudent(request)
+    fun createStudent(
+        @Valid @RequestBody request: CreateStudentRequest,
+        httpRequest: HttpServletRequest
+    ): ResponseEntity<ApiResponse<StudentDto>> {
+        val student = studentService.createStudent(request, requireActorUserId(httpRequest.getAttribute("userId") as? Long))
         return ResponseEntity
             .status(HttpStatus.CREATED)
             .body(ApiResponse.success(student, "Student created successfully"))
@@ -141,10 +148,41 @@ class StudentController(
     @Operation(summary = "Update student", description = "Update student information (Admin only)")
     fun updateStudent(
         @PathVariable id: Long,
-        @Valid @RequestBody request: UpdateStudentRequest
+        @Valid @RequestBody request: UpdateStudentRequest,
+        httpRequest: HttpServletRequest
     ): ResponseEntity<ApiResponse<StudentDto>> {
-        val student = studentService.updateStudent(id, request)
+        val student = studentService.updateStudent(id, request, requireActorUserId(httpRequest.getAttribute("userId") as? Long))
         return ResponseEntity.ok(ApiResponse.success(student, "Student updated successfully"))
+    }
+
+    @PostMapping("/identity-match")
+    @RequireAdminOrGuardian
+    @Operation(summary = "Match student identity", description = "Safely checks whether a student identity can be reused by the authenticated actor")
+    fun matchStudentIdentity(
+        @Valid @RequestBody request: StudentIdentityMatchRequest,
+        httpRequest: HttpServletRequest
+    ): ResponseEntity<ApiResponse<StudentIdentityMatchDto>> {
+        val actorUserId = requireActorUserId(httpRequest.getAttribute("userId") as? Long)
+        val actorRole = httpRequest.getAttribute("userRole") as? String
+            ?: throw UnauthorizedException("Token invalid or missing userRole")
+        return ResponseEntity.ok(ApiResponse.success(studentService.matchIdentity(actorUserId, actorRole, request)))
+    }
+
+    @PutMapping("/{id}/guardian")
+    @RequireAdmin
+    @Operation(summary = "Link guardian", description = "Links or reassigns the single current guardian with an audit event")
+    fun linkGuardian(
+        @PathVariable id: Long,
+        @Valid @RequestBody request: LinkStudentGuardianRequest,
+        httpRequest: HttpServletRequest
+    ): ResponseEntity<ApiResponse<StudentDto>> {
+        val actorUserId = requireActorUserId(httpRequest.getAttribute("userId") as? Long)
+        return ResponseEntity.ok(
+            ApiResponse.success(
+                studentService.linkGuardian(id, request.guardianId, actorUserId, request.reason),
+                "Guardian linked successfully"
+            )
+        )
     }
 
     @PostMapping("/{id}/photo", consumes = [MediaType.MULTIPART_FORM_DATA_VALUE])

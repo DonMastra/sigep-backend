@@ -42,6 +42,13 @@ class ResourceConflictException(
     details: String? = null
 ) : BusinessException(message, code, field, details)
 
+class UnprocessableEntityException(
+    message: String,
+    code: String = "UNPROCESSABLE_ENTITY",
+    field: String? = null,
+    details: String? = null
+) : BusinessException(message, code, field, details)
+
 class ReservationAlreadyAssignedException(
     message: String,
     field: String? = null,

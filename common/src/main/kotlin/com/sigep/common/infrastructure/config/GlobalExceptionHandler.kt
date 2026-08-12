@@ -8,6 +8,7 @@ import com.sigep.common.application.exception.ResourceConflictException as AppRe
 import com.sigep.common.application.exception.ReservationAlreadyAssignedException as AppReservationAlreadyAssignedException
 import com.sigep.common.application.exception.ResourceNotFoundException as AppResourceNotFoundException
 import com.sigep.common.application.exception.UnauthorizedException as AppUnauthorizedException
+import com.sigep.common.application.exception.UnprocessableEntityException as AppUnprocessableEntityException
 import com.sigep.common.application.exception.ValidationException as AppValidationException
 import com.sigep.common.domain.exception.BusinessException as DomainBusinessException
 import com.sigep.common.domain.exception.DuplicateResourceException as DomainDuplicateResourceException
@@ -112,6 +113,19 @@ class GlobalExceptionHandler {
         logger.warn("Resource conflict: {}", ex.message)
         return buildErrorResponse(
             status = HttpStatus.CONFLICT,
+            code = ex.code,
+            message = ex.message,
+            request = request,
+            field = ex.field,
+            details = ex.details
+        )
+    }
+
+    @ExceptionHandler(AppUnprocessableEntityException::class)
+    fun handleUnprocessableEntity(ex: AppUnprocessableEntityException, request: HttpServletRequest): ResponseEntity<ErrorResponse> {
+        logger.warn("Unprocessable entity: {}", ex.message)
+        return buildErrorResponse(
+            status = HttpStatus.UNPROCESSABLE_ENTITY,
             code = ex.code,
             message = ex.message,
             request = request,
