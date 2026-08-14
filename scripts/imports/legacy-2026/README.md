@@ -63,3 +63,46 @@ La escritura requiere agregar `-Execute`. Las credenciales no deben pasarse como
 - backend iniciado con perfil `prod` y `ddl-auto=validate`;
 - backup/restore de la rama descartable probado;
 - matrícula general, horarios/capacidades y responsable de cada incidencia definidos antes de considerar el ambiente apto para continuidad operativa.
+
+## Conciliación posterior con el libro institucional
+
+`Conciliacion_pendientes_migracion_SiGEP_2026.xlsx` es la única entrada admitida para resolver los datos que no pudieron inferirse de las exportaciones. El proceso de conciliación:
+
+- valida las seis hojas, sus encabezados y los 108 casos sin responsable, 36 ambiguos, 40 cursos, 8 decisiones y 591 responsables del catálogo;
+- cruza las identidades confirmadas con los hashes y filas de origen de `LEGACY-2026-UAT-20260814A`;
+- ignora toda fila que no tenga `Estado = CONFIRMADO`;
+- vincula el responsable y crea solicitud, cuotas y cargos de agosto a diciembre solo para casos originalmente bloqueados por falta de responsable;
+- cuando cambia un responsable ambiguo, alinea alumno, solicitud y cuenta de los cargos en una transacción, pero aborta si existe pago, factura, recargo o débito asociado;
+- actualiza duración y capacidad y genera sesiones entre el 1 de agosto y el 31 de diciembre solo para cursos confirmados con días, horas y aula/modalidad completos;
+- detecta choques entre docente, alumnos y aulas presenciales antes de escribir;
+- registra respuestas institucionales solo mediante hashes de evidencia; nunca transforma texto libre sobre autorizaciones, administradoras, backups o matrículas en cambios funcionales;
+- aplica V29, audita cada decisión y cada fila creada/actualizada, verifica el resultado y confirma todo en una sola transacción.
+
+La duración de curso debe expresarse en horas enteras porque `courses.duration` es un entero. Los horarios exactos quedan en `course_sessions`. No se inventan feriados ni excepciones: deben registrarse luego con el flujo de sesiones.
+
+Preparación sin escritura:
+
+```powershell
+.\scripts\imports\legacy-2026\Invoke-LegacyReconciliation.ps1 `
+  -WorkbookPath '<libro-completado.xlsx>' `
+  -WorkDirectory '<carpeta-temporal-cifrada>' `
+  -ArtifactToolRoot '<ruta-artifact-tool>' `
+  -PostgresJdbcJar '<ruta-postgresql.jar>'
+```
+
+La salida informa el SHA-256 del libro, los confirmados por bloque y la cantidad de sesiones a generar. Revisar ese resumen antes de repetir con `-Execute`. La ejecución se rechaza si no existe ninguna fila confirmada. Las credenciales se leen exclusivamente de `DATABASE_URL`, `DATABASE_USERNAME` y `DATABASE_PASSWORD` del proceso.
+
+Antes de ejecutar en `sigep_prod`, realizar un backup y repetir la preparación/ejecución en una rama Neon descartable creada desde el estado actual de UAT. Luego ejecutar `verify-legacy-reconciliation.sql`, arrancar el backend con perfil `prod` y revisar los flujos afectados.
+
+## Rollback de una conciliación
+
+El rollback se prepara por `run-id` y no escribe por defecto:
+
+```powershell
+.\scripts\imports\legacy-2026\Invoke-LegacyReconciliationRollback.ps1 `
+  -RunId '<LEGACY-RECON-2026-...>' `
+  -WorkDirectory '<carpeta-temporal-cifrada>' `
+  -PostgresJdbcJar '<ruta-postgresql.jar>'
+```
+
+Agregar `-Execute` únicamente después de revisar el SQL y su hash. El rollback aborta si una conciliación posterior depende de la misma decisión, si un cargo ya tiene actividad financiera, si una sesión tiene asistencia/excepciones o si una cuenta creada ya fue utilizada. Conserva la auditoría V29, restaura los vínculos y valores previos, vuelve a abrir las incidencias y marca la ejecución como `ROLLED_BACK`.
