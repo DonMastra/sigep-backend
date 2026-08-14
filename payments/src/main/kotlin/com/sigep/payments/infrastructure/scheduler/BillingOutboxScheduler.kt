@@ -35,7 +35,11 @@ class BillingOutboxScheduler(
             try {
                 processor.process(eventId)
             } catch (exception: Exception) {
-                logger.error("Unexpected billing outbox failure for event {}", eventId, exception)
+                logger.error(
+                    "Unexpected billing outbox failure for event {} ({})",
+                    eventId,
+                    exception.javaClass.simpleName
+                )
             }
         }
     }

@@ -82,7 +82,7 @@ class NonTeachingStaffService(
 
     @Transactional(readOnly = true)
     fun searchNonTeachingStaff(query: String, page: Int, limit: Int): PageResponse<NonTeachingStaffDto> {
-        log.debug("Searching non-teaching staff with query: {}", query)
+        log.debug("Searching non-teaching staff with a supplied query")
 
         val pageable = PageRequest.of(page, limit, Sort.by(Sort.Direction.ASC, "lastName"))
         val staffPage = nonTeachingStaffRepository.searchByQuery(query, pageable)
@@ -99,7 +99,7 @@ class NonTeachingStaffService(
 
     @CacheEvict(value = ["nonTeachingStaff"], allEntries = true)
     fun createNonTeachingStaff(request: CreateNonTeachingStaffRequest): NonTeachingStaffDto {
-        log.info("Creating new non-teaching staff: {} {}", request.firstName, request.lastName)
+        log.info("Creating new non-teaching staff record")
 
         nonTeachingStaffRepository.findByEmail(request.email)?.let {
             throw IllegalArgumentException("Email already exists: ${request.email}")
