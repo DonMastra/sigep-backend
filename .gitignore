@@ -43,6 +43,7 @@ application-prod.properties
 *.dump
 *.backup
 *.sql.gz
+*.generated.sql
 *.gpg
 *.age
 data-imports/
