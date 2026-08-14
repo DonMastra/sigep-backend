@@ -1,36 +1,47 @@
 package com.sigep.courses.application.dto
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties
+import com.sigep.common.application.service.ReservationInfo
 import com.sigep.courses.domain.model.CourseStatus
-import com.sigep.courses.domain.model.DayOfWeek
-import jakarta.validation.constraints.Min
-import jakarta.validation.constraints.NotBlank
-import jakarta.validation.constraints.NotNull
-import jakarta.validation.constraints.Size
+import com.sigep.courses.domain.model.CourseLevel
+import jakarta.validation.constraints.*
+import java.math.BigDecimal
+import java.time.LocalDate
 import java.time.LocalDateTime
 
 data class CourseDto(
     val id: Long,
+    val code: String,
     val name: String,
     val description: String,
-    val level: String,
+    val level: CourseLevel,
     val duration: Int,
     val maxStudents: Int,
-    val teacherId: Long,
+    val minStudents: Int,
+    val teacherId: Long?,
+    val teacherName: String? = null,
+    val price: BigDecimal,
+    val startDate: LocalDate?,
+    val endDate: LocalDate?,
     val status: CourseStatus,
-    val schedules: List<CourseScheduleDto>,
-    val enrolledStudents: Int, // Cantidad de estudiantes inscritos
+    val isPublished: Boolean,
+    val hasReservation: Boolean,
+    val reservationSummary: ReservationInfo? = null,
+    val enrolledStudents: Int,
+    val totalEnrollments: Int,
+    val availableSeats: Int,
+    val isEnrollmentOpen: Boolean,
     val createdAt: LocalDateTime,
     val updatedAt: LocalDateTime
 )
 
-data class CourseScheduleDto(
-    val id: Long?,
-    val dayOfWeek: DayOfWeek,
-    val startTime: String,
-    val endTime: String
-)
-
+@JsonIgnoreProperties(ignoreUnknown = true)
 data class CreateCourseRequest(
+    @field:NotBlank(message = "Course code is required")
+    @field:Size(min = 1, max = 50)
+    @field:Pattern(regexp = "^[\\p{L}\\p{N} ._-]+$", message = "Code may contain letters, numbers, spaces, hyphens, underscores and dots")
+    val code: String,
+
     @field:NotBlank(message = "Course name is required")
     @field:Size(min = 3, max = 200)
     val name: String,
@@ -39,52 +50,68 @@ data class CreateCourseRequest(
     @field:Size(min = 10, max = 1000)
     val description: String,
 
-    @field:NotBlank(message = "Level is required")
-    val level: String,
+    @field:NotNull(message = "Level is required")
+    val level: CourseLevel,
 
     @field:NotNull(message = "Duration is required")
-    @field:Min(1)
+    @field:Min(value = 1, message = "Duration must be at least 1 hour")
+    @field:Max(value = 1000, message = "Duration cannot exceed 1000 hours")
     val duration: Int,
 
     @field:NotNull(message = "Max students is required")
-    @field:Min(1)
+    @field:Min(value = 1, message = "Max students must be at least 1")
+    @field:Max(value = 100, message = "Max students cannot exceed 100")
     val maxStudents: Int,
 
-    @field:NotNull(message = "Teacher ID is required")
-    val teacherId: Long,
+    @field:Min(value = 1, message = "Min students must be at least 1")
+    val minStudents: Int = 1,
 
-    val schedules: List<CreateCourseScheduleRequest> = emptyList()
-)
+    val teacherId: Long? = null,
 
-data class CreateCourseScheduleRequest(
-    @field:NotNull(message = "Day of week is required")
-    val dayOfWeek: DayOfWeek,
+    @field:NotNull(message = "Price is required")
+    @field:DecimalMin(value = "0.0", message = "Price must be positive")
+    val price: BigDecimal,
 
-    @field:NotBlank(message = "Start time is required")
-    val startTime: String, // Format: HH:mm
-
-    @field:NotBlank(message = "End time is required")
-    val endTime: String // Format: HH:mm
+    val startDate: LocalDate? = null,
+    val endDate: LocalDate? = null,
+    val reservationId: Long? = null,
+    val status: CourseStatus? = null,
+    val isPublished: Boolean = false
 )
 
 data class UpdateCourseRequest(
+    @field:Size(min = 1, max = 50)
+    @field:Pattern(regexp = "^[\\p{L}\\p{N} ._-]+$", message = "Code may contain letters, numbers, spaces, hyphens, underscores and dots")
+    val code: String?,
+
     @field:Size(min = 3, max = 200)
     val name: String?,
 
     @field:Size(min = 10, max = 1000)
     val description: String?,
 
-    val level: String?,
+    val level: CourseLevel?,
 
-    @field:Min(1)
+    @field:Min(value = 1, message = "Duration must be at least 1 hour")
+    @field:Max(value = 1000, message = "Duration cannot exceed 1000 hours")
     val duration: Int?,
 
-    @field:Min(1)
+    @field:Min(value = 1, message = "Max students must be at least 1")
+    @field:Max(value = 100, message = "Max students cannot exceed 100")
     val maxStudents: Int?,
+
+    @field:Min(value = 1, message = "Min students must be at least 1")
+    val minStudents: Int?,
 
     val teacherId: Long?,
 
-    val status: CourseStatus?
+    @field:DecimalMin(value = "0.0", message = "Price must be positive")
+    val price: BigDecimal?,
+
+    val startDate: LocalDate?,
+    val endDate: LocalDate?,
+    val status: CourseStatus?,
+    val isPublished: Boolean?
 )
 
 data class EnrollStudentRequest(
@@ -94,3 +121,33 @@ data class EnrollStudentRequest(
     val notes: String? = null
 )
 
+data class CourseStatisticsDto(
+    val totalCourses: Long,
+    val activeCourses: Long,
+    val publishedCourses: Long,
+    val totalEnrollments: Long,
+    val averageEnrollmentRate: Double,
+    val coursesByLevel: Map<CourseLevel, Long>,
+    val coursesByStatus: Map<CourseStatus, Long>
+)
+
+data class CourseSimpleDto(
+    val id: Long,
+    val code: String,
+    val name: String,
+    val level: CourseLevel,
+    val price: BigDecimal,
+    val availableSeats: Int,
+    val isEnrollmentOpen: Boolean,
+    val hasReservation: Boolean
+)
+
+data class CourseFilterRequest(
+    val level: CourseLevel? = null,
+    val status: CourseStatus? = null,
+    val teacherId: Long? = null,
+    val isPublished: Boolean? = null,
+    val minPrice: BigDecimal? = null,
+    val maxPrice: BigDecimal? = null,
+    val hasAvailableSeats: Boolean? = null
+)

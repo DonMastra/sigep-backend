@@ -1,0 +1,123 @@
+# QA Environment Configuration
+# Intended for Render + Neon + Render Key Value or Upstash Redis.
+
+spring:
+  datasource:
+    # Neon must be provided as a JDBC URL, for example:
+    # jdbc:postgresql://host/dbname?sslmode=require
+    url: ${DATABASE_URL}
+    username: ${DATABASE_USERNAME}
+    password: ${DATABASE_PASSWORD}
+    hikari:
+      schema: ${DB_SCHEMA:public}
+      maximum-pool-size: ${DB_MAX_POOL_SIZE:5}
+      minimum-idle: ${DB_MIN_IDLE:1}
+      connection-timeout: 30000
+      idle-timeout: 300000
+      max-lifetime: 1200000
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      # QA schema is managed through the reviewed SQL migrations in scripts/migrations.
+      ddl-auto: ${JPA_DDL_AUTO:validate}
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+        use_sql_comments: false
+        jdbc:
+          batch_size: 20
+        default_schema: ${DB_SCHEMA:public}
+        order_inserts: true
+        order_updates: true
+
+  data:
+    redis:
+      repositories:
+        enabled: false
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 60000
+
+server:
+  port: ${PORT:8080}
+
+jwt:
+  secret: ${JWT_SECRET}
+  expiration: 86400000
+  refresh-expiration: 604800000
+
+app:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:https://sigep.com.ar,https://www.sigep.com.ar,https://sigep-qa.vercel.app}
+    allowed-origin-patterns: ${CORS_ALLOWED_ORIGIN_PATTERNS:https://*.vercel.app}
+  security:
+    rate-limit:
+      enabled: true
+      capacity: 100
+      refill-tokens: 100
+      refill-duration-minutes: 1
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+
+logging:
+  level:
+    root: INFO
+    com.sigep: INFO
+    org.springframework.security: WARN
+    org.hibernate.SQL: WARN
+
+billing:
+  fiscal-exclusion:
+    enabled: ${BILLING_FISCAL_EXCLUSION_ENABLED:true}
+  automatic-debit:
+    provider: ${BILLING_AUTOMATIC_DEBIT_PROVIDER:mock}
+  late-fee:
+    cron: ${BILLING_LATE_FEE_CRON:0 15 1 * * *}
+  fiscal:
+    provider: ${BILLING_FISCAL_PROVIDER:disabled}
+    reference-data-cache-ttl: ${BILLING_FISCAL_REFERENCE_DATA_CACHE_TTL:6h}
+    reference-data-stale-if-error: ${BILLING_FISCAL_REFERENCE_DATA_STALE_IF_ERROR:24h}
+    resilience:
+      max-concurrent-calls: ${BILLING_FISCAL_MAX_CONCURRENT_CALLS:4}
+      max-wait-duration: ${BILLING_FISCAL_MAX_WAIT_DURATION:0s}
+      failure-rate-threshold: ${BILLING_FISCAL_FAILURE_RATE_THRESHOLD:50}
+      minimum-number-of-calls: ${BILLING_FISCAL_MINIMUM_NUMBER_OF_CALLS:5}
+      sliding-window-size: ${BILLING_FISCAL_SLIDING_WINDOW_SIZE:10}
+      permitted-calls-in-half-open-state: ${BILLING_FISCAL_HALF_OPEN_CALLS:2}
+      open-state-duration: ${BILLING_FISCAL_OPEN_STATE_DURATION:30s}
+  issuer:
+    cuit: ${BILLING_ISSUER_CUIT:}
+    point-of-sale: ${BILLING_ISSUER_POINT_OF_SALE:}
+    legal-name: ${BILLING_ISSUER_LEGAL_NAME:}
+    business-address: ${BILLING_ISSUER_BUSINESS_ADDRESS:}
+    vat-condition: ${BILLING_ISSUER_VAT_CONDITION:}
+    gross-income: ${BILLING_ISSUER_GROSS_INCOME:}
+    activity-start: ${BILLING_ISSUER_ACTIVITY_START:}
+  arca:
+    environment: ${BILLING_ARCA_ENVIRONMENT:homologation}
+    wsaa-url: ${BILLING_ARCA_WSAA_URL:https://wsaahomo.afip.gov.ar/ws/services/LoginCms}
+    wsfe-url: ${BILLING_ARCA_WSFE_URL:https://wswhomo.afip.gov.ar/wsfev1/service.asmx}
+    keystore:
+      path: ${BILLING_ARCA_KEYSTORE_PATH:}
+      password: ${BILLING_ARCA_KEYSTORE_PASSWORD:}
+      alias: ${BILLING_ARCA_KEYSTORE_ALIAS:}
+    connect-timeout: ${BILLING_ARCA_CONNECT_TIMEOUT:5s}
+    request-timeout: ${BILLING_ARCA_REQUEST_TIMEOUT:20s}
+    ticket-refresh-skew: ${BILLING_ARCA_TICKET_REFRESH_SKEW:5m}
+  mock-service:
+    base-url: ${BILLING_MOCK_SERVICE_BASE_URL:http://localhost:8091}
+    connect-timeout: ${BILLING_MOCK_SERVICE_CONNECT_TIMEOUT:2s}
+    request-timeout: ${BILLING_MOCK_SERVICE_REQUEST_TIMEOUT:5s}
+  outbox:
+    enabled: ${BILLING_OUTBOX_ENABLED:false}
+    poll-delay-ms: ${BILLING_OUTBOX_POLL_DELAY_MS:1000}

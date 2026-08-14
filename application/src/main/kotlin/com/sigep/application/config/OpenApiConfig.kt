@@ -19,7 +19,17 @@ class OpenApiConfig {
             .info(
                 Info()
                     .title("SiGEP API - Sistema de Gestión de Enseñanza Privada")
-                    .description("API REST para la gestión integral de un instituto educativo de inglés")
+                    .description("""
+                        API REST para la gestión integral de un instituto educativo de inglés.
+                        
+                        Módulos disponibles:
+                        - **Students**: Gestión de estudiantes
+                        - **Courses**: Gestión de cursos e inscripciones
+                        - **Staff**: Gestión de personal docente y no docente
+                        - **Security**: Autenticación y autorización
+                        
+                        Para usar la API, primero debes autenticarte en /api/v1/auth/login
+                    """.trimIndent())
                     .version("1.0.0")
                     .contact(
                         Contact()

@@ -1,239 +1,301 @@
 # 📚 Índice de Documentación - SiGEP Backend
 
-Bienvenido a la documentación del backend de SiGEP. Esta guía te ayudará a navegar por todos los recursos disponibles.
-
-## 🚀 Para Empezar
-
-1. **[QUICKSTART.md](QUICKSTART.md)** ⭐ **¡EMPIEZA AQUÍ!**
-   - Guía paso a paso para iniciar el proyecto
-   - Configuración inicial
-   - Primeros pasos con la API
-
-2. **[README.md](README.md)**
-   - Descripción general del proyecto
-   - Tecnologías utilizadas
-   - Comandos útiles
-   - Endpoints principales
-
-## 🏗️ Arquitectura
-
-3. **[ARCHITECTURE.md](ARCHITECTURE.md)**
-   - Estructura completa de módulos
-   - Capas DDD (Domain, Application, Infrastructure, Presentation)
-   - Dependencias entre módulos
-   - Estrategia de migración a microservicios
-
-4. **[DIAGRAMS.md](DIAGRAMS.md)**
-   - Diagramas visuales de la arquitectura
-   - Flujo de requests
-   - Modelo de base de datos
-   - Comunicación entre módulos
-
-5. **[SUMMARY.md](SUMMARY.md)**
-   - Resumen ejecutivo de todos los módulos
-   - Características implementadas
-   - Tecnologías y versiones
-   - Roadmap
-
-## 📦 Módulos Implementados
-
-### Core Modules
-
-- **common/** - Utilidades compartidas, excepciones, DTOs base
-- **security/** - Autenticación JWT, autorización por roles
-- **application/** - Módulo principal orquestador
-
-### Bounded Contexts (DDD)
-
-- **students/** - Gestión completa de estudiantes ✅ **IMPLEMENTADO**
-- **courses/** - Gestión de cursos y horarios (estructura base)
-- **scheduling/** - Programación de calendarios (estructura base)
-- **payments/** - Gestión de pagos (estructura base)
-- **exams/** - Exámenes y resultados (estructura base)
-- **communications/** - Notificaciones (estructura base)
-- **reports/** - Generación de reportes (estructura base)
-
-## 🔧 Configuración
-
-### Archivos de Configuración
-
-- **build.gradle.kts** (raíz) - Configuración multi-módulo
-- **settings.gradle.kts** - Definición de módulos
-- **docker-compose.yml** - PostgreSQL + Redis + herramientas
-- **application.properties** - Configuración de Spring Boot
-
-### Scripts
-
-- **start.bat** - Inicia servicios Docker + aplicación (Windows)
-- **stop.bat** - Detiene servicios Docker (Windows)
-- **scripts/setup-database.sql** - Script de inicialización de BD
-
-## 📖 Guías por Rol
-
-### Para Desarrolladores Backend
-
-1. Leer **QUICKSTART.md** para configuración inicial
-2. Revisar **ARCHITECTURE.md** para entender la estructura
-3. Estudiar el módulo **students** como ejemplo completo de DDD
-4. Implementar módulos restantes siguiendo el mismo patrón
-
-### Para DevOps
-
-1. Revisar **docker-compose.yml** para servicios de infraestructura
-2. Configurar **application.properties** para diferentes ambientes
-3. Configurar CI/CD basado en Gradle
-4. Monitorear con Actuator endpoints
-
-### Para Frontend Developers
-
-1. Revisar **DIAGRAMS.md** para entender los endpoints
-2. Acceder a **Swagger UI** en `http://localhost:8080/swagger-ui.html`
-3. Probar endpoints con la colección de Postman (pendiente)
-4. Referencia al README.md del frontend para contrato de API
-
-## 🧪 Testing
-
-```bash
-# Ejecutar todos los tests
-gradlew test
-
-# Tests de un módulo específico
-gradlew :students:test
-
-# Tests con coverage
-gradlew test jacocoTestReport
-```
-
-## 📊 Monitoreo
-
-Una vez iniciada la aplicación:
-
-- **API Docs**: http://localhost:8080/swagger-ui.html
-- **Health**: http://localhost:8080/actuator/health
-- **Metrics**: http://localhost:8080/actuator/metrics
-- **PgAdmin**: http://localhost:5050 (admin@sigep.com / admin)
-- **Redis Commander**: http://localhost:8081
-
-## 🔐 Seguridad
-
-### Autenticación
-
-Todos los endpoints (excepto `/api/v1/auth/*`) requieren JWT token:
-
-```
-Authorization: Bearer <token>
-```
-
-### Roles
-
-- **ADMIN** - Acceso completo
-- **TEACHER** - Acceso a recursos educativos
-- **GUARDIAN** - Acceso limitado a sus estudiantes
-
-## 📝 Convenciones de Código
-
-### Estructura de Paquetes
-
-```
-com.sigep.{module}.{layer}.{component}
-
-Ejemplos:
-- com.sigep.students.domain.model.Student
-- com.sigep.students.application.service.StudentService
-- com.sigep.students.presentation.controller.StudentController
-```
-
-### Nombres de Clases
-
-- **Entities**: Sustantivos singulares (Student, Course, Payment)
-- **Services**: {Entity}Service
-- **Controllers**: {Entity}Controller
-- **Repositories**: {Entity}Repository
-- **DTOs**: {Entity}Dto, Create{Entity}Request, Update{Entity}Request
-
-## 🚦 Estado del Proyecto
-
-| Módulo | Estado | Documentación |
-|--------|--------|---------------|
-| common | ✅ Completo | - |
-| security | ✅ Completo | JWT, Roles |
-| students | ✅ Completo | CRUD completo |
-| courses | 🟡 Estructura base | Pendiente servicios |
-| scheduling | 🟡 Estructura base | Pendiente servicios |
-| payments | 🟡 Estructura base | Pendiente servicios |
-| exams | 🟡 Estructura base | Pendiente servicios |
-| communications | 🟡 Estructura base | Pendiente servicios |
-| reports | 🟡 Estructura base | Pendiente servicios |
-| application | ✅ Completo | Orquestador |
-
-## 🎯 Próximos Pasos
-
-1. ✅ **Completar módulos restantes** - Implementar servicios y controladores
-2. ⬜ **Tests de integración** - TestContainers
-3. ⬜ **CI/CD** - GitHub Actions
-4. ⬜ **Postman Collection** - Documentación interactiva
-5. ⬜ **WebSockets** - Notificaciones en tiempo real
-6. ⬜ **File Upload** - Documentos y fotos
-7. ⬜ **Audit Logging** - Trazabilidad de operaciones
-8. ⬜ **Rate Limiting** - Protección contra abuso
-
-## 📞 Recursos Adicionales
-
-### Documentación Externa
-
-- [Spring Boot Docs](https://spring.io/projects/spring-boot)
-- [Kotlin Documentation](https://kotlinlang.org/docs/home.html)
-- [Spring Security](https://spring.io/projects/spring-security)
-- [Spring Data JPA](https://spring.io/projects/spring-data-jpa)
-- [Redis](https://redis.io/documentation)
-- [PostgreSQL](https://www.postgresql.org/docs/)
-
-### Herramientas Recomendadas
-
-- **IDE**: IntelliJ IDEA
-- **API Testing**: Postman, Insomnia
-- **Database**: DBeaver, pgAdmin
-- **Git**: GitHub Desktop, SourceTree
-- **Docker**: Docker Desktop
-
-## 📄 Archivos de Documentación
-
-```
-sigep-backend/
-├── README.md                    # Documentación principal
-├── QUICKSTART.md               # Guía de inicio rápido ⭐
-├── ARCHITECTURE.md             # Arquitectura detallada
-├── DIAGRAMS.md                 # Diagramas visuales
-├── SUMMARY.md                  # Resumen ejecutivo
-├── INDEX.md                    # Este archivo
-├── .gitignore                  # Archivos ignorados por Git
-├── docker-compose.yml          # Servicios Docker
-├── start.bat / stop.bat        # Scripts de inicio/parada
-└── scripts/
-    └── setup-database.sql      # Inicialización de BD
-```
-
-## 🤝 Contribuciones
-
-Para contribuir al proyecto:
-
-1. Seguir las convenciones de código establecidas
-2. Crear tests para nuevas funcionalidades
-3. Actualizar documentación relevante
-4. Usar Conventional Commits (feat:, fix:, docs:, etc.)
-
-## 📧 Soporte
-
-Para dudas o problemas:
-
-1. Revisar esta documentación
-2. Consultar los logs de la aplicación
-3. Revisar issues conocidos
-4. Contactar al equipo de desarrollo
+**Sistema de Gestión de Enseñanza Privada**  
+*Backend API REST - Spring Boot + Kotlin*
 
 ---
 
-**¡Comienza con QUICKSTART.md y estarás listo en minutos!** 🚀
+## 🎯 Inicio Rápido
 
-**Última actualización**: Octubre 2025
+¿Primera vez con el proyecto? Comienza aquí:
+
+1. **[README.md](README.md)** - Introducción general y guía de inicio
+2. **[QUICKSTART.md](QUICKSTART.md)** - Guía rápida para levantar el proyecto
+3. **[AUTHENTICATION_GUIDE.md](security/AUTHENTICATION_GUIDE.md)** - Cómo autenticarse y probar la API
+
+---
+
+## 📖 Documentación Principal
+
+### 🏗️ Arquitectura y Diseño
+
+| Documento | Descripción | Audiencia |
+|-----------|-------------|-----------|
+| **[ARCHITECTURE.md](ARCHITECTURE.md)** | Arquitectura completa del sistema, patrones DDD, bounded contexts | Arquitectos, Desarrolladores |
+| **[DIAGRAMS.md](DIAGRAMS.md)** | Diagramas de arquitectura, flujos y relaciones entre módulos | Todos |
+
+### 🔐 Seguridad
+
+| Documento | Descripción | Audiencia |
+|-----------|-------------|-----------|
+| **[SECURITY.md](security/SECURITY.md)** | Documentación completa del módulo de seguridad, JWT, roles, rate limiting | Desarrolladores, Auditores |
+| **[AUTHENTICATION_GUIDE.md](security/AUTHENTICATION_GUIDE.md)** | Guía práctica de autenticación, obtención de tokens, testing | Desarrolladores Frontend/Backend |
+
+### 🔌 API y Contratos
+
+| Documento | Descripción | Audiencia |
+|-----------|-------------|-----------|
+| **[API_CONTRACT.md](API_CONTRACT.md)** | Contrato completo de API para integración frontend (TypeScript interfaces, ejemplos) | Desarrolladores Frontend |
+| **[TUITION_FRONTEND_COMMUNICATION.md](TUITION_FRONTEND_COMMUNICATION.md)** | Comunicado de integracion frontend para el modulo de matriculacion `tuition` | Desarrolladores Frontend |
+| **[Swagger UI](http://localhost:8080/swagger-ui/index.html)** | Documentación interactiva en vivo de todos los endpoints | Todos (requiere app corriendo) |
+
+### 📝 Implementación
+
+| Documento | Descripción | Audiencia |
+|-----------|-------------|-----------|
+| **[IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md)** | Resumen de implementación de funcionalidades | Desarrolladores, Project Managers |
+| **[QUICKSTART.md](QUICKSTART.md)** | Guía rápida de configuración e inicio | Nuevos Desarrolladores |
+
+---
+
+## 📦 Documentación por Módulo
+
+### 🔧 Common (Módulo Compartido)
+- **Estado**: ✅ Completado y estable
+- **Ubicación**: `common/`
+- **Documentación**: [common/README.md](common/README.md)
+- **Funcionalidades**:
+  - DTOs compartidos (ApiResponse, PageResponse)
+  - Excepciones personalizadas con mapeo a HTTP status
+  - Abstracciones DDD (AggregateRoot, ValueObject)
+  - Sistema de auditoría JPA automático
+  - Global Exception Handler
+  - Configuración base para todos los módulos
+
+**Importancia**: Este es el módulo fundamental del que dependen todos los demás. No tiene dependencias con otros módulos del proyecto.
+
+---
+
+### 🚀 Application (Módulo Principal)
+- **Estado**: ✅ Completado y funcionando
+- **Ubicación**: `application/`
+- **Documentación**: [application/README.md](application/README.md)
+- **Funcionalidades**:
+  - Punto de entrada de la aplicación (main)
+  - Integración de todos los bounded contexts
+  - Configuración OpenAPI/Swagger
+  - Configuración Redis para caché
+  - Actuator para health checks y métricas
+  - Component scanning y JPA configuration
+  - Hot reload con DevTools
+
+**Swagger UI**: http://localhost:8080/swagger-ui/index.html
+
+---
+
+### 🔐 Security (Seguridad)
+- **Estado**: ✅ Completado
+- **Ubicación**: `security/`
+- **Documentación**: [SECURITY.md](security/SECURITY.md)
+- **Funcionalidades**:
+  - Autenticación JWT (access + refresh tokens)
+  - Sistema de roles: ADMIN, TEACHER, GUARDIAN
+  - Rate limiting
+  - Anotaciones de seguridad personalizadas
+
+### 👥 Students (Estudiantes)
+- **Estado**: ✅ Completado
+- **Ubicación**: `students/`
+- **Documentación**: Ver [API_CONTRACT.md](API_CONTRACT.md#-students-endpoints)
+- **Funcionalidades**:
+  - CRUD de estudiantes
+  - Historial de cursos
+  - Relación con tutores
+  - Búsqueda y paginación
+
+### 📚 Courses (Cursos)
+- **Estado**: ✅ Completado
+- **Ubicación**: `courses/`
+- **Documentación**: 
+  - [courses/README.md](courses/README.md)
+  - [API_CONTRACT.md](API_CONTRACT.md#-courses-endpoints)
+- **Funcionalidades**:
+  - CRUD de cursos
+  - Inscripción de estudiantes
+  - Materiales del curso
+  - Sesiones programadas
+  - Sistema de asistencia
+  - Certificados
+
+### 📝 Exams (Exámenes)
+- **Estado**: ✅ Completado
+- **Ubicación**: `exams/`
+- **Documentación**: 
+  - [exams/README.md](exams/README.md)
+  - [exams/EXECUTIVE_SUMMARY.md](exams/EXECUTIVE_SUMMARY.md)
+  - [exams/TEACHER_PERFORMANCE.md](exams/TEACHER_PERFORMANCE.md)
+  - [API_CONTRACT.md](API_CONTRACT.md#-exams-endpoints)
+- **Funcionalidades**:
+  - CRUD de exámenes
+  - Tipos de examen (escrito, oral, práctico, final)
+  - Calificaciones por estudiante
+  - Análisis de rendimiento de docentes
+  - Estadísticas y métricas
+
+### 👔 Staff (Personal)
+- **Estado**: ✅ Completado
+- **Ubicación**: `staff/`
+- **Documentación**: 
+  - [staff/README.md](staff/README.md)
+  - [API_CONTRACT.md](API_CONTRACT.md#-staff-endpoints)
+- **Funcionalidades**:
+  - Gestión de personal docente
+  - Gestión de personal no docente
+  - Control de asistencia
+  - Notas y observaciones
+
+### 💳 Payments (Pagos)
+- **Estado**: 🚧 En desarrollo
+- **Ubicación**: `payments/`
+- **Funcionalidades planificadas**:
+  - Pagos de estudiantes
+  - Pagos a personal
+  - Historial de transacciones
+
+### 🔔 Communications (Comunicaciones)
+- **Estado**: 🚧 En desarrollo
+- **Ubicación**: `communications/`
+- **Funcionalidades planificadas**:
+  - Notificaciones de materiales
+  - Notificaciones de exámenes
+  - Recordatorios
+
+### 📊 Reports (Reportes)
+- **Estado**: 🚧 En desarrollo
+- **Ubicación**: `reports/`
+- **Funcionalidades planificadas**:
+  - Reportes administrativos
+  - Exportación de datos
+  - Estadísticas generales
+
+---
+
+## 🛠️ Guías de Desarrollo
+
+### Para Nuevos Desarrolladores
+
+1. **Configuración del Entorno**
+   - [QUICKSTART.md](QUICKSTART.md) - Setup inicial
+   - [README.md](README.md#-configuración) - Requisitos y configuración
+
+2. **Entender la Arquitectura**
+   - [ARCHITECTURE.md](ARCHITECTURE.md) - Patrones y estructura
+   - [DIAGRAMS.md](DIAGRAMS.md) - Diagramas visuales
+
+3. **Trabajar con Seguridad**
+   - [SECURITY.md](security/SECURITY.md) - Sistema de seguridad
+   - [AUTHENTICATION_GUIDE.md](security/AUTHENTICATION_GUIDE.md) - Testing con tokens
+
+### Para Desarrolladores Frontend
+
+1. **Integración con API**
+   - [API_CONTRACT.md](API_CONTRACT.md) - Contrato completo con TypeScript interfaces
+   - [AUTHENTICATION_GUIDE.md](security/AUTHENTICATION_GUIDE.md) - Flujo de autenticación
+   - [Swagger UI](http://localhost:8080/swagger-ui/index.html) - Probar endpoints
+
+2. **Ejemplos de Integración**
+   - Ver sección "Notas para Integración Frontend" en [API_CONTRACT.md](API_CONTRACT.md#-notas-para-integración-frontend)
+
+### Para Arquitectos y Tech Leads
+
+1. **Arquitectura del Sistema**
+   - [ARCHITECTURE.md](ARCHITECTURE.md) - Diseño completo
+   - [DIAGRAMS.md](DIAGRAMS.md) - Diagramas de componentes
+
+2. **Seguridad y Compliance**
+   - [SECURITY.md](security/SECURITY.md) - Medidas de seguridad implementadas
+
+3. **Roadmap**
+   - [README.md](README.md#-roadmap) - Funcionalidades actuales y planificadas
+
+---
+
+## 📋 Recursos Útiles
+
+### Scripts y Utilidades
+
+| Script | Descripción | Uso |
+|--------|-------------|-----|
+| `setup-env.bat` | Configurar variables de entorno | `.\setup-env.bat` |
+| `start.bat` | Iniciar aplicación (Windows) | `.\start.bat` |
+| `stop.bat` | Detener aplicación | `.\stop.bat` |
+| `scripts/setup-database.sql` | Script de setup de base de datos | SQL |
+| `scripts/seed-test-users.sql` | Usuarios de prueba | SQL |
+
+### Docker
+
+| Archivo | Descripción |
+|---------|-------------|
+| `docker-compose.yml` | Configuración de PostgreSQL y Redis |
+
+### Gradle
+
+| Comando | Descripción |
+|---------|-------------|
+| `gradlew clean build` | Compilar proyecto |
+| `gradlew :application:bootRun` | Ejecutar aplicación |
+| `gradlew test` | Ejecutar tests |
+
+---
+| Backend API | ✅ Producción | 1.0.0 | 2025-11-04 |
+| Módulo Common | ✅ Completado | 1.0.0 | 2025-11-04 |
+| Módulo Application | ✅ Completado | 1.0.0 | 2025-11-04 |
+## 🔍 Búsqueda Rápida
+
+### Por Funcionalidad
+
+- **Autenticación**: [SECURITY.md](security/SECURITY.md#-autenticación)
+- **Roles y Permisos**: [SECURITY.md](security/SECURITY.md#️-autorización)
+- **JWT Tokens**: [SECURITY.md](security/SECURITY.md#-jwt-tokens)
+- **Rate Limiting**: [SECURITY.md](security/SECURITY.md#-rate-limiting)
+| Documentación | ✅ Actualizada | 1.0.0 | 2025-11-04 |
+- **Estudiantes API**: [API_CONTRACT.md](API_CONTRACT.md#-students-endpoints)
+- **Cursos API**: [API_CONTRACT.md](API_CONTRACT.md#-courses-endpoints)
+- **Exámenes API**: [API_CONTRACT.md](API_CONTRACT.md#-exams-endpoints)
+- **Personal API**: [API_CONTRACT.md](API_CONTRACT.md#-staff-endpoints)
+
+### Por Rol de Usuario
+
+- **Administrador**: Ver todos los endpoints con rol "ADMIN" en [API_CONTRACT.md](API_CONTRACT.md)
+- **Profesor**: Ver endpoints con rol "TEACHER" en [API_CONTRACT.md](API_CONTRACT.md)
+- **Tutor**: Ver endpoints con rol "GUARDIAN" en [API_CONTRACT.md](API_CONTRACT.md)
+
+### Por Error/Problema
+
+- **Errores de Autenticación**: [SECURITY.md](security/SECURITY.md#️-manejo-de-errores-de-seguridad)
+- **Troubleshooting**: [README.md](README.md#-troubleshooting)
+- **Códigos de Error HTTP**: [API_CONTRACT.md](API_CONTRACT.md#️-error-codes)
+
+---
+
+## 📊 Estado del Proyecto
+
+| Componente | Estado | Versión | Última Actualización |
+|------------|--------|---------|---------------------|
+| Backend API | ✅ Producción | 1.0.0 | 2025-11-03 |
+| Módulo Security | ✅ Completado | 1.0.0 | 2025-11-03 |
+| Módulo Students | ✅ Completado | 1.0.0 | 2025-10-22 |
+| Módulo Courses | ✅ Completado | 1.0.0 | 2025-10-22 |
+| Módulo Exams | ✅ Completado | 1.0.0 | 2025-10-22 |
+| Módulo Staff | ✅ Completado | 1.0.0 | 2025-10-22 |
+| Módulo Payments | 🚧 En desarrollo | 0.1.0 | - |
+| Módulo Communications | 🚧 En desarrollo | 0.1.0 | - |
+| Módulo Reports | 🚧 En desarrollo | 0.1.0 | - |
+| Documentación | ✅ Actualizada | 1.0.0 | 2025-11-03 |
+
+---
+
+## 📞 Ayuda y Soporte
+
+**¿No encuentras lo que buscas?**
+
+1. Revisa la [Documentación Swagger](http://localhost:8080/swagger-ui/index.html) para ver todos los endpoints disponibles
+2. Consulta [API_CONTRACT.md](API_CONTRACT.md) para ver el contrato completo de API
+3. Revisa [TROUBLESHOOTING](README.md#-troubleshooting) para soluciones a problemas comunes
+4. Contacta al equipo de desarrollo: dev@sigep.edu.mx
+
+---
+
+**Última actualización de este índice**: Noviembre 3, 2025  
+**Mantenedor**: Equipo SiGEP Backend
 

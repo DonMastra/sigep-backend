@@ -17,6 +17,11 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-validation")
+    implementation("org.springframework.boot:spring-boot-starter-security")
+
+    // Jackson for JSON processing
+    implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
+    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310")
 
     // Redis for caching
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
@@ -25,7 +30,6 @@ dependencies {
     // PostgreSQL
     runtimeOnly("org.postgresql:postgresql")
 
-    // MapStruct for DTO mapping
-    implementation("org.mapstruct:mapstruct:1.5.5.Final")
-    annotationProcessor("org.mapstruct:mapstruct-processor:1.5.5.Final")
+    // Swagger/OpenAPI
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.2.0")
 }

@@ -6,7 +6,13 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 
 @Entity
-@Table(name = "students")
+@Table(
+    name = "students",
+    indexes = [
+        Index(name = "idx_students_guardian", columnList = "guardian_id"),
+        Index(name = "idx_students_document_identity", columnList = "document_country,document_type,normalized_document_number")
+    ]
+)
 data class Student(
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -18,11 +24,8 @@ data class Student(
     @Column(nullable = false)
     val lastName: String,
 
-    @Column(unique = true, nullable = false)
-    val email: String,
-
     @Column(nullable = false)
-    val phone: String,
+    val email: String,
 
     @Column(nullable = false)
     val dateOfBirth: LocalDate,
@@ -31,14 +34,39 @@ data class Student(
     val address: String,
 
     @Column(nullable = false)
-    val guardianId: Long, // Reference to User with GUARDIAN role
+    val phoneNumber: String,
+
+    @Column(nullable = false)
+    val emergencyContact: String,
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "document_type", nullable = false, length = 30)
+    val documentType: StudentDocumentType = StudentDocumentType.DNI,
+
+    @Column(name = "document_country", nullable = false, length = 2)
+    val documentCountry: String = "AR",
+
+    @Column(name = "document_number", length = 50)
+    val documentNumber: String? = null,
+
+    @Column(name = "normalized_document_number", length = 50)
+    val normalizedDocumentNumber: String? = null,
+
+    /** Referencia al User con rol GUARDIAN. Nullable: un estudiante puede no tener tutor registrado. */
+    @Column(nullable = true)
+    val guardianId: Long? = null,
 
     @Column(nullable = false)
     val enrollmentDate: LocalDate,
 
-    @Enumerated(EnumType.STRING)
+    @Column(length = 1000)
+    val medicalNotes: String? = null,
+
+    @Column(length = 500)
+    val photoUrl: String? = null,
+
     @Column(nullable = false)
-    val status: StudentStatus = StudentStatus.ACTIVE,
+    val active: Boolean = true,
 
     @Column(nullable = false)
     val currentLevel: String, // e.g., "Beginner", "Intermediate", "Advanced"
@@ -50,10 +78,12 @@ data class Student(
     val updatedAt: LocalDateTime = LocalDateTime.now()
 ) : AggregateRoot
 
-enum class StudentStatus {
-    ACTIVE,
-    INACTIVE,
-    SUSPENDED,
-    GRADUATED
+enum class StudentDocumentType {
+    DNI,
+    PASSPORT,
+    NATIONAL_ID,
+    NO_DOCUMENT,
+    IN_PROCESS
 }
+
 

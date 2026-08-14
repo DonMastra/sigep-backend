@@ -5,6 +5,7 @@ import com.sigep.common.application.dto.PageResponse
 import com.sigep.courses.application.dto.EnrollmentDto
 import com.sigep.courses.application.dto.StudentEnrollmentHistoryDto
 import com.sigep.courses.application.dto.UpdateEnrollmentRequest
+import com.sigep.courses.application.dto.BulkEnrollmentRequest
 import com.sigep.courses.application.service.EnrollmentService
 import com.sigep.security.application.annotation.RequireAdminOrTeacher
 import com.sigep.security.application.annotation.RequireStaffOrGuardian
@@ -12,6 +13,7 @@ import com.sigep.security.application.annotation.RequireAdmin
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
+import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
@@ -27,8 +29,11 @@ class EnrollmentController(
     @GetMapping("/{id}")
     @RequireAdminOrTeacher
     @Operation(summary = "Get enrollment by ID", description = "Retrieve a specific enrollment by its ID")
-    fun getEnrollmentById(@PathVariable id: Long): ResponseEntity<ApiResponse<EnrollmentDto>> {
-        val enrollment = enrollmentService.getEnrollmentById(id)
+    fun getEnrollmentById(
+        @PathVariable id: Long,
+        httpRequest: HttpServletRequest
+    ): ResponseEntity<ApiResponse<EnrollmentDto>> {
+        val enrollment = enrollmentService.getEnrollmentById(id, actorUserId(httpRequest), actorRole(httpRequest))
         return ResponseEntity.ok(ApiResponse.success(enrollment))
     }
 
@@ -38,9 +43,16 @@ class EnrollmentController(
     fun getStudentEnrollments(
         @PathVariable studentId: Long,
         @RequestParam(defaultValue = "0") page: Int,
-        @RequestParam(defaultValue = "10") limit: Int
+        @RequestParam(defaultValue = "10") limit: Int,
+        httpRequest: HttpServletRequest
     ): ResponseEntity<ApiResponse<PageResponse<EnrollmentDto>>> {
-        val enrollments = enrollmentService.getStudentEnrollments(studentId, page, limit)
+        val enrollments = enrollmentService.getStudentEnrollments(
+            studentId,
+            page,
+            limit,
+            actorUserId(httpRequest),
+            actorRole(httpRequest)
+        )
         return ResponseEntity.ok(ApiResponse.success(enrollments))
     }
 
@@ -48,9 +60,14 @@ class EnrollmentController(
     @RequireStaffOrGuardian
     @Operation(summary = "Get student enrollment history", description = "Retrieve complete enrollment history for a student with grades")
     fun getStudentEnrollmentHistory(
-        @PathVariable studentId: Long
+        @PathVariable studentId: Long,
+        httpRequest: HttpServletRequest
     ): ResponseEntity<ApiResponse<StudentEnrollmentHistoryDto>> {
-        val history = enrollmentService.getStudentEnrollmentHistory(studentId)
+        val history = enrollmentService.getStudentEnrollmentHistory(
+            studentId,
+            actorUserId(httpRequest),
+            actorRole(httpRequest)
+        )
         return ResponseEntity.ok(ApiResponse.success(history))
     }
 
@@ -60,9 +77,16 @@ class EnrollmentController(
     fun getCourseEnrollments(
         @PathVariable courseId: Long,
         @RequestParam(defaultValue = "0") page: Int,
-        @RequestParam(defaultValue = "10") limit: Int
+        @RequestParam(defaultValue = "10") limit: Int,
+        httpRequest: HttpServletRequest
     ): ResponseEntity<ApiResponse<PageResponse<EnrollmentDto>>> {
-        val enrollments = enrollmentService.getCourseEnrollments(courseId, page, limit)
+        val enrollments = enrollmentService.getCourseEnrollments(
+            courseId,
+            page,
+            limit,
+            actorUserId(httpRequest),
+            actorRole(httpRequest)
+        )
         return ResponseEntity.ok(ApiResponse.success(enrollments))
     }
 
@@ -71,9 +95,13 @@ class EnrollmentController(
     @Operation(summary = "Update enrollment", description = "Update enrollment details including status and grades")
     fun updateEnrollment(
         @PathVariable id: Long,
-        @Valid @RequestBody request: UpdateEnrollmentRequest
+        @Valid @RequestBody request: UpdateEnrollmentRequest,
+        httpRequest: HttpServletRequest
     ): ResponseEntity<ApiResponse<EnrollmentDto>> {
-        val enrollment = enrollmentService.updateEnrollment(id, request)
+        val userId = httpRequest.getAttribute("userId") as? Long
+        val userRole = httpRequest.getAttribute("userRole") as? String
+
+        val enrollment = enrollmentService.updateEnrollment(id, request, userId, userRole)
         return ResponseEntity.ok(ApiResponse.success(enrollment, "Enrollment updated successfully"))
     }
 
@@ -84,5 +112,24 @@ class EnrollmentController(
         enrollmentService.deleteEnrollment(id)
         return ResponseEntity.ok(ApiResponse.successNoContent("Enrollment deleted successfully"))
     }
+
+    @PostMapping("/bulk")
+    @RequireAdminOrTeacher
+    @Operation(summary = "Bulk create enrollments", description = "Enroll multiple students in a course")
+    fun createBulkEnrollments(
+        @Valid @RequestBody request: BulkEnrollmentRequest,
+        httpRequest: HttpServletRequest
+    ): ResponseEntity<ApiResponse<List<EnrollmentDto>>> {
+        val userId = httpRequest.getAttribute("userId") as? Long
+        val userRole = httpRequest.getAttribute("userRole") as? String
+        val enrollments = enrollmentService.createBulkEnrollments(request, userId, userRole)
+        return ResponseEntity
+            .status(org.springframework.http.HttpStatus.CREATED)
+            .body(ApiResponse.success(enrollments, "Bulk enrollments created successfully"))
+    }
+
+    private fun actorUserId(request: HttpServletRequest): Long? = request.getAttribute("userId") as? Long
+
+    private fun actorRole(request: HttpServletRequest): String? = request.getAttribute("userRole") as? String
 }
 

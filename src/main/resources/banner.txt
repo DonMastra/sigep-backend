@@ -1,0 +1,3 @@
+SiGEP
+v${application.version}
+Spring Boot ${spring-boot.version}

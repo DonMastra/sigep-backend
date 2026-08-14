@@ -13,17 +13,22 @@ data class Payment(
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     val id: Long? = null,
 
-    @Column(nullable = false)
-    val studentId: Long,
+    @Column
+    val studentId: Long?,
 
-    @Column(nullable = false, precision = 10, scale = 2)
+    @Column(nullable = false, precision = 12, scale = 2)
     val amount: BigDecimal,
+
+    // Keep Hibernate's development-time schema update safe for legacy rows.
+    // V16 remains the authoritative migration and performs the same backfill
+    // explicitly in QA/production databases.
+    @Column(nullable = false, length = 3, columnDefinition = "varchar(3) default 'ARS'")
+    val currency: String = "ARS",
 
     @Column(nullable = false)
     val concept: String,
 
-    @Column(nullable = false)
-    val paymentDate: LocalDate?,
+    val paymentDate: LocalDate? = null,
 
     @Column(nullable = false)
     val dueDate: LocalDate,
@@ -38,6 +43,25 @@ data class Payment(
     @Column(unique = true)
     val receiptNumber: String?,
 
+    @Column(unique = true, length = 150)
+    val externalReference: String? = null,
+
+    @Column(unique = true, length = 128)
+    val creationKey: String? = null,
+
+    @Column(length = 64)
+    val creationFingerprint: String? = null,
+
+    @Column(unique = true, length = 128)
+    val confirmationKey: String? = null,
+
+    @Column(length = 64)
+    val confirmationFingerprint: String? = null,
+
+    val confirmedAt: LocalDateTime? = null,
+
+    val confirmedBy: Long? = null,
+
     @Column(length = 1000)
     val notes: String?,
 
@@ -45,14 +69,21 @@ data class Payment(
     val createdAt: LocalDateTime = LocalDateTime.now(),
 
     @Column(nullable = false)
-    val updatedAt: LocalDateTime = LocalDateTime.now()
+    val updatedAt: LocalDateTime = LocalDateTime.now(),
+
+    // PostgreSQL cannot add a NOT NULL version column to a populated table
+    // unless existing rows receive the optimistic-lock baseline.
+    @Version
+    @Column(nullable = false, columnDefinition = "bigint default 0")
+    val version: Long = 0
 ) : AggregateRoot
 
 enum class PaymentStatus {
     PENDING,
     PAID,
     OVERDUE,
-    CANCELLED
+    CANCELLED,
+    REVERSED
 }
 
 enum class PaymentMethod {
@@ -60,6 +91,7 @@ enum class PaymentMethod {
     CREDIT_CARD,
     DEBIT_CARD,
     BANK_TRANSFER,
-    CHECK
+    CHECK,
+    AUTOMATIC_DEBIT
 }
 

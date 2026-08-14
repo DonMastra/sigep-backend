@@ -7,14 +7,14 @@ plugins {
 }
 
 group = "com.sigep"
-version = "0.0.1-SNAPSHOT"
+version = "1.0.0"
 
 subprojects {
 	apply(plugin = "org.jetbrains.kotlin.jvm")
 	apply(plugin = "io.spring.dependency-management")
 
 	group = "com.sigep"
-	version = "0.0.1-SNAPSHOT"
+	version = "1.0.0"
 
 	repositories {
 		mavenCentral()

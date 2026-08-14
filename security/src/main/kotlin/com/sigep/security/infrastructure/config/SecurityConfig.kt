@@ -29,7 +29,9 @@ class SecurityConfig(
     private val customAuthenticationEntryPoint: CustomAuthenticationEntryPoint,
     private val customAccessDeniedHandler: CustomAccessDeniedHandler,
     @Value("\${app.cors.allowed-origins:http://localhost:4200}")
-    private val allowedOrigins: String
+    private val allowedOrigins: String,
+    @Value("\${app.cors.allowed-origin-patterns:}")
+    private val allowedOriginPatterns: String
 ) {
 
     @Bean
@@ -46,7 +48,15 @@ class SecurityConfig(
             .authorizeHttpRequests { auth ->
                 auth
                     // Public endpoints - Authentication
-                    .requestMatchers("/api/v1/auth/login", "/api/v1/auth/register", "/api/v1/auth/refresh").permitAll()
+                    .requestMatchers(
+                        "/api/v1/auth/login",
+                        "/api/v1/auth/register",
+                        "/api/v1/auth/guardian-invitations/accept",
+                        "/api/v1/auth/refresh",
+                        "/api/v1/auth/refresh-token",
+                        "/api/v1/auth/registration-status",
+                        "/api/v1/courses/published"
+                    ).permitAll()
 
                     // Public endpoints - Documentation (only in development)
                     .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
@@ -78,8 +88,11 @@ class SecurityConfig(
     fun corsConfigurationSource(): CorsConfigurationSource {
         val configuration = CorsConfiguration()
 
-        // Parse allowed origins from configuration
-        configuration.allowedOrigins = allowedOrigins.split(",").map { it.trim() }
+        val origins = allowedOrigins.split(",").map { it.trim() }.filter { it.isNotBlank() }
+        val originPatterns = allowedOriginPatterns.split(",").map { it.trim() }.filter { it.isNotBlank() }
+
+        configuration.allowedOrigins = origins
+        configuration.allowedOriginPatterns = originPatterns
 
         // Allowed methods
         configuration.allowedMethods = listOf("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")
@@ -88,6 +101,7 @@ class SecurityConfig(
         configuration.allowedHeaders = listOf(
             "Authorization",
             "Content-Type",
+            "Idempotency-Key",
             "X-Requested-With",
             "Accept",
             "Origin",

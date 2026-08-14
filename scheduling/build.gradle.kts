@@ -5,18 +5,16 @@ plugins {
 }
 
 dependencies {
-    // Common and Security modules
+    // Only depends on common (interfaces) and security (JWT/roles)
+    // Cross-module data flows via interfaces declared in common (ReservationInfoProvider)
     implementation(project(":common"))
     implementation(project(":security"))
-
-    // Cross-module dependencies
-    implementation(project(":courses"))
-    implementation(project(":students"))
 
     // Spring Boot dependencies
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-validation")
+    implementation("org.springframework.boot:spring-boot-starter-security")
 
     // Redis for caching
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
@@ -25,7 +23,6 @@ dependencies {
     // PostgreSQL
     runtimeOnly("org.postgresql:postgresql")
 
-    // MapStruct for DTO mapping
-    implementation("org.mapstruct:mapstruct:1.5.5.Final")
-    annotationProcessor("org.mapstruct:mapstruct-processor:1.5.5.Final")
+    // Swagger/OpenAPI for API documentation
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.2.0")
 }
