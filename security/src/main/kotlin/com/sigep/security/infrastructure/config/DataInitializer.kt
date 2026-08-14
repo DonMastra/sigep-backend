@@ -54,10 +54,7 @@ class DataInitializer {
             )
 
             userRepository.saveAll(testUsers)
-            log.info("Test users created successfully:")
-            testUsers.forEach { user ->
-                log.info("  - ${user.username} (${user.role}) - password: password123")
-            }
+            log.info("Created {} development-only test users", testUsers.size)
         } else {
             log.info("Users already exist in database, skipping initialization")
         }

@@ -104,7 +104,7 @@ class StudentService(
     }
 
     fun searchStudents(search: String, page: Int, size: Int): PageResponse<StudentDto> {
-        logger.info("Searching students with query: {}", search)
+        logger.info("Searching students with a supplied query")
 
         val pageable = PageRequest.of(page, size)
         val studentsPage = studentRepository.searchStudents(search, pageable)
@@ -156,7 +156,7 @@ class StudentService(
 
     @CacheEvict(value = ["students", "students_detail"], allEntries = true)
     fun createStudent(request: CreateStudentRequest, actorUserId: Long): StudentDto {
-        logger.info("Creating new student with email: {}", request.email)
+        logger.info("Creating new student record")
         val identity = identityNormalizer.normalize(request.documentType, request.documentCountry, request.documentNumber)
         ensureDocumentAvailable(identity)
         request.guardianId?.let(::validateActiveGuardian)

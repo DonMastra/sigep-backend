@@ -8,8 +8,8 @@ import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
 import com.fasterxml.jackson.module.kotlin.registerKotlinModule
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.cache.Cache
-import org.springframework.cache.annotation.CacheEvict
 import org.springframework.cache.annotation.CachingConfigurer
 import org.springframework.cache.annotation.EnableCaching
 import org.springframework.cache.interceptor.CacheErrorHandler
@@ -18,6 +18,7 @@ import org.springframework.context.annotation.Configuration
 import org.springframework.data.redis.cache.RedisCacheConfiguration
 import org.springframework.data.redis.cache.RedisCacheManager
 import org.springframework.data.redis.connection.RedisConnectionFactory
+import org.springframework.data.redis.core.ScanOptions
 import org.springframework.data.redis.core.RedisTemplate
 import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer
 import org.springframework.data.redis.serializer.RedisSerializationContext
@@ -28,7 +29,11 @@ import java.time.Duration
 
 @Configuration
 @EnableCaching
-class RedisConfig : CachingConfigurer {
+class RedisConfig(
+    @Value("\${app.cache.namespace:sigep-local}") cacheNamespace: String = "sigep-local"
+) : CachingConfigurer {
+
+    private val cacheNamespace = normalizeCacheNamespace(cacheNamespace)
 
     companion object {
         private val log = LoggerFactory.getLogger(RedisConfig::class.java)
@@ -64,6 +69,8 @@ class RedisConfig : CachingConfigurer {
         activateDefaultTyping(ptv, ObjectMapper.DefaultTyping.EVERYTHING, JsonTypeInfo.As.PROPERTY)
     }
 
+    internal fun cachePrefix(cacheName: String): String = "$cacheNamespace::$cacheName::"
+
     @Bean
     fun cacheManager(connectionFactory: RedisConnectionFactory): RedisCacheManager {
         val objectMapper = redisObjectMapper()
@@ -71,6 +78,7 @@ class RedisConfig : CachingConfigurer {
 
         val config = RedisCacheConfiguration.defaultCacheConfig()
             .entryTtl(Duration.ofMinutes(10))
+            .computePrefixWith(::cachePrefix)
             .serializeKeysWith(
                 RedisSerializationContext.SerializationPair.fromSerializer(StringRedisSerializer())
             )
@@ -107,20 +115,20 @@ class RedisConfig : CachingConfigurer {
     override fun errorHandler(): CacheErrorHandler = object : CacheErrorHandler {
 
         override fun handleCacheGetError(e: RuntimeException, cache: Cache, key: Any) {
-            log.warn("[Cache] GET error en '{}' key='{}' - cache miss graceful ({})", cache.name, key, e.message)
+            log.warn("[Cache] GET error in '{}' - cache miss graceful ({})", cache.name, e.javaClass.simpleName)
             // No re-throw: Spring interpreta esto como cache miss y ejecuta el méthodo real
         }
 
         override fun handleCachePutError(e: RuntimeException, cache: Cache, key: Any, value: Any?) {
-            log.warn("[Cache] PUT error en '{}' key='{}': {}", cache.name, key, e.message)
+            log.warn("[Cache] PUT error in '{}' ({})", cache.name, e.javaClass.simpleName)
         }
 
         override fun handleCacheEvictError(e: RuntimeException, cache: Cache, key: Any) {
-            log.warn("[Cache] EVICT error en '{}' key='{}': {}", cache.name, key, e.message)
+            log.warn("[Cache] EVICT error in '{}' ({})", cache.name, e.javaClass.simpleName)
         }
 
         override fun handleCacheClearError(e: RuntimeException, cache: Cache) {
-            log.warn("[Cache] CLEAR error en '{}': {}", cache.name, e.message)
+            log.warn("[Cache] CLEAR error in '{}' ({})", cache.name, e.javaClass.simpleName)
         }
     }
 }
@@ -130,30 +138,39 @@ class RedisConfig : CachingConfigurer {
  */
 @Component
 class CacheManagementService(
-    private val redisTemplate: RedisTemplate<String, Any>
+    private val redisTemplate: RedisTemplate<String, Any>,
+    @Value("\${app.cache.namespace:sigep-local}") cacheNamespace: String = "sigep-local"
 ) {
     private val logger = LoggerFactory.getLogger(CacheManagementService::class.java)
+    private val cacheNamespace = normalizeCacheNamespace(cacheNamespace)
 
     /**
      * Limpia el cache de Redis
      */
-    @CacheEvict(
-        allEntries = true,
-        cacheNames = [
-            "students",
-            "students_detail",
-            "courses",
-            "enrollments",
-            "teachingStaff",
-            "nonTeachingStaff",
-            "exams",
-            "submissions"
-        ]
-    )
     fun clearAllCache() {
-        logger.info("Clearing all Redis cache")
-        redisTemplate.connectionFactory?.connection?.serverCommands()?.flushAll()
-        logger.info("Redis cache cleared successfully")
+        val pattern = "$cacheNamespace::*"
+        var deletedKeys = 0L
+
+        redisTemplate.scan(
+            ScanOptions.scanOptions()
+                .match(pattern)
+                .count(500)
+                .build()
+        ).use { cursor ->
+            val batch = ArrayList<String>(500)
+            while (cursor.hasNext()) {
+                batch.add(cursor.next())
+                if (batch.size == 500) {
+                    deletedKeys += redisTemplate.delete(batch)
+                    batch.clear()
+                }
+            }
+            if (batch.isNotEmpty()) {
+                deletedKeys += redisTemplate.delete(batch)
+            }
+        }
+
+        logger.info("Cleared {} keys from cache namespace '{}'", deletedKeys, cacheNamespace)
     }
 
     /**
@@ -167,4 +184,12 @@ class CacheManagementService(
         logger.info("Scheduled cache clear started")
         clearAllCache()
     }
+}
+
+internal fun normalizeCacheNamespace(value: String): String {
+    val normalized = value.trim()
+    require(normalized.matches(Regex("[A-Za-z0-9._-]+"))) {
+        "app.cache.namespace must contain only letters, numbers, dot, underscore or hyphen"
+    }
+    return normalized
 }

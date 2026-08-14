@@ -43,10 +43,10 @@ class JwtAuthenticationFilter(
 
                 SecurityContextHolder.getContext().authentication = authentication
 
-                log.debug("Authenticated user: {} with role: {}", username, role)
+                log.debug("Authenticated request with role {}", role)
             }
         } catch (ex: Exception) {
-            log.error("Could not set user authentication in security context", ex)
+            log.error("Could not set user authentication in security context ({})", ex.javaClass.simpleName)
         }
 
         filterChain.doFilter(request, response)

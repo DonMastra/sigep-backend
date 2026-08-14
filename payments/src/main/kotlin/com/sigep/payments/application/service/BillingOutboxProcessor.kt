@@ -199,7 +199,11 @@ class BillingOutboxProcessor(
             )
         } catch (exception: Exception) {
             val message = exception.message?.take(MAX_ERROR_LENGTH) ?: exception.javaClass.simpleName
-            logger.warn("Fiscal authorization for invoice {} ended in an ambiguous state: {}", invoiceId, message)
+            logger.warn(
+                "Fiscal authorization for invoice {} ended in an ambiguous state ({})",
+                invoiceId,
+                exception.javaClass.simpleName
+            )
             invoiceRepository.save(
                 authorizing.copy(
                     status = FiscalInvoiceStatus.UNKNOWN,

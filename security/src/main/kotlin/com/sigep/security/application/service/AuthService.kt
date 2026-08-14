@@ -42,7 +42,7 @@ class AuthService(
     private val logger = LoggerFactory.getLogger(AuthService::class.java)
 
     fun login(request: LoginRequest): LoginResponse {
-        logger.info("Login attempt for user: {}", request.username)
+        logger.info("Login attempt received")
 
         val user = userRepository.findByUsername(request.username)
             .orElseThrow { UnauthorizedException("Invalid credentials") }
@@ -56,7 +56,7 @@ class AuthService(
         val token = jwtTokenProvider.generateToken(user)
         val refreshToken = jwtTokenProvider.generateRefreshToken(user)
 
-        logger.info("User {} logged in successfully", user.username)
+        logger.info("Login completed successfully for user id {}", user.id)
 
         return LoginResponse(
             token = token,
@@ -66,7 +66,7 @@ class AuthService(
     }
 
     fun register(request: RegisterRequest): UserDto {
-        logger.info("Registration attempt for username: {}", request.username)
+        logger.info("Public registration attempt received")
 
         if (request.role == UserRole.ADMIN) {
             throw ValidationException("Public registration does not allow ADMIN role")
@@ -113,7 +113,7 @@ class AuthService(
             )
         )
 
-        logger.info("User {} registered successfully", savedUser.username)
+        logger.info("Public registration completed for user id {}", savedUser.id)
 
         return savedUser.toDto()
     }
