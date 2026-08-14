@@ -75,6 +75,7 @@ CORS_ALLOWED_ORIGINS=https://sigep.com.ar,https://www.sigep.com.ar
 CACHE_NAMESPACE=sigep-prod
 REDIS_HOST=<Key Value compartido>
 REDIS_PORT=<puerto>
+REDIS_USERNAME=<usuario interno>
 REDIS_PASSWORD=<secreto>
 APP_PUBLIC_REGISTRATION_ENABLED=false
 BILLING_FISCAL_PROVIDER=disabled
