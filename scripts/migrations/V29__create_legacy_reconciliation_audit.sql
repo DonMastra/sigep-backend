@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS legacy_reconciliation_changes (
     new_state          jsonb NOT NULL DEFAULT '{}'::jsonb,
     created_at         timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uq_legacy_reconciliation_change
-        UNIQUE (run_id, target_table, target_id, change_type),
+        UNIQUE (run_id, entity_type, target_table, target_id, change_type),
     CONSTRAINT chk_legacy_reconciliation_change_type
         CHECK (change_type IN ('CREATED', 'UPDATED', 'RESOLVED'))
 );
