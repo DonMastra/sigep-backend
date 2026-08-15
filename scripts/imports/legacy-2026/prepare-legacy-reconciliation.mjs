@@ -200,7 +200,10 @@ function parseMissing(rows, catalog) {
     if (guardianDocument && !catalog.has(guardianDocument)) {
       throw new Error(`Sin responsable row ${row.sourceWorkbookRow}: guardian document is not in the catalog`);
     }
-    const enrollmentHash = sourceHash("enrollment-2026", `${enrollmentNumber}|${normalize(values["Curso 2026"])}`);
+    // The fixed UAT source run (legacy-2026-v1) persisted enrollment mappings using
+    // only the legacy Matricula value. Keep that historical key for reconciliation;
+    // fresh imports use Matricula + course to support simultaneous enrollments.
+    const enrollmentHash = sourceHash("enrollment-2026", enrollmentNumber);
     return {
       sheetName: "Sin responsable",
       mode: selfGuardian ? "SELF_GUARDIAN" : "MISSING",
@@ -250,7 +253,7 @@ function parseAmbiguous(rows, catalog) {
         throw new Error(`Responsables ambiguos row ${row.sourceWorkbookRow}: CANDIDATO 2 does not match Documento final`);
       }
     }
-    const enrollmentHash = sourceHash("enrollment-2026", `${enrollmentNumber}|${normalize(values.Curso)}`);
+    const enrollmentHash = sourceHash("enrollment-2026", enrollmentNumber);
     return {
       sheetName: "Responsables ambiguos",
       mode: "AMBIGUOUS",

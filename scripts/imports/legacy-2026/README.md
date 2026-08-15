@@ -79,6 +79,8 @@ La escritura requiere agregar `-Execute`. Las credenciales no deben pasarse como
 - registra autorizaciones, administradoras, continuidad y cartel solo mediante hashes de evidencia; la única decisión funcional estructurada es la matrícula general exacta de ARS 90.000;
 - confirma o corrige los 546 `student_number`, aplica V29 y V30, audita cada decisión y cada fila creada/actualizada, verifica el resultado y confirma todo en una sola transacción.
 
+La conciliación está vinculada deliberadamente a `LEGACY-2026-UAT-20260814A`, generado por `legacy-2026-v1`: para localizar sus inscripciones reutiliza la clave histórica basada solo en `Matrícula`. El importador base actual mantiene `Matrícula + curso` para nuevas cargas y así admite dos inscripciones simultáneas del mismo alumno sin colisiones.
+
 La duración de curso debe expresarse en horas enteras porque `courses.duration` es un entero. Los horarios exactos quedan en `course_sessions`. No se inventan feriados ni excepciones: deben registrarse luego con el flujo de sesiones.
 
 Preparación sin escritura:
