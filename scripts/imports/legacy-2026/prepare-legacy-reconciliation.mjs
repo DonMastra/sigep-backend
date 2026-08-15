@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-const IMPORTER_VERSION = "legacy-reconciliation-2026-v2";
+const IMPORTER_VERSION = "legacy-reconciliation-2026-v3";
 const DISABLED_PASSWORD_HASH = "$2a$10$zMRfcjxtD9tGfPJ1wbHI/OvWpQa2gEurEaTMmX9cGGlz4o5pvh96K";
 const SQL_BOUNDARY = "-- SIGEP_STATEMENT_BOUNDARY";
 const COURSE_PERIOD_START = "2026-08-01";
@@ -292,15 +292,28 @@ function parseCourses(rows) {
       throw new Error(`Cursos row ${row.sourceWorkbookRow}: capacity is below active enrollment count`);
     }
     if (capacity > 1000) throw new Error(`Cursos row ${row.sourceWorkbookRow}: capacity exceeds 1000`);
-    const daysOfWeek = parseDays(values.Días, row.sourceWorkbookRow);
-    const startTime = parseTime(values["Hora inicio"], "start time", row.sourceWorkbookRow);
-    const endTime = parseTime(values["Hora fin"], "end time", row.sourceWorkbookRow);
+    const rawDays = values.Días;
+    const rawStartTime = values["Hora inicio"];
+    const rawEndTime = values["Hora fin"];
+    const scheduleFields = [rawDays, rawStartTime, rawEndTime].map(text);
+    const hasSchedule = scheduleFields.some(Boolean);
+    if (hasSchedule && scheduleFields.some((value) => !value)) {
+      throw new Error(`Cursos row ${row.sourceWorkbookRow}: days, start time and end time must be provided together`);
+    }
+    if (!hasSchedule) {
+      if (base.activeStudents > 0) {
+        throw new Error(`Cursos row ${row.sourceWorkbookRow}: an active course requires a schedule`);
+      }
+      return { ...base, durationHours, capacity, daysOfWeek: [], startTime: null, endTime: null, classroomName: null };
+    }
+    const daysOfWeek = parseDays(rawDays, row.sourceWorkbookRow);
+    const startTime = parseTime(rawStartTime, "start time", row.sourceWorkbookRow);
+    const endTime = parseTime(rawEndTime, "end time", row.sourceWorkbookRow);
     if (timeToMinutes(endTime) <= timeToMinutes(startTime)) {
       throw new Error(`Cursos row ${row.sourceWorkbookRow}: end time must be after start time`);
     }
-    const classroomName = text(values["Aula / modalidad"]);
-    if (!classroomName) throw new Error(`Cursos row ${row.sourceWorkbookRow}: classroom or modality is required`);
-    if (classroomName.length > 255) throw new Error(`Cursos row ${row.sourceWorkbookRow}: classroom or modality is too long`);
+    const classroomName = text(values["Aula / modalidad"]) || null;
+    if (classroomName && classroomName.length > 255) throw new Error(`Cursos row ${row.sourceWorkbookRow}: classroom or modality is too long`);
     return { ...base, durationHours, capacity, daysOfWeek, startTime, endTime, classroomName };
   });
 }
@@ -362,6 +375,7 @@ function parseStudentIdentifiers(rows) {
 }
 
 function buildCourseSessions(course) {
+  if (!course.daysOfWeek.length) return [];
   const allowedDays = new Set(course.daysOfWeek);
   const sessions = [];
   for (let cursor = isoDate(COURSE_PERIOD_START); cursor <= isoDate(COURSE_PERIOD_END); cursor = addUtcDays(cursor, 1)) {

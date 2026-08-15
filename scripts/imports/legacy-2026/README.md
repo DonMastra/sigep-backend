@@ -12,7 +12,7 @@ Este proceso prepara y carga el estado académico necesario para continuar el ci
 - Los responsables se crean inactivos y en `PENDING_APPROVAL`, sin credencial utilizable. Deben habilitarse individualmente mediante el flujo de invitación.
 - El export de alumnos no contiene fecha de nacimiento ni domicilio. Se utiliza `1900-01-01` y el texto `SIN INFORMAR - MIGRACION LEGACY 2026` como marcadores visibles y auditados, nunca como datos afirmados.
 - El export de docentes solo contiene nombres. Los demás campos obligatorios quedan con marcadores explícitos; no se crean cuentas docentes.
-- Los 40 cursos quedan con duración confirmada de 60 horas y capacidad confirmada de 20. Días, horas y aula/modalidad siguen pendientes; no se inventan sesiones.
+- Los 40 cursos quedan con duración confirmada de 60 horas y capacidad confirmada de 20. `6.Cursos.xlsx` aporta horario para los 30 cursos con alumnos activos: se generan sus sesiones sin aula asignada. Los 10 cursos sin alumnos y sin horario utilizable se conservan sin sesiones para que Administración los habilite desde la UI cuando corresponda.
 - Se crean 24 niveles según la estructura entregada. `Kids`, `Children` y `Junior` usan el segmento `CHILDREN`; `Teens` y `Senior`, `TEENS`; `Adults`, `ADULTS`.
 - El plan general usa ARS 90.000 y Kids ARS 80.000, vencimiento el día 10, vigencia abril-diciembre y 9 períodos. El import inicial no crea políticas de matrícula: Kids permanece pendiente y la matrícula general se aplica únicamente desde la decisión institucional confirmada de ARS 90.000.
 - No se importan pagos ni se presume que abril-julio estén impagos. Para las matrículas activas con responsable se crean cuotas de agosto a diciembre, sin recargo ni débito automático.
@@ -63,7 +63,7 @@ La escritura requiere agregar `-Execute`. Las credenciales no deben pasarse como
 - incidencias sin resolver inventariadas;
 - backend iniciado con perfil `prod` y `ddl-auto=validate`;
 - backup/restore de la rama descartable probado;
-- horarios, modalidad y responsable de cada incidencia no resuelta definidos antes de considerar el ambiente apto para continuidad operativa.
+- responsables de cada incidencia no resuelta definidos antes de cerrar la conciliación; los cursos sin alumnos pueden permanecer sin sesiones ni aula hasta que Administración decida habilitarlos desde la UI.
 
 ## Conciliación posterior con el libro institucional
 
@@ -74,8 +74,8 @@ La escritura requiere agregar `-Execute`. Las credenciales no deben pasarse como
 - ignora toda fila que no tenga `Estado = CONFIRMADO`;
 - vincula el responsable y crea solicitud, cuotas y cargos de agosto a diciembre solo para casos originalmente bloqueados por falta de responsable; los casos Adults confirmados como `AUTOTUTELA` reciben un usuario GUARDIAN inactivo vinculado a la misma persona STUDENT;
 - cuando cambia un responsable ambiguo, alinea alumno, solicitud y cuenta de los cargos en una transacción, pero aborta si existe pago, factura, recargo o débito asociado;
-- actualiza duración y capacidad y genera sesiones entre el 1 de agosto y el 31 de diciembre solo para cursos confirmados con días, horas y aula/modalidad completos;
-- detecta choques entre docente, alumnos y aulas presenciales antes de escribir;
+- actualiza duración y capacidad para todo curso confirmado y genera sesiones entre el 1 de agosto y el 31 de diciembre cuando días y horas están completos; el aula es opcional y puede asignarse posteriormente desde la UI;
+- rechaza horarios parciales y cursos con alumnos activos sin horario, y detecta choques entre docente, alumnos y aulas presenciales antes de escribir;
 - registra autorizaciones, administradoras, continuidad y cartel solo mediante hashes de evidencia; la única decisión funcional estructurada es la matrícula general exacta de ARS 90.000;
 - confirma o corrige los 546 `student_number`, aplica V29 y V30, audita cada decisión y cada fila creada/actualizada, verifica el resultado y confirma todo en una sola transacción.
 
