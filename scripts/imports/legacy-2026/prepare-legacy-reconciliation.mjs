@@ -3,7 +3,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-const IMPORTER_VERSION = "legacy-reconciliation-2026-v1";
+const IMPORTER_VERSION = "legacy-reconciliation-2026-v2";
+const DISABLED_PASSWORD_HASH = "$2a$10$zMRfcjxtD9tGfPJ1wbHI/OvWpQa2gEurEaTMmX9cGGlz4o5pvh96K";
 const SQL_BOUNDARY = "-- SIGEP_STATEMENT_BOUNDARY";
 const COURSE_PERIOD_START = "2026-08-01";
 const COURSE_PERIOD_END = "2026-12-31";
@@ -41,21 +42,29 @@ const summary = {
   generatedCourseSessions: parsed.courseSessions.length,
   institutionalDecisionsTotal: parsed.institutionalDecisions.length,
   institutionalDecisionsConfirmed: parsed.institutionalDecisionsConfirmed.length,
+  studentIdentifiersTotal: parsed.studentIdentifiers.length,
+  studentIdentifiersConfirmed: parsed.studentIdentifiersConfirmed.length,
 };
 summary.confirmedTotal = summary.missingGuardianConfirmed
   + summary.ambiguousGuardianConfirmed
   + summary.coursesConfirmed
-  + summary.institutionalDecisionsConfirmed;
+  + summary.institutionalDecisionsConfirmed
+  + summary.studentIdentifiersConfirmed;
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const migrationSql = await fs.readFile(
   path.resolve(scriptDir, "../../migrations/V29__create_legacy_reconciliation_audit.sql"),
   "utf8",
 );
+const studentIdentifierMigrationSql = await fs.readFile(
+  path.resolve(scriptDir, "../../migrations/V30__add_student_business_identifier.sql"),
+  "utf8",
+);
 const sqlText = buildSql({
   ...parsed,
   summary,
   migrationSql,
+  studentIdentifierMigrationSql,
   runId,
   workbookSha256,
   expectedDatabase,
@@ -84,6 +93,7 @@ function parseWorkbook(sourceWorkbook) {
     "Cursos",
     "Decisiones",
     "Catálogo responsables",
+    "Identificadores alumnos",
   ];
   const actualSheetNames = sourceWorkbook.worksheets.items.map((sheet) => sheet.name);
   if (actualSheetNames.length !== expectedSheetNames.length
@@ -106,12 +116,17 @@ function parseWorkbook(sourceWorkbook) {
   const institutionalDecisions = parseInstitutionalDecisions(tableRows(sourceWorkbook, "Decisiones", [
     "Tema", "Estado actual", "Respuesta institucional", "Estado", "Responsable", "Observaciones",
   ], 8));
+  const studentIdentifiers = parseStudentIdentifiers(tableRows(sourceWorkbook, "Identificadores alumnos", [
+    "Fila fuente", "Usuario legacy", "Matrícula alumno", "Alumno", "Ciclo de referencia", "Estado", "Observaciones",
+  ], 546));
 
   assertUnique(missing.map((row) => row.enrollmentHash), "missing-guardian enrollment");
   assertUnique(ambiguous.map((row) => row.enrollmentHash), "ambiguous-guardian enrollment");
   assertUnique([...missing, ...ambiguous].map((row) => row.enrollmentHash), "guardian reconciliation enrollment");
   assertUnique([...missing, ...ambiguous].map((row) => row.studentHash), "guardian reconciliation student");
   assertUnique(courses.map((row) => row.courseHash), "course");
+  assertUnique(studentIdentifiers.map((row) => row.studentHash), "student identifier mapping");
+  assertUnique(studentIdentifiers.map((row) => row.studentNumber), "student number");
 
   const coursesConfirmed = courses.filter((row) => row.state === "CONFIRMADO");
   const courseSessions = coursesConfirmed.flatMap(buildCourseSessions);
@@ -125,6 +140,8 @@ function parseWorkbook(sourceWorkbook) {
     courseSessions,
     institutionalDecisions,
     institutionalDecisionsConfirmed: institutionalDecisions.filter((row) => row.state === "CONFIRMADO"),
+    studentIdentifiers,
+    studentIdentifiersConfirmed: studentIdentifiers.filter((row) => row.state === "CONFIRMADO"),
   };
 }
 
@@ -171,17 +188,22 @@ function parseMissing(rows, catalog) {
     if (!legacyUser || !enrollmentNumber || !text(values.Alumno) || !text(values["Curso 2026"])) {
       throw new Error(`Sin responsable row ${row.sourceWorkbookRow}: immutable identity fields are incomplete`);
     }
-    const guardianDocument = digits(values["Documento responsable"]);
-    if (state === "CONFIRMADO" && !guardianDocument) {
+    const guardianToken = normalize(values["Documento responsable"]);
+    const selfGuardian = guardianToken === "AUTOTUTELA";
+    const guardianDocument = selfGuardian ? null : digits(values["Documento responsable"]);
+    if (selfGuardian && !normalize(values["Curso 2026"]).startsWith("ADULTS ")) {
+      throw new Error(`Sin responsable row ${row.sourceWorkbookRow}: AUTOTUTELA is only valid for Adults`);
+    }
+    if (state === "CONFIRMADO" && !guardianDocument && !selfGuardian) {
       throw new Error(`Sin responsable row ${row.sourceWorkbookRow}: confirmed row has no guardian document`);
     }
     if (guardianDocument && !catalog.has(guardianDocument)) {
       throw new Error(`Sin responsable row ${row.sourceWorkbookRow}: guardian document is not in the catalog`);
     }
-    const enrollmentHash = sourceHash("enrollment-2026", enrollmentNumber);
+    const enrollmentHash = sourceHash("enrollment-2026", `${enrollmentNumber}|${normalize(values["Curso 2026"])}`);
     return {
       sheetName: "Sin responsable",
-      mode: "MISSING",
+      mode: selfGuardian ? "SELF_GUARDIAN" : "MISSING",
       sourceRow,
       legacyUser,
       enrollmentNumber,
@@ -191,7 +213,7 @@ function parseMissing(rows, catalog) {
       studentName: text(values.Alumno),
       courseName: text(values["Curso 2026"]),
       currentGuardianHash: null,
-      finalGuardianHash: guardianDocument ? catalog.get(guardianDocument).guardianHash : null,
+      finalGuardianHash: selfGuardian ? sourceHash("self-guardian", legacyUser) : (guardianDocument ? catalog.get(guardianDocument).guardianHash : null),
       state,
     };
   });
@@ -228,7 +250,7 @@ function parseAmbiguous(rows, catalog) {
         throw new Error(`Responsables ambiguos row ${row.sourceWorkbookRow}: CANDIDATO 2 does not match Documento final`);
       }
     }
-    const enrollmentHash = sourceHash("enrollment-2026", enrollmentNumber);
+    const enrollmentHash = sourceHash("enrollment-2026", `${enrollmentNumber}|${normalize(values.Curso)}`);
     return {
       sheetName: "Responsables ambiguos",
       mode: "AMBIGUOUS",
@@ -295,11 +317,45 @@ function parseInstitutionalDecisions(rows) {
     if (state === "CONFIRMADO" && (!response || !responsible)) {
       throw new Error(`Decisiones row ${row.sourceWorkbookRow}: confirmed decision requires response and responsible`);
     }
+    const normalizedTopic = normalize(topic);
+    let action = "RECORD_ONLY";
+    let amount = null;
+    if (normalizedTopic === "MATRICULA GENERAL 2026" && state === "CONFIRMADO") {
+      action = "CREATE_GENERAL_ENROLLMENT_FEE_POLICY";
+      amount = firstMoneyAmount(response);
+      if (amount !== 90000) {
+        throw new Error(`Decisiones row ${row.sourceWorkbookRow}: general enrollment fee must be ARS 90000`);
+      }
+    }
     return {
       sheetName: "Decisiones",
       topic,
       sourceKeyHash: sourceHash("institutional-decision-2026", topic),
       decisionHash: state === "CONFIRMADO" ? sha256([normalize(response), normalize(responsible), normalize(observations)].join("|")) : null,
+      action,
+      amount,
+      state,
+    };
+  });
+}
+
+function parseStudentIdentifiers(rows) {
+  return rows.map((row) => {
+    const values = row.values;
+    const sourceRow = positiveInteger(values["Fila fuente"], "student source row", row.sourceWorkbookRow);
+    const legacyUser = digits(values["Usuario legacy"]);
+    const studentNumber = digits(values["Matrícula alumno"]);
+    const state = reconciliationState(values.Estado, row.sourceWorkbookRow);
+    if (!legacyUser || !studentNumber || !text(values.Alumno) || !text(values["Ciclo de referencia"])) {
+      throw new Error(`Identificadores alumnos row ${row.sourceWorkbookRow}: required fields are incomplete`);
+    }
+    return {
+      sheetName: "Identificadores alumnos",
+      sourceRow,
+      legacyUser,
+      studentHash: sourceHash("student", legacyUser),
+      studentNumber,
+      studentNumberHash: sha256(studentNumber),
       state,
     };
   });
@@ -329,15 +385,18 @@ function buildSql(input) {
     "SET LOCAL lock_timeout = '10s'",
     "SET LOCAL statement_timeout = '15min'",
     ...splitSimpleMigration(input.migrationSql),
+    ...splitSimpleMigration(input.studentIdentifierMigrationSql),
     ...stageStatements(input),
     preflightSql(input),
     `INSERT INTO legacy_reconciliation_runs (run_id,original_import_run_id,workbook_sha256,importer_version,target_git_commit,status) VALUES (${sql(input.runId)},${sql(input.originalImportRunId)},${sql(input.workbookSha256)},'${IMPORTER_VERSION}',${sql(input.targetGitCommit)},'RUNNING')`,
     applyGuardianDecisionsSql(input),
     applyCourseDecisionsSql(input),
-    recordInstitutionalDecisionsSql(input),
+    applyStudentIdentifierDecisionsSql(input),
+    applyInstitutionalDecisionsSql(input),
     postflightSql(input),
     `UPDATE legacy_reconciliation_runs SET status='COMPLETED',completed_at=CURRENT_TIMESTAMP,summary=${sql(JSON.stringify(input.summary))}::jsonb WHERE run_id=${sql(input.runId)}`,
     `INSERT INTO schema_version(version,git_commit,description) VALUES ('V29',${sql(input.targetGitCommit)},'Legacy 2026 institutional reconciliation audit') ON CONFLICT(version) DO UPDATE SET git_commit=EXCLUDED.git_commit,applied_at=CURRENT_TIMESTAMP,description=EXCLUDED.description`,
+    `INSERT INTO schema_version(version,git_commit,description) VALUES ('V30',${sql(input.targetGitCommit)},'Student business identifier') ON CONFLICT(version) DO UPDATE SET git_commit=EXCLUDED.git_commit,applied_at=CURRENT_TIMESTAMP,description=EXCLUDED.description`,
     "COMMIT",
   ];
   return statements.map((statement) => `${statement.trim().replace(/;\s*$/, "")};`)
@@ -367,9 +426,9 @@ function stageStatements(input) {
   return [
     "CREATE TEMP TABLE stage_expected_guardian_issues(enrollment_hash varchar(64),issue_code varchar(80),source_row int,student_hash varchar(64)) ON COMMIT DROP",
     insertValues("stage_expected_guardian_issues", ["enrollment_hash", "issue_code", "source_row", "student_hash"], expectedIssues),
-    "CREATE TEMP TABLE stage_guardian_decisions(sheet_name text,mode text,source_row int,enrollment_hash varchar(64),application_hash varchar(64),student_hash varchar(64),current_guardian_hash varchar(64),final_guardian_hash varchar(64)) ON COMMIT DROP",
-    insertValues("stage_guardian_decisions", ["sheet_name", "mode", "source_row", "enrollment_hash", "application_hash", "student_hash", "current_guardian_hash", "final_guardian_hash"], guardianDecisions.map((row) => [
-      row.sheetName, row.mode, row.sourceRow, row.enrollmentHash, row.applicationHash, row.studentHash,
+    "CREATE TEMP TABLE stage_guardian_decisions(sheet_name text,mode text,source_row int,legacy_user text,enrollment_hash varchar(64),application_hash varchar(64),student_hash varchar(64),current_guardian_hash varchar(64),final_guardian_hash varchar(64)) ON COMMIT DROP",
+    insertValues("stage_guardian_decisions", ["sheet_name", "mode", "source_row", "legacy_user", "enrollment_hash", "application_hash", "student_hash", "current_guardian_hash", "final_guardian_hash"], guardianDecisions.map((row) => [
+      row.sheetName, row.mode, row.sourceRow, row.legacyUser, row.enrollmentHash, row.applicationHash, row.studentHash,
       row.currentGuardianHash, row.finalGuardianHash,
     ])),
     "CREATE TEMP TABLE stage_guardian_billing_periods(enrollment_hash varchar(64),due_date date,ledger_hash varchar(64)) ON COMMIT DROP",
@@ -385,8 +444,10 @@ function stageStatements(input) {
     insertValues("stage_course_sessions", ["course_hash", "session_date", "start_time", "end_time", "classroom_name"], input.courseSessions.map((row) => [
       row.courseHash, row.sessionDate, row.startTime, row.endTime, row.classroomName,
     ])),
-    "CREATE TEMP TABLE stage_institutional_decisions(source_key_hash varchar(64),decision_hash varchar(64)) ON COMMIT DROP",
-    insertValues("stage_institutional_decisions", ["source_key_hash", "decision_hash"], input.institutionalDecisionsConfirmed.map((row) => [row.sourceKeyHash, row.decisionHash])),
+    "CREATE TEMP TABLE stage_institutional_decisions(source_key_hash varchar(64),decision_hash varchar(64),action text,amount numeric(12,2)) ON COMMIT DROP",
+    insertValues("stage_institutional_decisions", ["source_key_hash", "decision_hash", "action", "amount"], input.institutionalDecisionsConfirmed.map((row) => [row.sourceKeyHash, row.decisionHash, row.action, row.amount])),
+    "CREATE TEMP TABLE stage_student_identifiers(source_row int,student_hash varchar(64),student_number varchar(32),student_number_hash varchar(64)) ON COMMIT DROP",
+    insertValues("stage_student_identifiers", ["source_row", "student_hash", "student_number", "student_number_hash"], input.studentIdentifiersConfirmed.map((row) => [row.sourceRow, row.studentHash, row.studentNumber, row.studentNumberHash])),
   ];
 }
 
@@ -430,11 +491,30 @@ function preflightSql(input) {
      AND mapping.target_table='courses'
     WHERE mapping.id IS NULL;
     IF mismatch_count <> 0 THEN RAISE EXCEPTION 'Workbook courses do not match the original import'; END IF;
+    IF (SELECT count(*) FROM stage_student_identifiers) <> 546 THEN RAISE EXCEPTION 'Student identifier template is incomplete'; END IF;
+    IF EXISTS (
+      SELECT 1 FROM stage_student_identifiers staged
+      LEFT JOIN legacy_import_entity_map student_map
+        ON student_map.run_id=${sql(input.originalImportRunId)}
+       AND student_map.entity_type='STUDENT'
+       AND student_map.source_key_hash=staged.student_hash
+       AND student_map.source_row=staged.source_row
+       AND student_map.target_table='students'
+      WHERE student_map.id IS NULL
+    ) THEN RAISE EXCEPTION 'Student identifiers do not match the original import'; END IF;
+    IF EXISTS (SELECT 1 FROM stage_institutional_decisions WHERE action='CREATE_GENERAL_ENROLLMENT_FEE_POLICY' AND amount<>90000) THEN
+      RAISE EXCEPTION 'General enrollment fee amount differs from the approved ARS 90000';
+    END IF;
+    IF EXISTS (SELECT 1 FROM stage_institutional_decisions WHERE action='CREATE_GENERAL_ENROLLMENT_FEE_POLICY')
+       AND EXISTS (SELECT 1 FROM tuition_enrollment_fee_policies WHERE default_policy=true AND status='ACTIVE' AND valid_from<=DATE '2026-12-31' AND COALESCE(valid_to,DATE '9999-12-31')>=DATE '2026-04-01') THEN
+      RAISE EXCEPTION 'An active default enrollment fee policy already overlaps 2026';
+    END IF;
     IF EXISTS (
       SELECT 1 FROM (
         SELECT sheet_name, enrollment_hash AS source_key_hash FROM stage_guardian_decisions
         UNION ALL SELECT 'Cursos', course_hash FROM stage_course_decisions
         UNION ALL SELECT 'Decisiones', source_key_hash FROM stage_institutional_decisions
+        UNION ALL SELECT 'Identificadores alumnos', student_hash FROM stage_student_identifiers
       ) staged
       JOIN legacy_reconciliation_decisions decision
         ON decision.sheet_name=staged.sheet_name AND decision.source_key_hash=staged.source_key_hash
@@ -460,14 +540,14 @@ function preflightSql(input) {
        AND guardian_map.source_key_hash=staged.final_guardian_hash
        AND guardian_map.target_table='users'
       LEFT JOIN users guardian ON guardian.id=guardian_map.target_id AND guardian.role='GUARDIAN'
-      WHERE enrollment_map.id IS NULL OR student_map.id IS NULL OR guardian.id IS NULL
+      WHERE enrollment_map.id IS NULL OR student_map.id IS NULL OR (staged.mode<>'SELF_GUARDIAN' AND guardian.id IS NULL)
     ) THEN RAISE EXCEPTION 'Confirmed guardian decision cannot be resolved against original mappings'; END IF;
     IF EXISTS (
       SELECT 1 FROM stage_guardian_decisions staged
       JOIN legacy_import_entity_map student_map ON student_map.run_id=${sql(input.originalImportRunId)} AND student_map.entity_type='STUDENT' AND student_map.source_key_hash=staged.student_hash AND student_map.target_table='students'
       JOIN students student ON student.id=student_map.target_id
       LEFT JOIN legacy_import_entity_map current_guardian_map ON current_guardian_map.run_id=${sql(input.originalImportRunId)} AND current_guardian_map.entity_type='GUARDIAN' AND current_guardian_map.source_key_hash=staged.current_guardian_hash AND current_guardian_map.target_table='users'
-      WHERE (staged.mode='MISSING' AND student.guardian_id IS NOT NULL)
+      WHERE (staged.mode IN ('MISSING','SELF_GUARDIAN') AND student.guardian_id IS NOT NULL)
          OR (staged.mode='AMBIGUOUS' AND student.guardian_id IS DISTINCT FROM current_guardian_map.target_id)
     ) THEN RAISE EXCEPTION 'Student guardian state changed after the original import'; END IF;
     IF EXISTS (
@@ -484,7 +564,7 @@ function preflightSql(input) {
       SELECT 1 FROM stage_guardian_decisions staged
       JOIN legacy_import_entity_map enrollment_map ON enrollment_map.run_id=${sql(input.originalImportRunId)} AND enrollment_map.entity_type='ENROLLMENT' AND enrollment_map.source_key_hash=staged.enrollment_hash AND enrollment_map.target_table='enrollments'
       JOIN enrollments enrollment ON enrollment.id=enrollment_map.target_id
-      WHERE staged.mode='MISSING' AND (
+      WHERE staged.mode IN ('MISSING','SELF_GUARDIAN') AND (
         EXISTS (SELECT 1 FROM tuition_applications application WHERE application.enrollment_id=enrollment.id)
         OR EXISTS (SELECT 1 FROM tuition_ledger_entries ledger WHERE ledger.student_id=enrollment.student_id)
       )
@@ -566,7 +646,10 @@ function applyGuardianDecisionsSql(input) {
     SELECT target_id INTO year_id_value FROM legacy_import_entity_map WHERE run_id=${sql(input.originalImportRunId)} AND entity_type='ACADEMIC_YEAR' AND source_key_hash='${academicYearHash}' AND target_table='tuition_academic_years';
     FOR r IN SELECT * FROM stage_guardian_decisions ORDER BY source_row LOOP
       SELECT target_id INTO student_id_value FROM legacy_import_entity_map WHERE run_id=${sql(input.originalImportRunId)} AND entity_type='STUDENT' AND source_key_hash=r.student_hash AND target_table='students';
-      SELECT target_id INTO guardian_id_value FROM legacy_import_entity_map WHERE run_id=${sql(input.originalImportRunId)} AND entity_type='GUARDIAN' AND source_key_hash=r.final_guardian_hash AND target_table='users';
+      guardian_id_value:=NULL;
+      IF r.mode<>'SELF_GUARDIAN' THEN
+        SELECT target_id INTO guardian_id_value FROM legacy_import_entity_map WHERE run_id=${sql(input.originalImportRunId)} AND entity_type='GUARDIAN' AND source_key_hash=r.final_guardian_hash AND target_table='users';
+      END IF;
       SELECT target_id INTO enrollment_id_value FROM legacy_import_entity_map WHERE run_id=${sql(input.originalImportRunId)} AND entity_type='ENROLLMENT' AND source_key_hash=r.enrollment_hash AND target_table='enrollments';
       SELECT course_id INTO course_id_value FROM enrollments WHERE id=enrollment_id_value;
       SELECT id INTO level_id_value FROM tuition_levels WHERE code=(SELECT current_level FROM students WHERE id=student_id_value);
@@ -581,10 +664,19 @@ function applyGuardianDecisionsSql(input) {
         current_guardian_id_value:=NULL;
       END IF;
       INSERT INTO legacy_reconciliation_decisions(run_id,sheet_name,decision_type,source_key_hash,target_source_key_hash,outcome)
-      VALUES(${sql(input.runId)},r.sheet_name,CASE WHEN r.mode='MISSING' THEN 'LINK_GUARDIAN_AND_CREATE_BILLING' ELSE 'CONFIRM_OR_REASSIGN_GUARDIAN' END,r.enrollment_hash,r.final_guardian_hash,CASE WHEN r.mode='AMBIGUOUS' AND r.current_guardian_hash=r.final_guardian_hash THEN 'CONFIRMED_NO_CHANGE' ELSE 'APPLIED' END)
+      VALUES(${sql(input.runId)},r.sheet_name,CASE WHEN r.mode='SELF_GUARDIAN' THEN 'CREATE_SELF_GUARDIAN_AND_BILLING' WHEN r.mode='MISSING' THEN 'LINK_GUARDIAN_AND_CREATE_BILLING' ELSE 'CONFIRM_OR_REASSIGN_GUARDIAN' END,r.enrollment_hash,r.final_guardian_hash,CASE WHEN r.mode='AMBIGUOUS' AND r.current_guardian_hash=r.final_guardian_hash THEN 'CONFIRMED_NO_CHANGE' ELSE 'APPLIED' END)
       RETURNING id INTO decision_id_value;
 
-      IF r.mode='MISSING' OR r.current_guardian_hash<>r.final_guardian_hash THEN
+      IF r.mode='SELF_GUARDIAN' THEN
+        INSERT INTO users(username,email,password,first_name,last_name,phone_number,address,date_of_birth,document_number,role,status,active,created_at,updated_at)
+        SELECT 'adulto-legacy-'||r.legacy_user,'adulto-'||r.legacy_user||'@invalid.sigep.local','${DISABLED_PASSWORD_HASH}',first_name,last_name,phone_number,address,date_of_birth,document_number,'GUARDIAN','PENDING_APPROVAL',false,now(),now()
+        FROM students WHERE id=student_id_value
+        RETURNING id INTO guardian_id_value;
+        INSERT INTO legacy_reconciliation_changes(run_id,decision_id,entity_type,target_table,target_id,change_type,new_state)
+        VALUES(${sql(input.runId)},decision_id_value,'SELF_GUARDIAN_USER','users',guardian_id_value,'CREATED',jsonb_build_object('student_id',student_id_value,'login_enabled',false));
+      END IF;
+
+      IF r.mode IN ('MISSING','SELF_GUARDIAN') OR r.current_guardian_hash<>r.final_guardian_hash THEN
         INSERT INTO legacy_reconciliation_changes(run_id,decision_id,entity_type,target_table,target_id,change_type,previous_state,new_state)
         VALUES(${sql(input.runId)},decision_id_value,'STUDENT_GUARDIAN','students',student_id_value,'UPDATED',jsonb_build_object('guardian_id',current_guardian_id_value),jsonb_build_object('guardian_id',guardian_id_value));
         UPDATE students SET guardian_id=guardian_id_value,updated_at=now() WHERE id=student_id_value;
@@ -592,7 +684,7 @@ function applyGuardianDecisionsSql(input) {
         VALUES(student_id_value,current_guardian_id_value,guardian_id_value,CASE WHEN current_guardian_id_value IS NULL THEN 'LINKED' ELSE 'REASSIGNED' END,'ADMIN',actor_id_value,'Legacy reconciliation '||${sql(input.runId)},now());
       END IF;
 
-      IF r.mode='MISSING' OR r.current_guardian_hash<>r.final_guardian_hash THEN
+      IF r.mode IN ('MISSING','SELF_GUARDIAN') OR r.current_guardian_hash<>r.final_guardian_hash THEN
         SELECT id INTO account_id_value FROM billing_accounts WHERE guardian_user_id=guardian_id_value;
         account_created:=account_id_value IS NULL;
         IF account_created THEN
@@ -613,7 +705,7 @@ function applyGuardianDecisionsSql(input) {
         END IF;
       END IF;
 
-      IF r.mode='MISSING' THEN
+      IF r.mode IN ('MISSING','SELF_GUARDIAN') THEN
         INSERT INTO tuition_applications(admin_notes,application_type,approved_at,approved_by,created_at,enrollment_id,guardian_user_id,status,submitted_at,updated_at,academic_year_id,fee_plan_id,requires_admin_override,assigned_course_id,assigned_level_id,actor_user_id,origin,student_id,student_resolution,idempotency_key,version)
         VALUES('Importacion de continuidad ciclo 2026 conciliada', 'REGULAR_PROMOTION',now(),actor_id_value,now(),enrollment_id_value,guardian_id_value,'APPROVED',TIMESTAMP '2026-04-01 00:00:00',now(),year_id_value,plan_id_value,false,course_id_value,level_id_value,actor_id_value,'ADMIN',student_id_value,'EXISTING','legacy-2026-'||r.enrollment_hash,0)
         RETURNING id INTO application_id_value;
@@ -647,7 +739,7 @@ function applyGuardianDecisionsSql(input) {
         END LOOP;
       END IF;
 
-      SELECT id INTO issue_id_value FROM legacy_import_issues WHERE run_id=${sql(input.originalImportRunId)} AND source_key_hash=r.enrollment_hash AND issue_code=CASE WHEN r.mode='MISSING' THEN 'MISSING_GUARDIAN_MATCH' ELSE 'MULTIPLE_GUARDIAN_MATCHES' END AND resolved_at IS NULL;
+      SELECT id INTO issue_id_value FROM legacy_import_issues WHERE run_id=${sql(input.originalImportRunId)} AND source_key_hash=r.enrollment_hash AND issue_code=CASE WHEN r.mode IN ('MISSING','SELF_GUARDIAN') THEN 'MISSING_GUARDIAN_MATCH' ELSE 'MULTIPLE_GUARDIAN_MATCHES' END AND resolved_at IS NULL;
       INSERT INTO legacy_reconciliation_changes(run_id,decision_id,entity_type,target_table,target_id,change_type,previous_state,new_state)
       VALUES(${sql(input.runId)},decision_id_value,'LEGACY_IMPORT_ISSUE','legacy_import_issues',issue_id_value,'RESOLVED',jsonb_build_object('resolved',false),jsonb_build_object('resolved',true));
       UPDATE legacy_import_issues SET resolved_at=now(),resolution='Resolved by reconciliation run '||${sql(input.runId)} WHERE id=issue_id_value;
@@ -673,7 +765,7 @@ function applyCourseDecisionsSql(input) {
       END LOOP;
     END LOOP;
     IF (SELECT count(DISTINCT decision.source_key_hash) FROM legacy_reconciliation_decisions decision JOIN legacy_reconciliation_runs run ON run.run_id=decision.run_id WHERE run.original_import_run_id=${sql(input.originalImportRunId)} AND run.status IN ('RUNNING','COMPLETED') AND decision.sheet_name='Cursos')=40 THEN
-      SELECT id INTO issue_id_value FROM legacy_import_issues WHERE run_id=${sql(input.originalImportRunId)} AND issue_code='MISSING_SCHEDULE_AND_CAPACITY' AND resolved_at IS NULL;
+      SELECT id INTO issue_id_value FROM legacy_import_issues WHERE run_id=${sql(input.originalImportRunId)} AND issue_code='MISSING_SCHEDULE' AND resolved_at IS NULL;
       IF issue_id_value IS NOT NULL THEN
         SELECT id INTO decision_id_value FROM legacy_reconciliation_decisions WHERE run_id=${sql(input.runId)} AND sheet_name='Cursos' ORDER BY id LIMIT 1;
         INSERT INTO legacy_reconciliation_changes(run_id,decision_id,entity_type,target_table,target_id,change_type,previous_state,new_state)
@@ -684,10 +776,46 @@ function applyCourseDecisionsSql(input) {
   END $$`;
 }
 
-function recordInstitutionalDecisionsSql(input) {
-  return `INSERT INTO legacy_reconciliation_decisions(run_id,sheet_name,decision_type,source_key_hash,target_source_key_hash,outcome)
-    SELECT ${sql(input.runId)},'Decisiones','INSTITUTIONAL_DECISION_RECORDED',source_key_hash,decision_hash,'RECORDED_ONLY'
-    FROM stage_institutional_decisions`;
+function applyStudentIdentifierDecisionsSql(input) {
+  return `DO $$ DECLARE r record; decision_id_value bigint; student_id_value bigint; previous_number text; BEGIN
+    FOR r IN SELECT * FROM stage_student_identifiers ORDER BY source_row LOOP
+      SELECT target_id INTO student_id_value FROM legacy_import_entity_map
+      WHERE run_id=${sql(input.originalImportRunId)} AND entity_type='STUDENT' AND source_key_hash=r.student_hash AND target_table='students';
+      SELECT student_number INTO previous_number FROM students WHERE id=student_id_value;
+      INSERT INTO legacy_reconciliation_decisions(run_id,sheet_name,decision_type,source_key_hash,target_source_key_hash,outcome)
+      VALUES(${sql(input.runId)},'Identificadores alumnos','CONFIRM_STUDENT_NUMBER',r.student_hash,r.student_number_hash,CASE WHEN previous_number=r.student_number THEN 'CONFIRMED_NO_CHANGE' ELSE 'APPLIED' END)
+      RETURNING id INTO decision_id_value;
+      IF previous_number IS DISTINCT FROM r.student_number THEN
+        INSERT INTO legacy_reconciliation_changes(run_id,decision_id,entity_type,target_table,target_id,change_type,previous_state,new_state)
+        VALUES(${sql(input.runId)},decision_id_value,'STUDENT_NUMBER','students',student_id_value,'UPDATED',jsonb_build_object('student_number',previous_number),jsonb_build_object('student_number',r.student_number));
+        UPDATE students SET student_number=r.student_number,updated_at=now() WHERE id=student_id_value;
+      END IF;
+    END LOOP;
+  END $$`;
+}
+
+function applyInstitutionalDecisionsSql(input) {
+  return `DO $$ DECLARE r record; decision_id_value bigint; policy_id_value bigint; issue_id_value bigint; BEGIN
+    FOR r IN SELECT * FROM stage_institutional_decisions ORDER BY source_key_hash LOOP
+      INSERT INTO legacy_reconciliation_decisions(run_id,sheet_name,decision_type,source_key_hash,target_source_key_hash,outcome)
+      VALUES(${sql(input.runId)},'Decisiones',CASE WHEN r.action='CREATE_GENERAL_ENROLLMENT_FEE_POLICY' THEN r.action ELSE 'INSTITUTIONAL_DECISION_RECORDED' END,r.source_key_hash,r.decision_hash,CASE WHEN r.action='CREATE_GENERAL_ENROLLMENT_FEE_POLICY' THEN 'APPLIED' ELSE 'RECORDED_ONLY' END)
+      RETURNING id INTO decision_id_value;
+      IF r.action='CREATE_GENERAL_ENROLLMENT_FEE_POLICY' THEN
+        INSERT INTO tuition_enrollment_fee_policies(amount,automatic_debit_eligible,created_at,currency,default_policy,name,payment_due_days,status,updated_at,valid_from,valid_to)
+        VALUES(r.amount,false,now(),'ARS',true,'Matricula general 2026',3,'ACTIVE',now(),DATE '2026-04-01',DATE '2026-12-31')
+        RETURNING id INTO policy_id_value;
+        INSERT INTO legacy_reconciliation_changes(run_id,decision_id,entity_type,target_table,target_id,change_type,new_state)
+        VALUES(${sql(input.runId)},decision_id_value,'ENROLLMENT_FEE_POLICY','tuition_enrollment_fee_policies',policy_id_value,'CREATED',jsonb_build_object('amount',r.amount,'currency','ARS','default_policy',true));
+        SELECT id INTO issue_id_value FROM legacy_import_issues
+        WHERE run_id=${sql(input.originalImportRunId)} AND issue_code='GENERAL_ENROLLMENT_FEE_UNKNOWN' AND resolved_at IS NULL;
+        IF issue_id_value IS NOT NULL THEN
+          INSERT INTO legacy_reconciliation_changes(run_id,decision_id,entity_type,target_table,target_id,change_type,previous_state,new_state)
+          VALUES(${sql(input.runId)},decision_id_value,'LEGACY_IMPORT_ISSUE','legacy_import_issues',issue_id_value,'RESOLVED',jsonb_build_object('resolved',false),jsonb_build_object('resolved',true));
+          UPDATE legacy_import_issues SET resolved_at=now(),resolution='General enrollment fee confirmed at ARS 90000 by reconciliation run '||${sql(input.runId)} WHERE id=issue_id_value;
+        END IF;
+      END IF;
+    END LOOP;
+  END $$`;
 }
 
 function postflightSql(input) {
@@ -699,18 +827,21 @@ function postflightSql(input) {
     IF EXISTS (
       SELECT 1 FROM stage_guardian_decisions staged
       JOIN legacy_import_entity_map student_map ON student_map.run_id=${sql(input.originalImportRunId)} AND student_map.entity_type='STUDENT' AND student_map.source_key_hash=staged.student_hash AND student_map.target_table='students'
-      JOIN legacy_import_entity_map guardian_map ON guardian_map.run_id=${sql(input.originalImportRunId)} AND guardian_map.entity_type='GUARDIAN' AND guardian_map.source_key_hash=staged.final_guardian_hash AND guardian_map.target_table='users'
+      LEFT JOIN legacy_import_entity_map guardian_map ON guardian_map.run_id=${sql(input.originalImportRunId)} AND guardian_map.entity_type='GUARDIAN' AND guardian_map.source_key_hash=staged.final_guardian_hash AND guardian_map.target_table='users'
       JOIN students student ON student.id=student_map.target_id
-      WHERE student.guardian_id<>guardian_map.target_id
+      LEFT JOIN users self_guardian ON self_guardian.id=student.guardian_id AND self_guardian.role='GUARDIAN' AND self_guardian.username='adulto-legacy-'||staged.legacy_user AND self_guardian.active=false
+      WHERE (staged.mode='SELF_GUARDIAN' AND self_guardian.id IS NULL)
+         OR (staged.mode<>'SELF_GUARDIAN' AND student.guardian_id<>guardian_map.target_id)
     ) THEN RAISE EXCEPTION 'Student guardian postflight mismatch'; END IF;
     IF EXISTS (
       SELECT 1 FROM stage_guardian_decisions staged
       JOIN legacy_import_entity_map enrollment_map ON enrollment_map.run_id=${sql(input.originalImportRunId)} AND enrollment_map.entity_type='ENROLLMENT' AND enrollment_map.source_key_hash=staged.enrollment_hash AND enrollment_map.target_table='enrollments'
       JOIN enrollments enrollment ON enrollment.id=enrollment_map.target_id
-      JOIN legacy_import_entity_map guardian_map ON guardian_map.run_id=${sql(input.originalImportRunId)} AND guardian_map.entity_type='GUARDIAN' AND guardian_map.source_key_hash=staged.final_guardian_hash AND guardian_map.target_table='users'
+      JOIN students student ON student.id=enrollment.student_id
+      LEFT JOIN legacy_import_entity_map guardian_map ON guardian_map.run_id=${sql(input.originalImportRunId)} AND guardian_map.entity_type='GUARDIAN' AND guardian_map.source_key_hash=staged.final_guardian_hash AND guardian_map.target_table='users'
       LEFT JOIN tuition_applications application ON application.enrollment_id=enrollment.id
-      WHERE application.id IS NULL OR application.guardian_user_id<>guardian_map.target_id
-         OR (staged.mode='MISSING' AND ((SELECT count(*) FROM tuition_ledger_entries ledger WHERE ledger.application_id=application.id)<>5 OR (SELECT count(*) FROM tuition_ledger_entries ledger JOIN billing_charges charge ON charge.source_type='TUITION_LEDGER' AND charge.source_id=ledger.id WHERE ledger.application_id=application.id)<>5))
+      WHERE application.id IS NULL OR application.guardian_user_id<>CASE WHEN staged.mode='SELF_GUARDIAN' THEN student.guardian_id ELSE guardian_map.target_id END
+         OR (staged.mode IN ('MISSING','SELF_GUARDIAN') AND ((SELECT count(*) FROM tuition_ledger_entries ledger WHERE ledger.application_id=application.id)<>5 OR (SELECT count(*) FROM tuition_ledger_entries ledger JOIN billing_charges charge ON charge.source_type='TUITION_LEDGER' AND charge.source_id=ledger.id WHERE ledger.application_id=application.id)<>5))
     ) THEN RAISE EXCEPTION 'Tuition or billing postflight mismatch'; END IF;
     IF EXISTS (
       SELECT 1 FROM stage_course_decisions staged
@@ -719,6 +850,16 @@ function postflightSql(input) {
       WHERE course.duration<>staged.duration_hours OR course.max_students<>staged.max_students
          OR (SELECT count(*) FROM course_sessions session WHERE session.course_id=course.id)<>staged.expected_sessions
     ) THEN RAISE EXCEPTION 'Course reconciliation postflight mismatch'; END IF;
+    IF EXISTS (
+      SELECT 1 FROM stage_student_identifiers staged
+      JOIN legacy_import_entity_map student_map ON student_map.run_id=${sql(input.originalImportRunId)} AND student_map.entity_type='STUDENT' AND student_map.source_key_hash=staged.student_hash AND student_map.target_table='students'
+      JOIN students student ON student.id=student_map.target_id
+      WHERE student.student_number<>staged.student_number
+    ) THEN RAISE EXCEPTION 'Student identifier postflight mismatch'; END IF;
+    IF EXISTS (SELECT 1 FROM stage_institutional_decisions WHERE action='CREATE_GENERAL_ENROLLMENT_FEE_POLICY')
+       AND NOT EXISTS (SELECT 1 FROM tuition_enrollment_fee_policies WHERE name='Matricula general 2026' AND amount=90000 AND currency='ARS' AND default_policy=true AND status='ACTIVE') THEN
+      RAISE EXCEPTION 'General enrollment fee policy postflight mismatch';
+    END IF;
   END $$`;
 }
 
@@ -844,6 +985,14 @@ function normalize(value) {
 
 function digits(value) {
   return text(value).replace(/\D/g, "");
+}
+
+function firstMoneyAmount(value) {
+  const match = text(value).match(/(?:ARS\s*)?([0-9]+(?:[.,][0-9]{3})*)/i);
+  if (!match) return null;
+  const normalized = match[1].replace(/[.,]/g, "");
+  const amount = Number.parseInt(normalized, 10);
+  return Number.isSafeInteger(amount) ? amount : null;
 }
 
 function sha256(value) {

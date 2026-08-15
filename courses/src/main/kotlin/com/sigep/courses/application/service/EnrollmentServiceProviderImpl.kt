@@ -4,6 +4,7 @@ import com.sigep.common.application.dto.EnrollmentSummaryDto
 import com.sigep.common.application.service.EnrollmentServiceProvider
 import com.sigep.courses.domain.repository.EnrollmentRepository
 import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
 
 /**
@@ -16,7 +17,7 @@ class EnrollmentServiceProviderImpl(
 ) : EnrollmentServiceProvider {
 
     override fun getEnrollmentsByStudent(studentId: Long): List<EnrollmentSummaryDto> {
-        val pageable = PageRequest.of(0, 1000)
+        val pageable = PageRequest.of(0, 1000, Sort.by(Sort.Direction.ASC, "enrollmentDate", "id"))
         val enrollments = enrollmentRepository.findByStudentId(studentId, pageable)
 
         return enrollments.content.map { enrollment ->
@@ -35,7 +36,7 @@ class EnrollmentServiceProviderImpl(
     }
 
     override fun getCurrentEnrollmentByStudent(studentId: Long): EnrollmentSummaryDto? {
-        val pageable = PageRequest.of(0, 1)
+        val pageable = PageRequest.of(0, 1, Sort.by(Sort.Direction.ASC, "enrollmentDate", "id"))
         val enrollments = enrollmentRepository.findByStudentIdAndStatus(
             studentId,
             com.sigep.courses.domain.model.EnrollmentStatus.ACTIVE,
@@ -58,7 +59,7 @@ class EnrollmentServiceProviderImpl(
     }
 
     override fun getEnrollmentsByStudentAndStatus(studentId: Long, status: String): List<EnrollmentSummaryDto> {
-        val pageable = PageRequest.of(0, 1000)
+        val pageable = PageRequest.of(0, 1000, Sort.by(Sort.Direction.ASC, "enrollmentDate", "id"))
         val enrollmentStatus = try {
             com.sigep.courses.domain.model.EnrollmentStatus.valueOf(status)
         } catch (e: IllegalArgumentException) {

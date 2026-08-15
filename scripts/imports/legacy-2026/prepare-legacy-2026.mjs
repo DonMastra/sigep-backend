@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-const IMPORTER_VERSION = "legacy-2026-v1";
+const IMPORTER_VERSION = "legacy-2026-v2";
 const SQL_BOUNDARY = "-- SIGEP_STATEMENT_BOUNDARY";
 const UNKNOWN_TEXT = "SIN INFORMAR - MIGRACION LEGACY 2026";
 const UNKNOWN_DATE = "1900-01-01";
@@ -55,7 +55,7 @@ const guardians = prepareGuardians(guardianRecords);
 const students = prepareStudents(studentRecords, guardians);
 const levels = curriculumLevels();
 verifyCurriculum(levelRows, levels);
-const { teachers, courses } = prepareTeachersAndCourses(courseRecords, students, studentRecords, levels);
+const { teachers, courses } = prepareTeachersAndCourses(courseRecords, levels);
 const enrollments = prepareEnrollments(studentRecords, students, courses);
 const relationships = prepareGuardianRelationships(students);
 const ledgers = prepareLedgers(enrollments);
@@ -79,9 +79,10 @@ const summary = {
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const migrationSql = await fs.readFile(path.resolve(scriptDir, "../../migrations/V28__create_legacy_import_audit.sql"), "utf8");
+const studentIdentifierMigrationSql = await fs.readFile(path.resolve(scriptDir, "../../migrations/V30__add_student_business_identifier.sql"), "utf8");
 const sqlText = buildSql({
   runId, expectedDatabase, targetGitCommit, sourceManifestSha256, sourceManifestJson,
-  summary, migrationSql, guardians, students, teachers, levels, courses, enrollments,
+  summary, migrationSql, studentIdentifierMigrationSql, guardians, students, teachers, levels, courses, enrollments,
   relationships, ledgers,
 });
 
@@ -217,7 +218,14 @@ function prepareStudents(rows, guardians) {
     const names = new Set(history.map((row) => normalize(`${text(row.Apellido)} ${text(row.Nombre)}`)));
     if (names.size !== 1) throw new Error(`Student identity conflict at source row ${latest._sourceRow}`);
     const hash = sourceHash("student", legacyUser);
-    const current = history.find((row) => cycleYear(row["Ciclo Lectivo"]) === 2026) ?? null;
+    const currentRows = history.filter((row) => cycleYear(row["Ciclo Lectivo"]) === 2026);
+    const currentStudentNumbers = new Set(currentRows.map((row) => digits(row["Matrícula"])).filter(Boolean));
+    if (currentStudentNumbers.size > 1) {
+      throw new Error(`Student ${legacyUser} has more than one 2026 student number`);
+    }
+    const current = currentRows.find((row) => normalize(row["Situación académica"]) !== "BAJA") ?? currentRows[0] ?? null;
+    const studentNumber = [...currentStudentNumbers][0] ?? digits(latest["Matrícula"]);
+    if (!studentNumber) throw new Error(`Student row ${latest._sourceRow} has no student number`);
     const candidateGuardians = guardians.filter((guardian) => {
       const childText = ` ${normalize(guardian.childText)} `;
       return [normalize(`${text(latest.Apellido)} ${text(latest.Nombre)}`), normalize(`${text(latest.Nombre)} ${text(latest.Apellido)}`)]
@@ -225,18 +233,17 @@ function prepareStudents(rows, guardians) {
     }).sort((a, b) => b.contactScore - a.contactScore || a.sourceRow - b.sourceRow);
     const primaryGuardian = candidateGuardians[0] ?? null;
     const suppliedEmail = normalizedEmail(latest.Mail);
-    const status = normalize(latest["Situación académica"]);
     const latestYear = cycleYear(latest["Ciclo Lectivo"]);
     result.push({
-      sourceRow: latest._sourceRow, hash, firstName: text(latest.Nombre), lastName: text(latest.Apellido),
+      sourceRow: latest._sourceRow, hash, studentNumber, firstName: text(latest.Nombre), lastName: text(latest.Apellido),
       email: validEmail(suppliedEmail) ? suppliedEmail : `alumno-${hash.slice(0, 16)}@invalid.sigep.local`,
       phone: text(latest["Teléfono"]) || primaryGuardian?.phone || UNKNOWN_TEXT,
       emergencyContact: primaryGuardian ? `${primaryGuardian.firstName} ${primaryGuardian.lastName}`.trim() : UNKNOWN_TEXT,
       enrollmentDate: `${latestYear ?? 2026}-04-01`, currentLevel: mapStudentCurrentLevel(text((current ?? latest).Curso), Boolean(current)),
-      active: latestYear === 2026 && ["ALUMNO REGULAR", "INSCRIPTO", "CONTINUA"].includes(status),
+      active: currentRows.some((row) => ["ALUMNO REGULAR", "INSCRIPTO", "CONTINUA"].includes(normalize(row["Situación académica"]))),
       primaryGuardianHash: primaryGuardian?.hash ?? null,
       guardianCandidateHashes: candidateGuardians.map((guardian) => guardian.hash),
-      guardianCandidateCount: candidateGuardians.length, currentSourceRow: current?._sourceRow ?? null,
+      guardianCandidateCount: candidateGuardians.length, currentSourceRows: currentRows.map((row) => row._sourceRow),
     });
   }
   return result.sort((a, b) => a.sourceRow - b.sourceRow);
@@ -251,19 +258,12 @@ function prepareGuardianRelationships(students) {
   })));
 }
 
-function prepareTeachersAndCourses(rows, students, allStudentRows, levels) {
+function prepareTeachersAndCourses(rows, levels) {
   const courseGroups = new Map();
   for (const row of rows) {
     const key = normalize(row.Curso);
     if (!courseGroups.has(key)) courseGroups.set(key, []);
     courseGroups.get(key).push(row);
-  }
-  const sourceStudentByRow = new Map(allStudentRows.map((row) => [row._sourceRow, row]));
-  const currentStudentCounts = new Map();
-  for (const student of students) {
-    if (!student.currentSourceRow) continue;
-    const key = normalize(sourceStudentByRow.get(student.currentSourceRow)?.Curso);
-    currentStudentCounts.set(key, (currentStudentCounts.get(key) ?? 0) + 1);
   }
   const teacherNames = new Set();
   const courses = [];
@@ -278,7 +278,7 @@ function prepareTeachersAndCourses(rows, students, allStudentRows, levels) {
       sourceRow: Math.min(...group.map((row) => row._sourceRow)), hash: sourceHash("course-2026", courseKey),
       code: `2026-${courseKey.replace(/ /g, "-")}`.slice(0, 50), name: text(group[0].Curso), levelCode,
       courseLevel: level.courseLevel, teacherHash: sourceHash("teacher", teacherName),
-      maxStudents: Math.max(30, currentStudentCounts.get(courseKey) ?? 0), price: levelCode === "KIDS" ? 80000 : 90000,
+      maxStudents: 20, price: levelCode === "KIDS" ? 80000 : 90000,
     });
   }
   const teachers = [...teacherNames].sort().map((fullName, index) => {
@@ -290,12 +290,13 @@ function prepareTeachersAndCourses(rows, students, allStudentRows, levels) {
 }
 
 function prepareEnrollments(rows, students, courses) {
-  const studentByCurrentRow = new Map(students.filter((row) => row.currentSourceRow).map((row) => [row.currentSourceRow, row]));
+  const studentByCurrentRow = new Map(students.flatMap((row) => row.currentSourceRows.map((sourceRow) => [sourceRow, row])));
   const courseByName = new Map(courses.map((row) => [normalize(row.name), row]));
   return rows.filter((row) => cycleYear(row["Ciclo Lectivo"]) === 2026).map((row) => {
     const student = studentByCurrentRow.get(row._sourceRow); const course = courseByName.get(normalize(row.Curso));
     if (!student || !course) throw new Error(`Cannot resolve enrollment source row ${row._sourceRow}`);
-    const originalStatus = normalize(row["Situación académica"]); const hash = sourceHash("enrollment-2026", digits(row["Matrícula"]));
+    const originalStatus = normalize(row["Situación académica"]);
+    const hash = sourceHash("enrollment-2026", `${student.studentNumber}|${normalize(row.Curso)}`);
     const planCode = course.levelCode === "KIDS" ? "PLAN-KIDS-2026" : "PLAN-GENERAL-2026";
     return { sourceRow: row._sourceRow, hash, applicationHash: sha256(`application:${hash}`), studentHash: student.hash, courseHash: course.hash, levelCode: course.levelCode, planCode, planHash: sourceHash("fee-plan", planCode), status: originalStatus === "BAJA" ? "DROPPED" : "ACTIVE", originalStatus, guardianHash: student.primaryGuardianHash, guardianCandidateCount: student.guardianCandidateCount };
   });
@@ -351,11 +352,22 @@ function verifyCurriculum(rows, levels) {
 }
 
 function buildSql(input) {
-  const statements = ["BEGIN", "SET LOCAL lock_timeout = '10s'", "SET LOCAL statement_timeout = '15min'", ...splitSimpleMigration(input.migrationSql), preflightSql(input)];
+  const statements = [
+    "BEGIN",
+    "SET LOCAL lock_timeout = '10s'",
+    "SET LOCAL statement_timeout = '15min'",
+    ...splitSimpleMigration(input.migrationSql),
+    ...splitSimpleMigration(input.studentIdentifierMigrationSql),
+    preflightSql(input),
+  ];
   statements.push(`INSERT INTO legacy_import_runs (run_id,source_system,source_manifest_sha256,source_manifest,importer_version,target_git_commit,status) VALUES (${sql(input.runId)},'Quinttos legacy',${sql(input.sourceManifestSha256)},${sql(input.sourceManifestJson)}::jsonb,'${IMPORTER_VERSION}',${sql(input.targetGitCommit)},'RUNNING')`);
   statements.push(...stageStatements(input), importSystemActorSql(input.runId), importGuardiansSql(input.runId), importRelationshipsSql(input.runId), importIssuesSql(input.runId), importStudentsSql(input.runId), importTeachersSql(input.runId), importLevelsSql(input.runId), importCatalogSql(input.runId), importCoursesSql(input.runId), importEnrollmentsSql(input.runId), importApplicationsSql(input.runId), importBillingSql(input.runId), postflightSql(input));
   statements.push(`UPDATE legacy_import_runs SET status='COMPLETED',completed_at=CURRENT_TIMESTAMP,summary=${sql(JSON.stringify(input.summary))}::jsonb WHERE run_id=${sql(input.runId)}`);
-  statements.push(`INSERT INTO schema_version(version,git_commit,description) VALUES ('V28',${sql(input.targetGitCommit)},'Legacy import audit and 2026 training dataset') ON CONFLICT(version) DO UPDATE SET git_commit=EXCLUDED.git_commit,applied_at=CURRENT_TIMESTAMP,description=EXCLUDED.description`, "COMMIT");
+  statements.push(
+    `INSERT INTO schema_version(version,git_commit,description) VALUES ('V28',${sql(input.targetGitCommit)},'Legacy import audit and 2026 training dataset') ON CONFLICT(version) DO UPDATE SET git_commit=EXCLUDED.git_commit,applied_at=CURRENT_TIMESTAMP,description=EXCLUDED.description`,
+    `INSERT INTO schema_version(version,git_commit,description) VALUES ('V30',${sql(input.targetGitCommit)},'Student business identifier') ON CONFLICT(version) DO UPDATE SET git_commit=EXCLUDED.git_commit,applied_at=CURRENT_TIMESTAMP,description=EXCLUDED.description`,
+    "COMMIT",
+  );
   return statements.map((statement) => `${statement.trim().replace(/;\s*$/, "")};`).join(`\n\n${SQL_BOUNDARY}\n\n`) + "\n";
 }
 
@@ -375,8 +387,8 @@ function stageStatements(input) {
   return [
     `CREATE TEMP TABLE stage_guardians(source_row int,source_hash varchar(64),first_name text,last_name text,email text,phone text,address text,birth_date date,document_number text) ON COMMIT DROP`,
     insertValues("stage_guardians", ["source_row","source_hash","first_name","last_name","email","phone","address","birth_date","document_number"], input.guardians.map((r) => [r.sourceRow,r.hash,r.firstName,r.lastName,r.email,r.phone,r.address,r.dateOfBirth,r.document])),
-    `CREATE TEMP TABLE stage_students(source_row int,source_hash varchar(64),first_name text,last_name text,email text,phone text,emergency_contact text,enrollment_date date,current_level text,active boolean,guardian_hash varchar(64)) ON COMMIT DROP`,
-    insertValues("stage_students", ["source_row","source_hash","first_name","last_name","email","phone","emergency_contact","enrollment_date","current_level","active","guardian_hash"], input.students.map((r) => [r.sourceRow,r.hash,r.firstName,r.lastName,r.email,r.phone,r.emergencyContact,r.enrollmentDate,r.currentLevel,r.active,r.primaryGuardianHash])),
+    `CREATE TEMP TABLE stage_students(source_row int,source_hash varchar(64),student_number varchar(32),first_name text,last_name text,email text,phone text,emergency_contact text,enrollment_date date,current_level text,active boolean,guardian_hash varchar(64)) ON COMMIT DROP`,
+    insertValues("stage_students", ["source_row","source_hash","student_number","first_name","last_name","email","phone","emergency_contact","enrollment_date","current_level","active","guardian_hash"], input.students.map((r) => [r.sourceRow,r.hash,r.studentNumber,r.firstName,r.lastName,r.email,r.phone,r.emergencyContact,r.enrollmentDate,r.currentLevel,r.active,r.primaryGuardianHash])),
     `CREATE TEMP TABLE stage_teachers(source_row int,source_hash varchar(64),first_name text,last_name text,email text,document_number text) ON COMMIT DROP`,
     insertValues("stage_teachers", ["source_row","source_hash","first_name","last_name","email","document_number"], input.teachers.map((r) => [r.sourceRow,r.hash,r.firstName,r.lastName,r.email,r.document])),
     `CREATE TEMP TABLE stage_levels(source_row int,source_hash varchar(64),code text,name text,segment text,level_order int,course_level text) ON COMMIT DROP`,
@@ -419,8 +431,8 @@ function importIssuesSql(runId) {
       FROM stage_enrollments WHERE status='ACTIVE' AND guardian_candidate_count > 1;
     INSERT INTO legacy_import_issues(run_id,entity_type,issue_code,severity,details) VALUES
       (${sql(runId)},'STUDENT','MISSING_STUDENT_PROFILE_FIELDS','WARNING',jsonb_build_object('affected_students',(SELECT count(*) FROM stage_students),'placeholder_date','${UNKNOWN_DATE}')),
-      (${sql(runId)},'COURSE','MISSING_SCHEDULE_AND_CAPACITY','BLOCKER',jsonb_build_object('affected_courses',(SELECT count(*) FROM stage_courses),'default_capacity',30,'default_duration_hours',1)),
-      (${sql(runId)},'ENROLLMENT_FEE_POLICY','GENERAL_ENROLLMENT_FEE_UNKNOWN','BLOCKER',jsonb_build_object('kids_amount',85000,'general_policy_created',false)),
+      (${sql(runId)},'COURSE','MISSING_SCHEDULE','BLOCKER',jsonb_build_object('affected_courses',(SELECT count(*) FROM stage_courses),'confirmed_capacity',20,'confirmed_duration_hours',60)),
+      (${sql(runId)},'ENROLLMENT_FEE_POLICY','GENERAL_ENROLLMENT_FEE_UNKNOWN','BLOCKER',jsonb_build_object('general_policy_created',false,'kids_policy_status','PENDING_VALIDATION')),
       (${sql(runId)},'PAYMENT','PAYMENT_HISTORY_NOT_SUPPLIED','WARNING',jsonb_build_object('generated_period','2026-08 through 2026-12'));
   END $$`;
 }
@@ -431,7 +443,7 @@ function importStudentsSql(runId) {
     SELECT target_id INTO actor_id_value FROM legacy_import_entity_map WHERE run_id=${sql(runId)} AND source_key_hash='${actorHash}' AND target_table='users';
     FOR r IN SELECT * FROM stage_students ORDER BY source_row LOOP guardian_id_value:=NULL;
       IF r.guardian_hash IS NOT NULL THEN SELECT target_id INTO guardian_id_value FROM legacy_import_entity_map WHERE run_id=${sql(runId)} AND source_key_hash=r.guardian_hash AND target_table='users'; END IF;
-      INSERT INTO students(first_name,last_name,email,date_of_birth,address,phone_number,emergency_contact,document_type,document_country,document_number,normalized_document_number,guardian_id,enrollment_date,medical_notes,active,current_level,created_at,updated_at) VALUES(r.first_name,r.last_name,r.email,DATE '${UNKNOWN_DATE}','${UNKNOWN_TEXT}',r.phone,r.emergency_contact,'NO_DOCUMENT','AR',NULL,NULL,guardian_id_value,r.enrollment_date,NULL,r.active,r.current_level,now(),now()) RETURNING id INTO new_id;
+      INSERT INTO students(student_number,first_name,last_name,email,date_of_birth,address,phone_number,emergency_contact,document_type,document_country,document_number,normalized_document_number,guardian_id,enrollment_date,medical_notes,active,current_level,created_at,updated_at) VALUES(r.student_number,r.first_name,r.last_name,r.email,DATE '${UNKNOWN_DATE}','${UNKNOWN_TEXT}',r.phone,r.emergency_contact,'NO_DOCUMENT','AR',NULL,NULL,guardian_id_value,r.enrollment_date,NULL,r.active,r.current_level,now(),now()) RETURNING id INTO new_id;
       INSERT INTO legacy_import_entity_map(run_id,entity_type,source_key_hash,source_row,target_table,target_id,mapping_status,notes) VALUES(${sql(runId)},'STUDENT',r.source_hash,r.source_row,'students',new_id,'PLACEHOLDER_FIELDS','Birth date and address absent from legacy export');
       IF guardian_id_value IS NOT NULL THEN INSERT INTO student_guardian_link_events(student_id,previous_guardian_user_id,guardian_user_id,action,origin,actor_user_id,reason,created_at) VALUES(new_id,NULL,guardian_id_value,'LINKED','ADMIN',actor_id_value,'Legacy 2026 exact-name relationship import',now()); END IF;
     END LOOP; END $$`;
@@ -462,16 +474,14 @@ function importCatalogSql(runId) {
     INSERT INTO legacy_import_entity_map(run_id,entity_type,source_key_hash,target_table,target_id,mapping_status) VALUES(${sql(runId)},'FEE_PLAN','${sourceHash("fee-plan", "PLAN-GENERAL-2026")}','tuition_fee_plans',new_id,'IMPORTED');
     INSERT INTO tuition_fee_plans(created_at,currency,installments,monthly_fee,name,segment,status,updated_at,valid_from,valid_to,academic_year_id,level_id,monthly_due_day,late_fee_percentage,automatic_debit_monthly) VALUES(now(),'ARS',9,80000,'Arancel Kids 2026','CHILDREN','ACTIVE',now(),DATE '2026-04-01',DATE '2026-12-31',year_id,kids_level_id,10,0,false) RETURNING id INTO new_id;
     INSERT INTO legacy_import_entity_map(run_id,entity_type,source_key_hash,target_table,target_id,mapping_status) VALUES(${sql(runId)},'FEE_PLAN','${sourceHash("fee-plan", "PLAN-KIDS-2026")}','tuition_fee_plans',new_id,'IMPORTED');
-    INSERT INTO tuition_enrollment_fee_policies(amount,automatic_debit_eligible,created_at,currency,default_policy,name,payment_due_days,status,updated_at,valid_from,valid_to) VALUES(85000,false,now(),'ARS',false,'Matricula Kids 2026',3,'ACTIVE',now(),DATE '2026-04-01',DATE '2026-12-31') RETURNING id INTO new_id;
-    INSERT INTO legacy_import_entity_map(run_id,entity_type,source_key_hash,target_table,target_id,mapping_status,notes) VALUES(${sql(runId)},'ENROLLMENT_FEE_POLICY','${sourceHash("enrollment-fee", "KIDS-2026")}','tuition_enrollment_fee_policies',new_id,'IMPORTED','General enrollment fee was not visible in supplied sources');
   END $$`;
 }
 
 function importCoursesSql(runId) {
   return `DO $$ DECLARE r record; new_id bigint; teacher_id_value bigint; BEGIN FOR r IN SELECT * FROM stage_courses ORDER BY code LOOP
     SELECT target_id INTO teacher_id_value FROM legacy_import_entity_map WHERE run_id=${sql(runId)} AND source_key_hash=r.teacher_hash AND target_table='teaching_staff';
-    INSERT INTO courses(code,created_at,description,duration,end_date,is_published,level,max_students,min_students,name,price,start_date,status,teacher_id,updated_at) VALUES(r.code,now(),'Cursada 2026 importada del sistema legacy. Horario, duracion y capacidad deben validarse.',1,DATE '2026-12-31',true,r.course_level,r.max_students,1,r.name,r.price,DATE '2026-04-01','ACTIVE',teacher_id_value,now()) RETURNING id INTO new_id;
-    INSERT INTO legacy_import_entity_map(run_id,entity_type,source_key_hash,source_row,target_table,target_id,mapping_status,notes) VALUES(${sql(runId)},'COURSE',r.source_hash,r.source_row,'courses',new_id,'PLACEHOLDER_FIELDS','Duration and capacity absent; capacity defaults to at least 30');
+    INSERT INTO courses(code,created_at,description,duration,end_date,is_published,level,max_students,min_students,name,price,start_date,status,teacher_id,updated_at) VALUES(r.code,now(),'Cursada 2026 importada del sistema legacy. Horario y modalidad pendientes de conciliacion.',60,DATE '2026-12-31',true,r.course_level,r.max_students,1,r.name,r.price,DATE '2026-04-01','ACTIVE',teacher_id_value,now()) RETURNING id INTO new_id;
+    INSERT INTO legacy_import_entity_map(run_id,entity_type,source_key_hash,source_row,target_table,target_id,mapping_status,notes) VALUES(${sql(runId)},'COURSE',r.source_hash,r.source_row,'courses',new_id,'IMPORTED','Duration 60 hours and capacity 20 confirmed; scheduling remains pending');
   END LOOP; END $$`;
 }
 

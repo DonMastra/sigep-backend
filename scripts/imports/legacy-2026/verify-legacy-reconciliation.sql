@@ -68,3 +68,20 @@ SELECT
         WHERE student.guardian_id IS NOT NULL
           AND (guardian.id IS NULL OR guardian.role <> 'GUARDIAN')
     ) AS guardian_links_are_valid;
+
+SELECT
+    count(*) AS students,
+    count(DISTINCT student_number) AS distinct_student_numbers,
+    count(*) FILTER (WHERE student_number IS NULL OR btrim(student_number) = '') AS missing_student_numbers
+FROM students;
+
+SELECT student_id, count(*) AS active_courses
+FROM enrollments
+WHERE status = 'ACTIVE'
+GROUP BY student_id
+HAVING count(*) > 1
+ORDER BY active_courses DESC, student_id;
+
+SELECT id, name, amount, currency, default_policy, status, valid_from, valid_to
+FROM tuition_enrollment_fee_policies
+ORDER BY id;

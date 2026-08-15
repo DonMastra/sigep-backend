@@ -8,6 +8,7 @@ import java.time.LocalDateTime
 
 data class StudentDto(
     val id: Long,
+    val studentNumber: String,
     val firstName: String,
     val lastName: String,
     val email: String,
@@ -19,6 +20,7 @@ data class StudentDto(
     val guardianId: Long?,
     val currentCourseId: Long?,
     val currentCourseName: String?,
+    val currentCourses: List<EnrollmentSummaryDto>,
     val currentLevel: String,
     val active: Boolean,
     val photoUrl: String?,
@@ -33,6 +35,7 @@ data class StudentDto(
  */
 data class StudentDetailDto(
     val id: Long,
+    val studentNumber: String,
     val firstName: String,
     val lastName: String,
     val email: String,
@@ -48,6 +51,7 @@ data class StudentDetailDto(
     val medicalNotes: String?,
     val currentCourseId: Long?,
     val currentCourseName: String?,
+    val currentCourses: List<EnrollmentSummaryDto>,
     val currentLevel: String,
     val active: Boolean,
     val photoUrl: String?,

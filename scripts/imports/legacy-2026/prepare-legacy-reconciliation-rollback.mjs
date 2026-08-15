@@ -98,7 +98,8 @@ function preflightSql() {
       LEFT JOIN courses course ON change.target_table='courses' AND course.id=change.target_id
       LEFT JOIN legacy_import_issues issue ON change.target_table='legacy_import_issues' AND issue.id=change.target_id
       WHERE change.run_id=${sql(runId)} AND change.change_type IN ('UPDATED','RESOLVED') AND (
-        (change.target_table='students' AND student.guardian_id IS DISTINCT FROM NULLIF(change.new_state->>'guardian_id','')::bigint)
+        (change.target_table='students' AND change.entity_type='STUDENT_GUARDIAN' AND student.guardian_id IS DISTINCT FROM NULLIF(change.new_state->>'guardian_id','')::bigint)
+        OR (change.target_table='students' AND change.entity_type='STUDENT_NUMBER' AND student.student_number IS DISTINCT FROM change.new_state->>'student_number')
         OR (change.target_table='tuition_applications' AND application.guardian_user_id IS DISTINCT FROM NULLIF(change.new_state->>'guardian_id','')::bigint)
         OR (change.target_table='billing_charges' AND charge.account_id IS DISTINCT FROM NULLIF(change.new_state->>'account_id','')::bigint)
         OR (change.target_table='courses' AND (course.duration IS DISTINCT FROM (change.new_state->>'duration')::int OR course.max_students IS DISTINCT FROM (change.new_state->>'max_students')::int))
@@ -111,11 +112,15 @@ function preflightSql() {
       LEFT JOIN tuition_ledger_entries ledger ON change.target_table='tuition_ledger_entries' AND ledger.id=change.target_id
       LEFT JOIN billing_profiles profile ON change.target_table='billing_profiles' AND profile.id=change.target_id
       LEFT JOIN billing_accounts account ON change.target_table='billing_accounts' AND account.id=change.target_id
+      LEFT JOIN users created_user ON change.target_table='users' AND created_user.id=change.target_id
+      LEFT JOIN tuition_enrollment_fee_policies policy ON change.target_table='tuition_enrollment_fee_policies' AND policy.id=change.target_id
       WHERE change.run_id=${sql(runId)} AND change.change_type='CREATED' AND (
         (change.target_table='tuition_applications' AND application.status<>'APPROVED')
         OR (change.target_table='tuition_ledger_entries' AND (ledger.status<>'PENDING' OR ledger.paid_amount<>0 OR ledger.late_fee_amount<>0))
         OR (change.target_table='billing_profiles' AND (profile.status<>'INCOMPLETE' OR profile.version<>0))
         OR (change.target_table='billing_accounts' AND account.version<>0)
+        OR (change.target_table='users' AND (created_user.role<>'GUARDIAN' OR created_user.status<>'PENDING_APPROVAL' OR created_user.active<>false))
+        OR (change.target_table='tuition_enrollment_fee_policies' AND (policy.amount<>90000 OR policy.default_policy<>true OR policy.status<>'ACTIVE'))
       )
     ) THEN RAISE EXCEPTION 'Rollback blocked because a created row was modified after the run'; END IF;
   END $$`;
@@ -146,7 +151,7 @@ function rollbackSql() {
     WHERE change.run_id=${sql(runId)} AND change.target_table='tuition_applications' AND change.change_type='UPDATED' AND application.id=change.target_id;
 
     FOR student_change IN
-      SELECT * FROM legacy_reconciliation_changes WHERE run_id=${sql(runId)} AND target_table='students' AND change_type='UPDATED' ORDER BY id DESC
+      SELECT * FROM legacy_reconciliation_changes WHERE run_id=${sql(runId)} AND target_table='students' AND entity_type='STUDENT_GUARDIAN' AND change_type='UPDATED' ORDER BY id DESC
     LOOP
       UPDATE students SET guardian_id=NULLIF(student_change.previous_state->>'guardian_id','')::bigint,updated_at=now() WHERE id=student_change.target_id;
       INSERT INTO student_guardian_link_events(student_id,previous_guardian_user_id,guardian_user_id,action,origin,actor_user_id,reason,created_at)
@@ -158,6 +163,11 @@ function rollbackSql() {
         'ADMIN',actor_id_value,'Rollback reconciliation '||${sql(runId)},now()
       );
     END LOOP;
+
+    UPDATE students student
+    SET student_number=change.previous_state->>'student_number',updated_at=now()
+    FROM legacy_reconciliation_changes change
+    WHERE change.run_id=${sql(runId)} AND change.target_table='students' AND change.entity_type='STUDENT_NUMBER' AND change.change_type='UPDATED' AND student.id=change.target_id;
 
     DELETE FROM course_sessions WHERE id IN (
       SELECT target_id FROM legacy_reconciliation_changes WHERE run_id=${sql(runId)} AND target_table='course_sessions' AND change_type='CREATED'
@@ -172,6 +182,17 @@ function rollbackSql() {
     );
     DELETE FROM billing_accounts WHERE id IN (
       SELECT target_id FROM legacy_reconciliation_changes WHERE run_id=${sql(runId)} AND target_table='billing_accounts' AND change_type='CREATED'
+    );
+    DELETE FROM student_guardian_link_events WHERE guardian_user_id IN (
+      SELECT target_id FROM legacy_reconciliation_changes WHERE run_id=${sql(runId)} AND target_table='users' AND change_type='CREATED'
+    ) OR previous_guardian_user_id IN (
+      SELECT target_id FROM legacy_reconciliation_changes WHERE run_id=${sql(runId)} AND target_table='users' AND change_type='CREATED'
+    );
+    DELETE FROM users WHERE id IN (
+      SELECT target_id FROM legacy_reconciliation_changes WHERE run_id=${sql(runId)} AND target_table='users' AND change_type='CREATED'
+    );
+    DELETE FROM tuition_enrollment_fee_policies WHERE id IN (
+      SELECT target_id FROM legacy_reconciliation_changes WHERE run_id=${sql(runId)} AND target_table='tuition_enrollment_fee_policies' AND change_type='CREATED'
     );
 
     UPDATE legacy_import_issues issue SET resolved_at=NULL,resolution=NULL
@@ -193,12 +214,18 @@ function postflightSql() {
         OR (change.target_table='course_sessions' AND EXISTS (SELECT 1 FROM course_sessions row WHERE row.id=change.target_id))
         OR (change.target_table='billing_profiles' AND EXISTS (SELECT 1 FROM billing_profiles row WHERE row.id=change.target_id))
         OR (change.target_table='billing_accounts' AND EXISTS (SELECT 1 FROM billing_accounts row WHERE row.id=change.target_id))
+        OR (change.target_table='users' AND EXISTS (SELECT 1 FROM users row WHERE row.id=change.target_id))
+        OR (change.target_table='tuition_enrollment_fee_policies' AND EXISTS (SELECT 1 FROM tuition_enrollment_fee_policies row WHERE row.id=change.target_id))
       )
     ) THEN RAISE EXCEPTION 'Created reconciliation rows remain after rollback'; END IF;
     IF EXISTS (
       SELECT 1 FROM legacy_reconciliation_changes change JOIN students student ON student.id=change.target_id
-      WHERE change.run_id=${sql(runId)} AND change.target_table='students' AND student.guardian_id IS DISTINCT FROM NULLIF(change.previous_state->>'guardian_id','')::bigint
+      WHERE change.run_id=${sql(runId)} AND change.target_table='students' AND change.entity_type='STUDENT_GUARDIAN' AND student.guardian_id IS DISTINCT FROM NULLIF(change.previous_state->>'guardian_id','')::bigint
     ) THEN RAISE EXCEPTION 'Student guardian rollback mismatch'; END IF;
+    IF EXISTS (
+      SELECT 1 FROM legacy_reconciliation_changes change JOIN students student ON student.id=change.target_id
+      WHERE change.run_id=${sql(runId)} AND change.target_table='students' AND change.entity_type='STUDENT_NUMBER' AND student.student_number IS DISTINCT FROM change.previous_state->>'student_number'
+    ) THEN RAISE EXCEPTION 'Student identifier rollback mismatch'; END IF;
     IF EXISTS (
       SELECT 1 FROM legacy_reconciliation_changes change JOIN legacy_import_issues issue ON issue.id=change.target_id
       WHERE change.run_id=${sql(runId)} AND change.target_table='legacy_import_issues' AND issue.resolved_at IS NOT NULL

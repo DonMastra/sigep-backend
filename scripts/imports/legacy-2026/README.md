@@ -4,16 +4,17 @@ Este proceso prepara y carga el estado académico necesario para continuar el ci
 
 ## Decisiones de mapeo
 
-- Las 625 filas de alumnos se consolidan por el identificador `Usuario` del legacy en 546 identidades. Las filas repetidas representan historia por ciclo, no personas duplicadas.
+- Las 625 filas de alumnos se consolidan por el identificador técnico `Usuario` del legacy en 546 identidades. `Matrícula` se conserva como identificador de negocio del alumno (`students.student_number`), priorizando el valor 2026 y, si no existe, el del último ciclo disponible.
 - Se importan las 320 matrículas del ciclo 2026: `Alumno Regular` e `Inscripto` pasan a `ACTIVE`; `Baja` pasa a `DROPPED`.
+- Un mismo alumno puede tener más de una inscripción activa siempre que corresponda a cursos distintos. La identidad de cada inscripción se compone con matrícula y curso para evitar colisiones.
 - Se importan los 40 cursos informados en `Cursadas`, incluso los grupos sin alumnos en el detalle. Los duplicados por nombre se consolidan y el detalle de alumnos prevalece para las matrículas.
 - La relación alumno-responsable se acepta únicamente por coincidencia exacta normalizada del nombre completo dentro de `Hijo/s`. Cuando existen dos coincidencias se elige como responsable principal el registro con más datos de contacto y luego la menor fila de origen; la alternativa queda auditada.
 - Los responsables se crean inactivos y en `PENDING_APPROVAL`, sin credencial utilizable. Deben habilitarse individualmente mediante el flujo de invitación.
 - El export de alumnos no contiene fecha de nacimiento ni domicilio. Se utiliza `1900-01-01` y el texto `SIN INFORMAR - MIGRACION LEGACY 2026` como marcadores visibles y auditados, nunca como datos afirmados.
 - El export de docentes solo contiene nombres. Los demás campos obligatorios quedan con marcadores explícitos; no se crean cuentas docentes.
-- El export no contiene horarios, duración ni capacidad. Los cursos quedan con duración técnica de 1 hora y capacidad mínima de 30, ambos pendientes de validación. No se inventan sesiones ni aulas.
+- Los 40 cursos quedan con duración confirmada de 60 horas y capacidad confirmada de 20. Días, horas y aula/modalidad siguen pendientes; no se inventan sesiones.
 - Se crean 24 niveles según la estructura entregada. `Kids`, `Children` y `Junior` usan el segmento `CHILDREN`; `Teens` y `Senior`, `TEENS`; `Adults`, `ADULTS`.
-- El plan general usa ARS 90.000 y Kids ARS 80.000, vencimiento el día 10, vigencia abril-diciembre y 9 períodos. La matrícula Kids se registra en ARS 85.000. No se crea matrícula general porque su importe no aparece en las fuentes.
+- El plan general usa ARS 90.000 y Kids ARS 80.000, vencimiento el día 10, vigencia abril-diciembre y 9 períodos. El import inicial no crea políticas de matrícula: Kids permanece pendiente y la matrícula general se aplica únicamente desde la decisión institucional confirmada de ARS 90.000.
 - No se importan pagos ni se presume que abril-julio estén impagos. Para las matrículas activas con responsable se crean cuotas de agosto a diciembre, sin recargo ni débito automático.
 - Las matrículas activas sin responsable coincidente se cargan académicamente, pero no generan solicitud, cuenta corriente ni deuda inventada. Quedan como incidencias `BLOCKER` para conciliación administrativa.
 
@@ -24,7 +25,7 @@ El importador:
 1. verifica los conteos y la estructura exacta de los cinco libros revisados;
 2. calcula SHA-256 de XLS/XLSX y capturas;
 3. exige que la base sea `sigep_prod`, tenga V27 registrada y no contenga filas funcionales;
-4. ejecuta V28 y toda la carga dentro de una única transacción;
+4. ejecuta V28, V30 y toda la carga dentro de una única transacción;
 5. registra hashes de identidad, relaciones, incidencias y mapeos sin copiar payloads fuente a las tablas de auditoría;
 6. concilia conteos y referencias antes de `COMMIT`;
 7. elimina por defecto el SQL generado después de una ejecución exitosa.
@@ -62,21 +63,21 @@ La escritura requiere agregar `-Execute`. Las credenciales no deben pasarse como
 - incidencias sin resolver inventariadas;
 - backend iniciado con perfil `prod` y `ddl-auto=validate`;
 - backup/restore de la rama descartable probado;
-- matrícula general, horarios/capacidades y responsable de cada incidencia definidos antes de considerar el ambiente apto para continuidad operativa.
+- horarios, modalidad y responsable de cada incidencia no resuelta definidos antes de considerar el ambiente apto para continuidad operativa.
 
 ## Conciliación posterior con el libro institucional
 
 `Conciliacion_pendientes_migracion_SiGEP_2026.xlsx` es la única entrada admitida para resolver los datos que no pudieron inferirse de las exportaciones. El proceso de conciliación:
 
-- valida las seis hojas, sus encabezados y los 108 casos sin responsable, 36 ambiguos, 40 cursos, 8 decisiones y 591 responsables del catálogo;
+- valida las siete hojas, sus encabezados y los 108 casos sin responsable, 36 ambiguos, 40 cursos, 8 decisiones, 591 responsables del catálogo y 546 identificadores de alumno;
 - cruza las identidades confirmadas con los hashes y filas de origen de `LEGACY-2026-UAT-20260814A`;
 - ignora toda fila que no tenga `Estado = CONFIRMADO`;
-- vincula el responsable y crea solicitud, cuotas y cargos de agosto a diciembre solo para casos originalmente bloqueados por falta de responsable;
+- vincula el responsable y crea solicitud, cuotas y cargos de agosto a diciembre solo para casos originalmente bloqueados por falta de responsable; los casos Adults confirmados como `AUTOTUTELA` reciben un usuario GUARDIAN inactivo vinculado a la misma persona STUDENT;
 - cuando cambia un responsable ambiguo, alinea alumno, solicitud y cuenta de los cargos en una transacción, pero aborta si existe pago, factura, recargo o débito asociado;
 - actualiza duración y capacidad y genera sesiones entre el 1 de agosto y el 31 de diciembre solo para cursos confirmados con días, horas y aula/modalidad completos;
 - detecta choques entre docente, alumnos y aulas presenciales antes de escribir;
-- registra respuestas institucionales solo mediante hashes de evidencia; nunca transforma texto libre sobre autorizaciones, administradoras, backups o matrículas en cambios funcionales;
-- aplica V29, audita cada decisión y cada fila creada/actualizada, verifica el resultado y confirma todo en una sola transacción.
+- registra autorizaciones, administradoras, continuidad y cartel solo mediante hashes de evidencia; la única decisión funcional estructurada es la matrícula general exacta de ARS 90.000;
+- confirma o corrige los 546 `student_number`, aplica V29 y V30, audita cada decisión y cada fila creada/actualizada, verifica el resultado y confirma todo en una sola transacción.
 
 La duración de curso debe expresarse en horas enteras porque `courses.duration` es un entero. Los horarios exactos quedan en `course_sessions`. No se inventan feriados ni excepciones: deben registrarse luego con el flujo de sesiones.
 
@@ -105,4 +106,4 @@ El rollback se prepara por `run-id` y no escribe por defecto:
   -PostgresJdbcJar '<ruta-postgresql.jar>'
 ```
 
-Agregar `-Execute` únicamente después de revisar el SQL y su hash. El rollback aborta si una conciliación posterior depende de la misma decisión, si un cargo ya tiene actividad financiera, si una sesión tiene asistencia/excepciones o si una cuenta creada ya fue utilizada. Conserva la auditoría V29, restaura los vínculos y valores previos, vuelve a abrir las incidencias y marca la ejecución como `ROLLED_BACK`.
+Agregar `-Execute` únicamente después de revisar el SQL y su hash. El rollback aborta si una conciliación posterior depende de la misma decisión, si un cargo ya tiene actividad financiera, si una sesión tiene asistencia/excepciones o si una cuenta creada ya fue utilizada. Conserva la auditoría, restaura vínculos e identificadores, elimina usuarios de autotutela y la política general creados por la ejecución, vuelve a abrir las incidencias y marca la ejecución como `ROLLED_BACK`.

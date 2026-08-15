@@ -276,6 +276,7 @@ Parametros comunes de listado:
 ```ts
 interface StudentDto {
   id: number;
+  studentNumber: string;
   firstName: string;
   lastName: string;
   email: string;
@@ -288,6 +289,9 @@ interface StudentDto {
   guardianPhone?: string;
   guardianEmail?: string;
   documentNumber?: string;
+  currentCourseId?: number;
+  currentCourseName?: string;
+  currentCourses: EnrollmentSummaryDto[];
   currentLevel?: string;
   emergencyContact?: string;
   active: boolean;
@@ -296,6 +300,13 @@ interface StudentDto {
   updatedAt?: string;
 }
 ```
+
+`studentNumber` es el identificador de negocio inmutable del alumno. Para la migracion
+legacy conserva `Matricula`; para altas nuevas el backend genera un valor `SIGEP-*`.
+`currentCourses` contiene todas las inscripciones `ACTIVE`. Los campos singulares
+`currentCourseId` y `currentCourseName` se conservan temporalmente por compatibilidad y
+representan el primer curso activo en orden estable. Un alumno puede estar activo en varios
+cursos distintos; solo se rechaza duplicar el mismo par alumno-curso.
 
 La identidad documental se compara por `(documentCountry, documentType, normalizedDocumentNumber)`.
 Para `AR + DNI` se eliminan separadores y se completa a 8 digitos; pasaporte y documento
