@@ -211,6 +211,40 @@ class AuthService(
         return user.toProfileDto()
     }
 
+    fun changePassword(userId: Long, request: ChangePasswordRequest): UserDto {
+        val user = userRepository.findById(userId)
+            .orElseThrow { ResourceNotFoundException("User not found") }
+
+        if (!passwordEncoder.matches(request.currentPassword, user.password)) {
+            throw ValidationException(
+                message = "La contrasena actual no es correcta",
+                code = "CURRENT_PASSWORD_INVALID",
+                field = "currentPassword"
+            )
+        }
+
+        if (passwordEncoder.matches(request.newPassword, user.password)) {
+            throw ValidationException(
+                message = "La nueva contrasena debe ser diferente de la actual",
+                code = "PASSWORD_UNCHANGED",
+                field = "newPassword"
+            )
+        }
+
+        val now = LocalDateTime.now()
+        val updatedUser = userRepository.save(
+            user.copy(
+                password = passwordEncoder.encode(request.newPassword),
+                mustChangePassword = false,
+                passwordChangedAt = now,
+                updatedAt = now
+            )
+        )
+
+        logger.info("Password changed successfully for user id {}", userId)
+        return updatedUser.toDto()
+    }
+
     @Transactional(readOnly = true)
     fun getRegistrationStatus(username: String): RegistrationStatusResponseDto {
         val user = userRepository.findByUsername(username)
@@ -422,7 +456,8 @@ class AuthService(
         lastName = lastName,
         role = role,
         status = status,
-        active = active
+        active = active,
+        mustChangePassword = mustChangePassword
     )
 
     private fun secureToken(): String {
@@ -449,7 +484,8 @@ class AuthService(
         emergencyContact = emergencyContact,
         role = role,
         status = status,
-        active = active
+        active = active,
+        mustChangePassword = mustChangePassword
     )
 
     private fun RegistrationRequest.toDto() = RegistrationRequestDto(

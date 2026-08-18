@@ -45,6 +45,7 @@ interface StudentRepository : JpaRepository<Student, Long> {
         SELECT s FROM Student s WHERE 
         LOWER(s.firstName) LIKE LOWER(CONCAT('%', :search, '%')) OR 
         LOWER(s.lastName) LIKE LOWER(CONCAT('%', :search, '%')) OR 
+        LOWER(CONCAT(TRIM(s.firstName), ' ', TRIM(s.lastName))) LIKE LOWER(CONCAT('%', :search, '%')) OR
         LOWER(s.email) LIKE LOWER(CONCAT('%', :search, '%')) OR
         LOWER(s.studentNumber) LIKE LOWER(CONCAT('%', :search, '%')) OR
         LOWER(COALESCE(s.documentNumber, '')) LIKE LOWER(CONCAT('%', :search, '%'))
@@ -55,6 +56,7 @@ interface StudentRepository : JpaRepository<Student, Long> {
         SELECT s FROM Student s WHERE s.id IN :studentIds AND (
         LOWER(s.firstName) LIKE LOWER(CONCAT('%', :search, '%')) OR
         LOWER(s.lastName) LIKE LOWER(CONCAT('%', :search, '%')) OR
+        LOWER(CONCAT(TRIM(s.firstName), ' ', TRIM(s.lastName))) LIKE LOWER(CONCAT('%', :search, '%')) OR
         LOWER(s.email) LIKE LOWER(CONCAT('%', :search, '%')) OR
         LOWER(s.studentNumber) LIKE LOWER(CONCAT('%', :search, '%')) OR
         LOWER(COALESCE(s.documentNumber, '')) LIKE LOWER(CONCAT('%', :search, '%')))
