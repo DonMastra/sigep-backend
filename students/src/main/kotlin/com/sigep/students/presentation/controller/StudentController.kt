@@ -76,19 +76,21 @@ class StudentController(
 
     @GetMapping("/search")
     @RequireAdminOrTeacher
-    @Operation(summary = "Search students", description = "Search students by name, email or document number")
+    @Operation(summary = "Search students", description = "Search by name, email, document or student number with stable server-side sorting")
     fun searchStudents(
         @RequestParam query: String,
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(defaultValue = "10") limit: Int,
+        @RequestParam(defaultValue = "lastName") sort: String,
+        @RequestParam(defaultValue = "ASC") order: String,
         httpRequest: HttpServletRequest
     ): ResponseEntity<ApiResponse<PageResponse<StudentDto>>> {
         val actorUserId = httpRequest.getAttribute("userId") as? Long
         val actorRole = httpRequest.getAttribute("userRole") as? String
         val students = if (actorRole == "TEACHER") {
-            studentService.searchStudentsForTeacher(requireActorUserId(actorUserId), query, page, limit)
+            studentService.searchStudentsForTeacher(requireActorUserId(actorUserId), query, page, limit, sort, order)
         } else {
-            studentService.searchStudents(query, page, limit)
+            studentService.searchStudents(query, page, limit, sort, order)
         }
         return ResponseEntity.ok(ApiResponse.success(students))
     }
