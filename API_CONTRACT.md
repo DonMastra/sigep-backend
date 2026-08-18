@@ -1,6 +1,6 @@
 # API Contract - SiGEP Backend
 
-Contrato REST para integracion del frontend Angular SiGEP con el backend. Este documento refleja el estado del workspace al 2026-07-28.
+Contrato REST para integracion del frontend Angular SiGEP con el backend. Este documento refleja el estado del workspace al 2026-08-18.
 
 ## Informacion General
 
@@ -43,6 +43,11 @@ Flujo esperado:
 4. Enviar el access token en endpoints protegidos.
 5. Ante expiracion, usar `POST /api/v1/auth/refresh-token`.
 6. Si el refresh falla, limpiar sesion frontend y volver a login.
+7. Si `user.mustChangePassword` es `true`, navegar a `/auth/change-password` y usar
+   `PATCH /api/v1/users/me/password` antes de acceder a cualquier otra operacion protegida.
+
+Mientras el cambio obligatorio esta pendiente, el backend responde `403` con codigo
+`PASSWORD_CHANGE_REQUIRED` para los demas endpoints protegidos.
 
 Roles:
 
@@ -188,8 +193,33 @@ interface UserDto {
   role: 'ADMIN' | 'TEACHER' | 'GUARDIAN';
   status: 'PENDING_APPROVAL' | 'ACTIVE' | 'REJECTED';
   active: boolean;
+  mustChangePassword: boolean;
 }
 ```
+
+## Perfil de usuario autenticado
+
+Base: `/api/v1/users`
+
+| Metodo | Ruta | Roles | Descripcion |
+|---|---|---|---|
+| GET | `/me` | `ADMIN`, `TEACHER`, `GUARDIAN` | Obtiene el perfil autenticado. |
+| PATCH | `/me/password` | `ADMIN`, `TEACHER`, `GUARDIAN` | Cambia la contrasena verificando primero la actual. |
+
+El cambio de contrasena recibe:
+
+```ts
+interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string; // 12 a 100 caracteres
+}
+```
+
+Errores de negocio especificos:
+
+- `CURRENT_PASSWORD_INVALID`: la contrasena actual no coincide.
+- `PASSWORD_UNCHANGED`: la nueva contrasena coincide con la actual.
+- `PASSWORD_CHANGE_REQUIRED`: la cuenta debe reemplazar su clave temporal antes de continuar.
 
 ## Usuario Autenticado
 

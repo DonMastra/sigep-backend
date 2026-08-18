@@ -20,6 +20,17 @@ data class LoginRequest @JsonCreator constructor(
     val password: String
 )
 
+data class ChangePasswordRequest @JsonCreator constructor(
+    @JsonProperty("currentPassword")
+    @field:NotBlank(message = "Current password is required")
+    val currentPassword: String,
+
+    @JsonProperty("newPassword")
+    @field:NotBlank(message = "New password is required")
+    @field:Size(min = 12, max = 100, message = "New password must contain between 12 and 100 characters")
+    val newPassword: String
+)
+
 data class LoginResponse(
     val token: String,
     val refreshToken: String,
@@ -77,7 +88,8 @@ data class UserDto(
     val lastName: String,
     val role: UserRole,
     val status: AccountStatus,
-    val active: Boolean
+    val active: Boolean,
+    val mustChangePassword: Boolean
 )
 
 data class AdminUserPageDto(
@@ -100,7 +112,8 @@ data class UserProfileDto(
     val emergencyContact: String?,
     val role: UserRole,
     val status: AccountStatus,
-    val active: Boolean
+    val active: Boolean,
+    val mustChangePassword: Boolean
 )
 
 data class RegistrationStatusResponseDto(

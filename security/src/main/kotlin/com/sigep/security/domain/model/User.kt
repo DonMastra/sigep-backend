@@ -54,6 +54,12 @@ data class User(
     @Column(nullable = false)
     val active: Boolean = true,
 
+    @Column(name = "must_change_password", nullable = false)
+    val mustChangePassword: Boolean = false,
+
+    @Column(name = "password_changed_at")
+    val passwordChangedAt: LocalDateTime? = null,
+
     @Column(name = "created_at", nullable = false)
     val createdAt: LocalDateTime = LocalDateTime.now(),
 
