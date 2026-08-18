@@ -65,8 +65,7 @@ class StudentService(
     fun getAllStudents(page: Int, size: Int, sortBy: String, sortDirection: String): PageResponse<StudentDto> {
         logger.info("Fetching all students - page: {}, size: {}", page, size)
 
-        val direction = if (sortDirection.uppercase() == "DESC") Sort.Direction.DESC else Sort.Direction.ASC
-        val pageable = PageRequest.of(page, size, Sort.by(direction, sortBy))
+        val pageable = studentPageRequest(page, size, sortBy, sortDirection)
 
         val studentsPage = studentRepository.findAll(pageable)
 
@@ -91,8 +90,7 @@ class StudentService(
             return PageResponse(emptyList(), page, size, 0, 0)
         }
 
-        val direction = if (sortDirection.uppercase() == "DESC") Sort.Direction.DESC else Sort.Direction.ASC
-        val pageable = PageRequest.of(page, size, Sort.by(direction, sortBy))
+        val pageable = studentPageRequest(page, size, sortBy, sortDirection)
         val studentsPage = studentRepository.findByIdIn(studentIds, pageable)
         return PageResponse(
             content = studentsPage.content.map { it.toDto() },
@@ -103,10 +101,16 @@ class StudentService(
         )
     }
 
-    fun searchStudents(search: String, page: Int, size: Int): PageResponse<StudentDto> {
+    fun searchStudents(
+        search: String,
+        page: Int,
+        size: Int,
+        sortBy: String,
+        sortDirection: String
+    ): PageResponse<StudentDto> {
         logger.info("Searching students with a supplied query")
 
-        val pageable = PageRequest.of(page, size)
+        val pageable = studentPageRequest(page, size, sortBy, sortDirection)
         val studentsPage = studentRepository.searchStudents(search, pageable)
 
         return PageResponse(
@@ -118,13 +122,20 @@ class StudentService(
         )
     }
 
-    fun searchStudentsForTeacher(teacherUserId: Long, search: String, page: Int, size: Int): PageResponse<StudentDto> {
+    fun searchStudentsForTeacher(
+        teacherUserId: Long,
+        search: String,
+        page: Int,
+        size: Int,
+        sortBy: String,
+        sortDirection: String
+    ): PageResponse<StudentDto> {
         val studentIds = enrollmentServiceProvider.getActiveStudentIdsByTeacher(teacherUserId)
         if (studentIds.isEmpty()) {
             return PageResponse(emptyList(), page, size, 0, 0)
         }
 
-        val pageable = PageRequest.of(page, size)
+        val pageable = studentPageRequest(page, size, sortBy, sortDirection)
         val studentsPage = studentRepository.searchStudentsByIds(search, studentIds, pageable)
         return PageResponse(
             content = studentsPage.content.map { it.toDto() },
@@ -152,6 +163,29 @@ class StudentService(
             }
             else -> throw ForbiddenException("User role cannot access students")
         }
+    }
+
+    private fun studentPageRequest(page: Int, size: Int, sortBy: String, sortDirection: String): PageRequest {
+        val sortField = sortBy.takeIf { it in ALLOWED_SORT_FIELDS } ?: "id"
+        val direction = if (sortDirection.uppercase(Locale.ROOT) == "DESC") {
+            Sort.Direction.DESC
+        } else {
+            Sort.Direction.ASC
+        }
+        val orders = buildList {
+            val primaryOrder = Sort.Order(direction, sortField)
+            add(if (sortField == "id") primaryOrder else primaryOrder.ignoreCase())
+            when (sortField) {
+                "lastName" -> add(Sort.Order(direction, "firstName").ignoreCase())
+                "firstName" -> add(Sort.Order(direction, "lastName").ignoreCase())
+            }
+            if (sortField != "id") add(Sort.Order.asc("id"))
+        }
+        return PageRequest.of(page, size, Sort.by(orders))
+    }
+
+    private companion object {
+        val ALLOWED_SORT_FIELDS = setOf("id", "lastName", "firstName", "studentNumber", "email")
     }
 
     @CacheEvict(value = ["students", "students_detail"], allEntries = true)

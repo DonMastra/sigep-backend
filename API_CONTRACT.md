@@ -281,7 +281,7 @@ Base: `/api/v1/students`
 |---|---|---|---|
 | GET | `/` | ADMIN, TEACHER | Lista estudiantes paginados. |
 | GET | `/{id}` | ADMIN, TEACHER, GUARDIAN | Detalle completo del estudiante. |
-| GET | `/search?query=` | ADMIN, TEACHER | Busca por nombre, email o documento. |
+| GET | `/search?query=` | ADMIN, TEACHER | Busca por nombre, nombre completo, email, documento o matricula, con paginacion y orden. |
 | GET | `/guardian/{guardianId}` | ADMIN, TEACHER, GUARDIAN | Estudiantes asociados a guardian. |
 | POST | `/` | ADMIN | Crea estudiante. |
 | POST | `/self-registration` | GUARDIAN | Crea estudiante vinculado al guardian autenticado. |
@@ -298,8 +298,12 @@ Parametros comunes de listado:
 
 - `page?: number`
 - `limit?: number`
-- `sort?: string`
+- `sort?: id | lastName | firstName | studentNumber | email`
 - `order?: ASC | DESC`
+
+El listado y la busqueda aplican el orden en backend antes de paginar. Para `lastName` y
+`firstName` se agregan criterios secundarios estables y `id` como desempate, evitando que un
+alumno cambie de pagina entre consultas equivalentes.
 
 ### StudentDto
 
