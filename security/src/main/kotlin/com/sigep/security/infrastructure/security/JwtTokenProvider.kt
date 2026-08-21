@@ -32,6 +32,7 @@ class JwtTokenProvider(
             .claim("userId", user.id)
             .claim("role", user.role.name)
             .claim("email", user.email)
+            .claim("mustChangePassword", user.mustChangePassword)
             .issuedAt(now)
             .expiration(expiryDate)
             .signWith(key)
@@ -60,6 +61,10 @@ class JwtTokenProvider(
 
     fun getRoleFromToken(token: String): String {
         return getClaims(token).get("role", String::class.java)
+    }
+
+    fun getMustChangePasswordFromToken(token: String): Boolean {
+        return getClaims(token).get("mustChangePassword", Boolean::class.javaObjectType) ?: false
     }
 
     fun validateToken(token: String): Boolean {

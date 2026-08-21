@@ -8,6 +8,7 @@ import com.sigep.common.application.exception.ResourceConflictException as AppRe
 import com.sigep.common.application.exception.ReservationAlreadyAssignedException as AppReservationAlreadyAssignedException
 import com.sigep.common.application.exception.ResourceNotFoundException as AppResourceNotFoundException
 import com.sigep.common.application.exception.UnauthorizedException as AppUnauthorizedException
+import com.sigep.common.application.exception.UnprocessableEntityException as AppUnprocessableEntityException
 import com.sigep.common.application.exception.ValidationException as AppValidationException
 import com.sigep.common.domain.exception.BusinessException as DomainBusinessException
 import com.sigep.common.domain.exception.DuplicateResourceException as DomainDuplicateResourceException
@@ -21,6 +22,7 @@ import org.springframework.security.authorization.AuthorizationDeniedException
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
+import org.springframework.web.servlet.resource.NoResourceFoundException
 
 @RestControllerAdvice
 class GlobalExceptionHandler {
@@ -29,7 +31,7 @@ class GlobalExceptionHandler {
 
     @ExceptionHandler(AppResourceNotFoundException::class)
     fun handleResourceNotFound(ex: AppResourceNotFoundException, request: HttpServletRequest): ResponseEntity<ErrorResponse> {
-        logger.warn("Resource not found: {}", ex.message)
+        logger.warn("Resource not found at {}", request.requestURI)
         return buildErrorResponse(
             status = HttpStatus.NOT_FOUND,
             code = ex.code,
@@ -40,7 +42,7 @@ class GlobalExceptionHandler {
 
     @ExceptionHandler(DomainResourceNotFoundException::class)
     fun handleDomainResourceNotFound(ex: DomainResourceNotFoundException, request: HttpServletRequest): ResponseEntity<ErrorResponse> {
-        logger.warn("Resource not found: {}", ex.message)
+        logger.warn("Domain resource not found at {}", request.requestURI)
         return buildErrorResponse(
             status = HttpStatus.NOT_FOUND,
             code = "RESOURCE_NOT_FOUND",
@@ -51,7 +53,7 @@ class GlobalExceptionHandler {
 
     @ExceptionHandler(AppValidationException::class)
     fun handleValidation(ex: AppValidationException, request: HttpServletRequest): ResponseEntity<ErrorResponse> {
-        logger.warn("Validation error: {}", ex.message)
+        logger.warn("Validation error at {}", request.requestURI)
         val details = ex.details ?: ex.validationDetails.takeIf { it.isNotEmpty() }?.joinToString(", ")
         return buildErrorResponse(
             status = HttpStatus.BAD_REQUEST,
@@ -65,7 +67,7 @@ class GlobalExceptionHandler {
 
     @ExceptionHandler(AppUnauthorizedException::class)
     fun handleUnauthorized(ex: AppUnauthorizedException, request: HttpServletRequest): ResponseEntity<ErrorResponse> {
-        logger.warn("Unauthorized access: {}", ex.message)
+        logger.warn("Unauthorized access at {}", request.requestURI)
         return buildErrorResponse(
             status = HttpStatus.UNAUTHORIZED,
             code = ex.code,
@@ -76,7 +78,7 @@ class GlobalExceptionHandler {
 
     @ExceptionHandler(AppForbiddenException::class)
     fun handleForbidden(ex: AppForbiddenException, request: HttpServletRequest): ResponseEntity<ErrorResponse> {
-        logger.warn("Forbidden access: {}", ex.message)
+        logger.warn("Forbidden access at {}", request.requestURI)
         return buildErrorResponse(
             status = HttpStatus.FORBIDDEN,
             code = ex.code,
@@ -87,7 +89,7 @@ class GlobalExceptionHandler {
 
     @ExceptionHandler(AuthorizationDeniedException::class)
     fun handleAuthorizationDenied(ex: AuthorizationDeniedException, request: HttpServletRequest): ResponseEntity<ErrorResponse> {
-        logger.warn("Authorization denied: {}", ex.message)
+        logger.warn("Authorization denied at {}", request.requestURI)
         return buildErrorResponse(
             status = HttpStatus.FORBIDDEN,
             code = "FORBIDDEN",
@@ -98,7 +100,7 @@ class GlobalExceptionHandler {
 
     @ExceptionHandler(AppDuplicateResourceException::class)
     fun handleDuplicateResource(ex: AppDuplicateResourceException, request: HttpServletRequest): ResponseEntity<ErrorResponse> {
-        logger.warn("Duplicate resource: {}", ex.message)
+        logger.warn("Duplicate resource at {}", request.requestURI)
         return buildErrorResponse(
             status = HttpStatus.CONFLICT,
             code = ex.code,
@@ -109,7 +111,7 @@ class GlobalExceptionHandler {
 
     @ExceptionHandler(AppResourceConflictException::class)
     fun handleResourceConflict(ex: AppResourceConflictException, request: HttpServletRequest): ResponseEntity<ErrorResponse> {
-        logger.warn("Resource conflict: {}", ex.message)
+        logger.warn("Resource conflict at {}", request.requestURI)
         return buildErrorResponse(
             status = HttpStatus.CONFLICT,
             code = ex.code,
@@ -120,9 +122,22 @@ class GlobalExceptionHandler {
         )
     }
 
+    @ExceptionHandler(AppUnprocessableEntityException::class)
+    fun handleUnprocessableEntity(ex: AppUnprocessableEntityException, request: HttpServletRequest): ResponseEntity<ErrorResponse> {
+        logger.warn("Unprocessable entity at {}", request.requestURI)
+        return buildErrorResponse(
+            status = HttpStatus.UNPROCESSABLE_ENTITY,
+            code = ex.code,
+            message = ex.message,
+            request = request,
+            field = ex.field,
+            details = ex.details
+        )
+    }
+
     @ExceptionHandler(AppReservationAlreadyAssignedException::class)
     fun handleReservationAlreadyAssigned(ex: AppReservationAlreadyAssignedException, request: HttpServletRequest): ResponseEntity<ErrorResponse> {
-        logger.warn("Reservation already assigned: {}", ex.message)
+        logger.warn("Reservation already assigned at {}", request.requestURI)
         return buildErrorResponse(
             status = HttpStatus.CONFLICT,
             code = ex.code,
@@ -135,7 +150,7 @@ class GlobalExceptionHandler {
 
     @ExceptionHandler(DomainDuplicateResourceException::class)
     fun handleDomainDuplicateResource(ex: DomainDuplicateResourceException, request: HttpServletRequest): ResponseEntity<ErrorResponse> {
-        logger.warn("Duplicate resource: {}", ex.message)
+        logger.warn("Domain duplicate resource at {}", request.requestURI)
         return buildErrorResponse(
             status = HttpStatus.CONFLICT,
             code = "DUPLICATE_RESOURCE",
@@ -148,7 +163,7 @@ class GlobalExceptionHandler {
     fun handleMethodArgumentNotValid(ex: MethodArgumentNotValidException, request: HttpServletRequest): ResponseEntity<ErrorResponse> {
         val firstFieldError = ex.bindingResult.fieldErrors.firstOrNull()
         val details = firstFieldError?.defaultMessage ?: "Validation failed"
-        logger.warn("Validation failed: {}", ex.bindingResult.fieldErrors)
+        logger.warn("Validation failed at {} with {} field errors", request.requestURI, ex.bindingResult.fieldErrorCount)
         return buildErrorResponse(
             status = HttpStatus.BAD_REQUEST,
             code = "VALIDATION_ERROR",
@@ -161,7 +176,7 @@ class GlobalExceptionHandler {
 
     @ExceptionHandler(HttpMessageNotReadableException::class)
     fun handleHttpMessageNotReadable(ex: HttpMessageNotReadableException, request: HttpServletRequest): ResponseEntity<ErrorResponse> {
-        logger.warn("Malformed request body: {}", ex.mostSpecificCause.message)
+        logger.warn("Malformed request body at {}", request.requestURI)
         return buildErrorResponse(
             status = HttpStatus.BAD_REQUEST,
             code = "VALIDATION_ERROR",
@@ -171,9 +186,20 @@ class GlobalExceptionHandler {
         )
     }
 
+    @ExceptionHandler(NoResourceFoundException::class)
+    fun handleNoResourceFound(ex: NoResourceFoundException, request: HttpServletRequest): ResponseEntity<ErrorResponse> {
+        logger.warn("No resource found at {}", request.requestURI)
+        return buildErrorResponse(
+            status = HttpStatus.NOT_FOUND,
+            code = "RESOURCE_NOT_FOUND",
+            message = "Resource not found",
+            request = request
+        )
+    }
+
     @ExceptionHandler(AppBusinessException::class)
     fun handleBusinessException(ex: AppBusinessException, request: HttpServletRequest): ResponseEntity<ErrorResponse> {
-        logger.warn("Business exception: {}", ex.message)
+        logger.warn("Business exception {} at {}", ex.code, request.requestURI)
         return buildErrorResponse(
             status = HttpStatus.BAD_REQUEST,
             code = ex.code,
@@ -186,7 +212,7 @@ class GlobalExceptionHandler {
 
     @ExceptionHandler(DomainBusinessException::class)
     fun handleDomainBusinessException(ex: DomainBusinessException, request: HttpServletRequest): ResponseEntity<ErrorResponse> {
-        logger.warn("Business exception: {}", ex.message)
+        logger.warn("Domain business exception at {}", request.requestURI)
         return buildErrorResponse(
             status = HttpStatus.BAD_REQUEST,
             code = "BUSINESS_RULE_VIOLATION",
@@ -197,7 +223,7 @@ class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception::class)
     fun handleGenericException(ex: Exception, request: HttpServletRequest): ResponseEntity<ErrorResponse> {
-        logger.error("Unexpected error: {}", ex.message, ex)
+        logger.error("Unexpected {} at {}", ex.javaClass.simpleName, request.requestURI)
         return buildErrorResponse(
             status = HttpStatus.INTERNAL_SERVER_ERROR,
             code = "INTERNAL_SERVER_ERROR",

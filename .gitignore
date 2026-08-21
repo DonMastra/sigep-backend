@@ -36,3 +36,15 @@ application-prod.properties
 *.pem
 *.env
 
+# Local migration inputs and backups (never commit identified data)
+*.xlsx
+*.xls
+*.xlsm
+*.dump
+*.backup
+*.sql.gz
+*.generated.sql
+*.gpg
+*.age
+data-imports/
+backups/

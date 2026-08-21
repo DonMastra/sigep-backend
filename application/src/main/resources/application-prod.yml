@@ -1,14 +1,20 @@
 # Production Environment Configuration
 
 spring:
+  # SiGEP authenticates with its stateless JWT filter. Prevent Spring Boot from
+  # creating and logging an unrelated development password in this environment.
+  autoconfigure:
+    exclude: org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+
   # PostgreSQL Configuration (use environment variables in production)
   datasource:
-    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/sigep_db}
-    username: ${DATABASE_USERNAME:sigep_user}
-    password: ${DATABASE_PASSWORD:sigep_password}
+    url: ${DATABASE_URL}
+    username: ${DATABASE_USERNAME}
+    password: ${DATABASE_PASSWORD}
     hikari:
-      maximum-pool-size: 20
-      minimum-idle: 5
+      schema: ${DB_SCHEMA:public}
+      maximum-pool-size: ${DB_MAX_POOL_SIZE:5}
+      minimum-idle: ${DB_MIN_IDLE:1}
       connection-timeout: 30000
       idle-timeout: 600000
       max-lifetime: 1800000
@@ -16,7 +22,7 @@ spring:
   # JPA/Hibernate Configuration (never use ddl-auto=update in production!)
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: ${JPA_DDL_AUTO:validate}
     show-sql: false
     properties:
       hibernate:
@@ -31,12 +37,16 @@ spring:
   # Redis Configuration (use environment variables)
   data:
     redis:
+      repositories:
+        enabled: false
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+      username: ${REDIS_USERNAME:}
       password: ${REDIS_PASSWORD:}
 
 # Server Configuration
 server:
+  port: ${PORT:8080}
   ssl:
     enabled: ${SSL_ENABLED:false}
     key-store: ${SSL_KEYSTORE_PATH:}
@@ -52,7 +62,11 @@ jwt:
 # CORS Configuration (restrict to production domains)
 app:
   cors:
-    allowed-origins: ${CORS_ALLOWED_ORIGINS:https://sigep.edu.mx,https://www.sigep.edu.mx}
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:https://sigep.com.ar,https://www.sigep.com.ar}
+  registration:
+    public-enabled: ${APP_PUBLIC_REGISTRATION_ENABLED:false}
+  cache:
+    namespace: ${CACHE_NAMESPACE:sigep-prod}
   security:
     rate-limit:
       capacity: 100
@@ -63,10 +77,21 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,prometheus
+        include: health,info
   endpoint:
     health:
-      show-details: when-authorized
+      show-details: never
+  health:
+    # Redis is a disposable cache in the free UAT environment. A cache outage
+    # must not make Render restart an otherwise healthy PostgreSQL-backed API.
+    redis:
+      enabled: false
+
+springdoc:
+  api-docs:
+    enabled: ${SPRINGDOC_API_DOCS_ENABLED:false}
+  swagger-ui:
+    enabled: ${SPRINGDOC_SWAGGER_UI_ENABLED:false}
 
 # Logging Configuration (less verbose in production)
 logging:
@@ -119,5 +144,6 @@ billing:
     connect-timeout: ${BILLING_MOCK_SERVICE_CONNECT_TIMEOUT:2s}
     request-timeout: ${BILLING_MOCK_SERVICE_REQUEST_TIMEOUT:5s}
   outbox:
+    enabled: ${BILLING_OUTBOX_ENABLED:false}
     poll-delay-ms: ${BILLING_OUTBOX_POLL_DELAY_MS:1000}
 

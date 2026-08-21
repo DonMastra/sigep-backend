@@ -1,6 +1,6 @@
 # API Contract - SiGEP Backend
 
-Contrato REST para integracion del frontend Angular SiGEP con el backend. Este documento refleja el estado del workspace al 2026-07-28.
+Contrato REST para integracion del frontend Angular SiGEP con el backend. Este documento refleja el estado del workspace al 2026-08-18.
 
 ## Informacion General
 
@@ -43,6 +43,11 @@ Flujo esperado:
 4. Enviar el access token en endpoints protegidos.
 5. Ante expiracion, usar `POST /api/v1/auth/refresh-token`.
 6. Si el refresh falla, limpiar sesion frontend y volver a login.
+7. Si `user.mustChangePassword` es `true`, navegar a `/auth/change-password` y usar
+   `PATCH /api/v1/users/me/password` antes de acceder a cualquier otra operacion protegida.
+
+Mientras el cambio obligatorio esta pendiente, el backend responde `403` con codigo
+`PASSWORD_CHANGE_REQUIRED` para los demas endpoints protegidos.
 
 Roles:
 
@@ -188,8 +193,33 @@ interface UserDto {
   role: 'ADMIN' | 'TEACHER' | 'GUARDIAN';
   status: 'PENDING_APPROVAL' | 'ACTIVE' | 'REJECTED';
   active: boolean;
+  mustChangePassword: boolean;
 }
 ```
+
+## Perfil de usuario autenticado
+
+Base: `/api/v1/users`
+
+| Metodo | Ruta | Roles | Descripcion |
+|---|---|---|---|
+| GET | `/me` | `ADMIN`, `TEACHER`, `GUARDIAN` | Obtiene el perfil autenticado. |
+| PATCH | `/me/password` | `ADMIN`, `TEACHER`, `GUARDIAN` | Cambia la contrasena verificando primero la actual. |
+
+El cambio de contrasena recibe:
+
+```ts
+interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string; // 12 a 100 caracteres
+}
+```
+
+Errores de negocio especificos:
+
+- `CURRENT_PASSWORD_INVALID`: la contrasena actual no coincide.
+- `PASSWORD_UNCHANGED`: la nueva contrasena coincide con la actual.
+- `PASSWORD_CHANGE_REQUIRED`: la cuenta debe reemplazar su clave temporal antes de continuar.
 
 ## Usuario Autenticado
 
@@ -251,11 +281,13 @@ Base: `/api/v1/students`
 |---|---|---|---|
 | GET | `/` | ADMIN, TEACHER | Lista estudiantes paginados. |
 | GET | `/{id}` | ADMIN, TEACHER, GUARDIAN | Detalle completo del estudiante. |
-| GET | `/search?query=` | ADMIN, TEACHER | Busca por nombre, email o documento. |
+| GET | `/search?query=` | ADMIN, TEACHER | Busca por nombre, nombre completo, email, documento o matricula, con paginacion y orden. |
 | GET | `/guardian/{guardianId}` | ADMIN, TEACHER, GUARDIAN | Estudiantes asociados a guardian. |
 | POST | `/` | ADMIN | Crea estudiante. |
 | POST | `/self-registration` | GUARDIAN | Crea estudiante vinculado al guardian autenticado. |
+| POST | `/identity-match` | ADMIN, GUARDIAN | Detecta coincidencias antes de crear; para GUARDIAN no revela datos de un estudiante ajeno. |
 | PUT | `/{id}` | ADMIN | Actualiza estudiante. |
+| PUT | `/{id}/guardian` | ADMIN | Vincula o reasigna el unico tutor vigente; exige `guardianId` y `reason` y genera auditoria. |
 | DELETE | `/{id}` | ADMIN | Elimina estudiante. |
 | POST | `/{id}/photo` | ADMIN | Sube foto multipart con parte `file`. |
 | GET | `/{id}/photo` | ADMIN, TEACHER, GUARDIAN | Descarga imagen. |
@@ -266,17 +298,24 @@ Parametros comunes de listado:
 
 - `page?: number`
 - `limit?: number`
-- `sort?: string`
+- `sort?: id | lastName | firstName | studentNumber | email`
 - `order?: ASC | DESC`
+
+El listado y la busqueda aplican el orden en backend antes de paginar. Para `lastName` y
+`firstName` se agregan criterios secundarios estables y `id` como desempate, evitando que un
+alumno cambie de pagina entre consultas equivalentes.
 
 ### StudentDto
 
 ```ts
 interface StudentDto {
   id: number;
+  studentNumber: string;
   firstName: string;
   lastName: string;
   email: string;
+  documentType: 'DNI' | 'PASSPORT' | 'NATIONAL_ID' | 'NO_DOCUMENT' | 'IN_PROCESS';
+  documentCountry: string;
   phoneNumber?: string;
   dateOfBirth?: string;
   address?: string;
@@ -284,6 +323,9 @@ interface StudentDto {
   guardianPhone?: string;
   guardianEmail?: string;
   documentNumber?: string;
+  currentCourseId?: number;
+  currentCourseName?: string;
+  currentCourses: EnrollmentSummaryDto[];
   currentLevel?: string;
   emergencyContact?: string;
   active: boolean;
@@ -292,6 +334,23 @@ interface StudentDto {
   updatedAt?: string;
 }
 ```
+
+`studentNumber` es el identificador de negocio inmutable del alumno. Para la migracion
+legacy conserva `Matricula`; para altas nuevas el backend genera un valor `SIGEP-*`.
+`currentCourses` contiene todas las inscripciones `ACTIVE`. Los campos singulares
+`currentCourseId` y `currentCourseName` se conservan temporalmente por compatibilidad y
+representan el primer curso activo en orden estable. Un alumno puede estar activo en varios
+cursos distintos; solo se rechaza duplicar el mismo par alumno-curso.
+
+La identidad documental se compara por `(documentCountry, documentType, normalizedDocumentNumber)`.
+Para `AR + DNI` se eliminan separadores y se completa a 8 digitos; pasaporte y documento
+nacional extranjero se comparan en mayusculas y sin separadores. `NO_DOCUMENT` e `IN_PROCESS`
+no llevan numero ni participan de la unicidad documental. El email de un estudiante no es una
+clave de identidad y puede repetirse, especialmente para menores.
+
+`POST /identity-match` devuelve `NONE`, `OWNED`, `UNASSIGNED` o `VERIFICATION_REQUIRED`.
+GUARDIAN solo recibe `studentId` y nombre para un estudiante ya vinculado a su propia cuenta;
+cualquier coincidencia ajena se reduce a `VERIFICATION_REQUIRED`.
 
 ## Courses
 
@@ -353,17 +412,18 @@ Tuition separa la solicitud del tutor, el cobro de matricula, la nivelacion y la
 academica final. El tutor no elige ciclo, nivel, curso ni plan. `Enrollment` y los cargos de
 cuotas se crean juntos cuando ADMIN asigna una solicitud ya matriculada y nivelada.
 
-### Guardian flow
+### Flujo unificado ADMIN / GUARDIAN
 
 | Metodo | Ruta | Roles | Descripcion |
 |---|---|---|---|
-| POST | `/applications` | GUARDIAN | Crea solicitud `SUBMITTED` para alumno nuevo, adicional o regular. |
+| POST | `/applications` | ADMIN, GUARDIAN | Resuelve o crea el estudiante y crea una solicitud `SUBMITTED`; exige `Idempotency-Key`. |
 | GET | `/my-applications` | GUARDIAN | Lista solicitudes del guardian autenticado. |
 
 ### Admin flow
 
 | Metodo | Ruta | Roles | Descripcion |
 |---|---|---|---|
+| POST | `/applications` | ADMIN, GUARDIAN | ADMIN informa `actingForGuardianUserId`; ambos actores usan el mismo agregado y reglas. |
 | GET | `/applications?status=&academicYearId=` | ADMIN | Lista solicitudes con filtros; las nuevas no tienen ciclo hasta la asignacion. |
 | GET | `/applications/{id}` | ADMIN, TEACHER | Detalle con matricula, nivelacion, asignacion y ledger. |
 | POST | `/applications/{id}/enrollment-charge` | ADMIN | Aplica una politica de matricula activa y crea el ledger/cargo idempotente. |
@@ -397,6 +457,9 @@ Enums principales:
 type TuitionAcademicYearStatus = 'DRAFT' | 'OPEN' | 'CLOSED';
 type TuitionSegment = 'CHILDREN' | 'TEENS' | 'ADULTS';
 type TuitionApplicationType = 'NEW_STUDENT' | 'REGULAR_PROMOTION' | 'ADDITIONAL_STUDENT';
+type TuitionStudentMode = 'EXISTING' | 'NEW';
+type TuitionApplicationOrigin = 'ADMIN' | 'GUARDIAN';
+type TuitionStudentResolution = 'EXISTING' | 'CREATED';
 type TuitionApplicationStatus =
   | 'SUBMITTED'
   | 'PAYMENT_PENDING'
@@ -418,10 +481,14 @@ Solicitud:
 ```ts
 interface CreateTuitionApplicationRequest {
   applicationType: TuitionApplicationType;
+  actingForGuardianUserId?: number; // obligatorio para ADMIN
+  studentMode?: TuitionStudentMode;
   studentId?: number;
   studentFirstName?: string;
   studentLastName?: string;
   studentEmail?: string;
+  studentDocumentType?: 'DNI' | 'PASSPORT' | 'NATIONAL_ID' | 'NO_DOCUMENT' | 'IN_PROCESS';
+  studentDocumentCountry?: string;
   studentDocumentNumber?: string;
   studentDateOfBirth?: string;
   studentAddress?: string;
@@ -433,10 +500,16 @@ interface CreateTuitionApplicationRequest {
 
 Notas:
 
-- `REGULAR_PROMOTION` requiere un `studentId` propio del guardian. Los demas tipos requieren
-  el snapshot completo, pero no crean la fila `students` al enviar la solicitud.
-- Un pago parcial mantiene `PAYMENT_PENDING`. Al completar la matricula, el observer crea al
-  estudiante con nivel tecnico `PENDING_PLACEMENT` y pasa a `ENROLLED_PENDING_PLACEMENT`.
+- `Idempotency-Key` debe tener 8 a 128 caracteres. Repetir la misma clave, actor y payload
+  devuelve la solicitud existente; reutilizarla para otro payload responde `409 IDEMPOTENCY_KEY_REUSED`.
+- `REGULAR_PROMOTION` requiere `studentMode=EXISTING`. Los demas tipos permiten reutilizar
+  `studentId` o enviar el perfil completo. La identidad y el unico vinculo tutor-estudiante se
+  resuelven transaccionalmente antes de persistir la solicitud y antes de cualquier cargo.
+- ADMIN opera en nombre de un tutor activo mediante `actingForGuardianUserId`; la solicitud
+  conserva `actorUserId`, `guardianUserId`, `origin` y `studentResolution`.
+- GUARDIAN no puede vincularse a una coincidencia ajena: recibe `422 STUDENT_MATCH_REQUIRES_VERIFICATION`.
+- Un pago parcial mantiene `PAYMENT_PENDING`. Al completar la matricula, el observer solo marca
+  el ledger y pasa a `ENROLLED_PENDING_PLACEMENT`; nunca crea tarde una segunda fila `students`.
 - El pago se registra por `POST /api/v1/billing/charges/{chargeId}/payments` y actualiza importes
   y `billingReference=PAYMENT-{paymentId}`. Una reversion previa a la asignacion vuelve a
   `PAYMENT_PENDING`; si el alumno ya fue asignado conserva su historial y deja una advertencia.
@@ -449,6 +522,16 @@ Notas:
   fin del plan, fin del ciclo y `installments`, que representa la cantidad maxima por estudiante.
   El primer vencimiento nunca puede ser anterior a la fecha de asignacion. Su debito proviene
   del plan mensual; la matricula usa su politica independiente.
+
+### Alta e invitacion administrativa de tutores
+
+| Metodo | Ruta | Roles | Descripcion |
+|---|---|---|---|
+| POST | `/api/v1/admin/guardians` | ADMIN | Crea tutor `ACTIVE` con clave inicial o `INVITE` con token de 48 horas. |
+| POST | `/api/v1/auth/guardian-invitations/accept` | Publico | Consume una vez el token y define una clave de al menos 12 caracteres. |
+
+El token de invitacion se devuelve una sola vez al ADMIN; en base solo se guarda SHA-256.
+Este camino no reemplaza `POST /auth/register` ni el circuito existente de aprobacion.
 
 ## Course Sessions
 
@@ -557,6 +640,7 @@ Base: `/api/v1/staff/teaching`
 | GET | `/` | ADMIN | Lista docentes. |
 | GET | `/{id}` | ADMIN, TEACHER | Detalle de docente. |
 | GET | `/search?query=` | ADMIN | Busca docentes. |
+| GET | `/assignable` | ADMIN | Lista personal activo enlazado a cuentas activas `TEACHER` o `ADMIN`; `id` pertenece a `users`. |
 | POST | `/resolve` | ADMIN, TEACHER | Resuelve ids a nombres. |
 | POST | `/` | ADMIN | Crea docente. |
 | PUT | `/{id}` | ADMIN | Actualiza docente. |
@@ -570,6 +654,10 @@ transaccionalmente. `UpdateTeachingStaffRequest` no acepta credenciales: recibe 
 personales/laborales, `linkedUserId`, `assignedCourseIds`, `confirmCourseReassignments` e
 `isActive`. Las asignaciones son exactas: cursos quitados quedan sin docente y las
 reasignaciones requieren confirmacion.
+
+`courses.teacher_id` y `AssignableTeacherDto.id` usan siempre el identificador de `users`,
+nunca el identificador de `teaching_staff`. Una cuenta `ADMIN` puede ser asignable cuando
+tambien esta enlazada a un legajo docente activo.
 
 ### Non-Teaching Staff
 

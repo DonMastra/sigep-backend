@@ -35,6 +35,14 @@ annotation class RequireGuardian
 annotation class RequireAdminOrTeacher
 
 /**
+ * Annotation for endpoints accessible by ADMIN or GUARDIAN.
+ */
+@Target(AnnotationTarget.FUNCTION, AnnotationTarget.CLASS)
+@Retention(AnnotationRetention.RUNTIME)
+@PreAuthorize("hasAnyRole('ADMIN', 'GUARDIAN')")
+annotation class RequireAdminOrGuardian
+
+/**
  * Annotation for endpoints accessible by ADMIN, TEACHER or GUARDIAN
  */
 @Target(AnnotationTarget.FUNCTION, AnnotationTarget.CLASS)

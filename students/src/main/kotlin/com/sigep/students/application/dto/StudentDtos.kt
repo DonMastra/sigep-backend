@@ -1,21 +1,26 @@
 package com.sigep.students.application.dto
 
 import com.sigep.common.application.dto.EnrollmentSummaryDto
+import com.sigep.students.domain.model.StudentDocumentType
 import jakarta.validation.constraints.*
 import java.time.LocalDate
 import java.time.LocalDateTime
 
 data class StudentDto(
     val id: Long,
+    val studentNumber: String,
     val firstName: String,
     val lastName: String,
     val email: String,
-    val documentNumber: String,
+    val documentType: StudentDocumentType,
+    val documentCountry: String,
+    val documentNumber: String?,
     val dateOfBirth: LocalDate,
     val enrollmentDate: LocalDate,
     val guardianId: Long?,
     val currentCourseId: Long?,
     val currentCourseName: String?,
+    val currentCourses: List<EnrollmentSummaryDto>,
     val currentLevel: String,
     val active: Boolean,
     val photoUrl: String?,
@@ -30,10 +35,13 @@ data class StudentDto(
  */
 data class StudentDetailDto(
     val id: Long,
+    val studentNumber: String,
     val firstName: String,
     val lastName: String,
     val email: String,
-    val documentNumber: String,
+    val documentType: StudentDocumentType,
+    val documentCountry: String,
+    val documentNumber: String?,
     val dateOfBirth: LocalDate,
     val address: String,
     val phoneNumber: String,
@@ -43,6 +51,7 @@ data class StudentDetailDto(
     val medicalNotes: String?,
     val currentCourseId: Long?,
     val currentCourseName: String?,
+    val currentCourses: List<EnrollmentSummaryDto>,
     val currentLevel: String,
     val active: Boolean,
     val photoUrl: String?,
@@ -65,8 +74,12 @@ data class CreateStudentRequest(
     @field:Email(message = "Invalid email format")
     val email: String,
 
-    @field:NotBlank(message = "Document number is required")
-    val documentNumber: String,
+    val documentType: StudentDocumentType = StudentDocumentType.DNI,
+
+    @field:Pattern(regexp = "^[A-Za-z]{2}$", message = "Document country must be ISO alpha-2")
+    val documentCountry: String = "AR",
+
+    val documentNumber: String? = null,
 
     @field:NotNull(message = "Date of birth is required")
     @field:Past(message = "Date of birth must be in the past")
@@ -85,9 +98,9 @@ data class CreateStudentRequest(
 
     val active: Boolean = true,
 
-    val guardianId: Long?,
+    val guardianId: Long? = null,
 
-    val medicalNotes: String?,
+    val medicalNotes: String? = null,
 
     val currentLevel: String = "BEGINNER"
 )
@@ -101,6 +114,11 @@ data class GuardianStudentRegistrationRequest(
 
     @field:Email(message = "Invalid email format")
     val email: String? = null,
+
+    val documentType: StudentDocumentType = StudentDocumentType.DNI,
+
+    @field:Pattern(regexp = "^[A-Za-z]{2}$", message = "Document country must be ISO alpha-2")
+    val documentCountry: String = "AR",
 
     val documentNumber: String? = null,
 
@@ -128,6 +146,11 @@ data class UpdateStudentRequest(
     @field:Email(message = "Invalid email format")
     val email: String? = null,
 
+    val documentType: StudentDocumentType? = null,
+
+    @field:Pattern(regexp = "^[A-Za-z]{2}$", message = "Document country must be ISO alpha-2")
+    val documentCountry: String? = null,
+
     val documentNumber: String? = null,
 
     @field:Past(message = "Date of birth must be in the past")
@@ -148,5 +171,33 @@ data class UpdateStudentRequest(
     val active: Boolean? = null,
 
     val currentLevel: String? = null
+)
+
+data class StudentIdentityMatchRequest(
+    val documentType: StudentDocumentType = StudentDocumentType.DNI,
+    @field:Pattern(regexp = "^[A-Za-z]{2}$", message = "Document country must be ISO alpha-2")
+    val documentCountry: String = "AR",
+    val documentNumber: String? = null,
+    @field:Size(min = 1, max = 100) val firstName: String? = null,
+    @field:Size(min = 1, max = 100) val lastName: String? = null,
+    @field:Past val dateOfBirth: LocalDate? = null
+)
+
+data class StudentIdentityMatchDto(
+    val outcome: StudentIdentityMatchOutcome,
+    val studentId: Long? = null,
+    val displayName: String? = null
+)
+
+enum class StudentIdentityMatchOutcome {
+    NONE,
+    OWNED,
+    UNASSIGNED,
+    VERIFICATION_REQUIRED
+}
+
+data class LinkStudentGuardianRequest(
+    @field:NotNull val guardianId: Long,
+    @field:NotBlank @field:Size(max = 500) val reason: String
 )
 

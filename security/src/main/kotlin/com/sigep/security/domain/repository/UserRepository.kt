@@ -13,6 +13,8 @@ interface UserRepository : JpaRepository<User, Long>, JpaSpecificationExecutor<U
     fun findByEmail(email: String): Optional<User>
     fun existsByUsername(username: String): Boolean
     fun existsByEmail(email: String): Boolean
+    fun existsByUsernameIgnoreCase(username: String): Boolean
+    fun existsByEmailIgnoreCase(email: String): Boolean
     fun countByStatus(status: AccountStatus): Long
 }
 

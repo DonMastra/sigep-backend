@@ -93,6 +93,8 @@ class EnrollmentServiceAuthorizationTest {
         firstName = "Test",
         lastName = "Student",
         email = "student@example.com",
+        documentType = "DNI",
+        documentCountry = "AR",
         documentNumber = "12345678",
         dateOfBirth = LocalDate.of(2012, 1, 1),
         address = "Street 123",

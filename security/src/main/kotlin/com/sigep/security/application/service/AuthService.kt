@@ -3,14 +3,17 @@ package com.sigep.security.application.service
 import com.sigep.common.application.exception.DuplicateResourceException
 import com.sigep.common.application.exception.ForbiddenException
 import com.sigep.common.application.exception.ResourceNotFoundException
+import com.sigep.common.application.exception.ResourceConflictException
 import com.sigep.common.application.exception.UnauthorizedException
 import com.sigep.common.application.exception.ValidationException
 import com.sigep.security.application.dto.*
 import com.sigep.security.domain.model.AccountStatus
 import com.sigep.security.domain.model.RegistrationRequest
+import com.sigep.security.domain.model.GuardianInvitation
 import com.sigep.security.domain.model.User
 import com.sigep.security.domain.model.UserRole
 import com.sigep.security.domain.repository.RegistrationRequestRepository
+import com.sigep.security.domain.repository.GuardianInvitationRepository
 import com.sigep.security.domain.repository.UserRepository
 import com.sigep.security.infrastructure.security.JwtTokenProvider
 import org.slf4j.LoggerFactory
@@ -21,12 +24,17 @@ import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDateTime
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
+import java.security.SecureRandom
+import java.util.Base64
 
 @Service
 @Transactional
 class AuthService(
     private val userRepository: UserRepository,
     private val registrationRequestRepository: RegistrationRequestRepository,
+    private val guardianInvitationRepository: GuardianInvitationRepository,
     private val passwordEncoder: PasswordEncoder,
     private val jwtTokenProvider: JwtTokenProvider
 ) {
@@ -34,7 +42,7 @@ class AuthService(
     private val logger = LoggerFactory.getLogger(AuthService::class.java)
 
     fun login(request: LoginRequest): LoginResponse {
-        logger.info("Login attempt for user: {}", request.username)
+        logger.info("Login attempt received")
 
         val user = userRepository.findByUsername(request.username)
             .orElseThrow { UnauthorizedException("Invalid credentials") }
@@ -48,7 +56,7 @@ class AuthService(
         val token = jwtTokenProvider.generateToken(user)
         val refreshToken = jwtTokenProvider.generateRefreshToken(user)
 
-        logger.info("User {} logged in successfully", user.username)
+        logger.info("Login completed successfully for user id {}", user.id)
 
         return LoginResponse(
             token = token,
@@ -58,7 +66,7 @@ class AuthService(
     }
 
     fun register(request: RegisterRequest): UserDto {
-        logger.info("Registration attempt for username: {}", request.username)
+        logger.info("Public registration attempt received")
 
         if (request.role == UserRole.ADMIN) {
             throw ValidationException("Public registration does not allow ADMIN role")
@@ -105,9 +113,94 @@ class AuthService(
             )
         )
 
-        logger.info("User {} registered successfully", savedUser.username)
+        logger.info("Public registration completed for user id {}", savedUser.id)
 
         return savedUser.toDto()
+    }
+
+    fun createGuardianByAdmin(
+        request: AdminCreateGuardianRequest,
+        createdBy: Long
+    ): AdminCreateGuardianResponse {
+        val username = request.username.trim()
+        val email = request.email.trim().lowercase()
+        if (userRepository.existsByUsernameIgnoreCase(username)) {
+            throw DuplicateResourceException("Username already exists", "USERNAME_ALREADY_EXISTS")
+        }
+        if (userRepository.existsByEmailIgnoreCase(email)) {
+            throw DuplicateResourceException("Email already exists", "GUARDIAN_EMAIL_ALREADY_EXISTS")
+        }
+        if (request.activationMode == AdminGuardianActivationMode.ACTIVE && request.initialPassword.isNullOrBlank()) {
+            throw ValidationException(
+                message = "initialPassword is required for ACTIVE guardian creation",
+                code = "INITIAL_PASSWORD_REQUIRED",
+                field = "initialPassword"
+            )
+        }
+
+        val now = LocalDateTime.now()
+        val invitationToken = if (request.activationMode == AdminGuardianActivationMode.INVITE) secureToken() else null
+        val rawPassword = request.initialPassword ?: secureToken()
+        val user = userRepository.save(
+            User(
+                username = username,
+                email = email,
+                password = passwordEncoder.encode(rawPassword),
+                firstName = request.firstName.trim(),
+                lastName = request.lastName.trim(),
+                phoneNumber = request.phoneNumber?.trim(),
+                address = request.address?.trim(),
+                dateOfBirth = request.dateOfBirth,
+                documentNumber = request.documentNumber?.trim(),
+                emergencyContact = request.emergencyContact?.trim(),
+                role = UserRole.GUARDIAN,
+                status = if (request.activationMode == AdminGuardianActivationMode.ACTIVE) AccountStatus.ACTIVE else AccountStatus.PENDING_APPROVAL,
+                active = request.activationMode == AdminGuardianActivationMode.ACTIVE,
+                createdAt = now,
+                updatedAt = now
+            )
+        )
+
+        val invitation = invitationToken?.let { token ->
+            guardianInvitationRepository.save(
+                GuardianInvitation(
+                    user = user,
+                    tokenHash = hashToken(token),
+                    expiresAt = now.plusHours(48),
+                    createdBy = createdBy,
+                    createdAt = now
+                )
+            )
+        }
+        return AdminCreateGuardianResponse(
+            user = user.toDto(),
+            activationMode = request.activationMode,
+            invitationToken = invitationToken,
+            invitationExpiresAt = invitation?.expiresAt
+        )
+    }
+
+    fun acceptGuardianInvitation(request: AcceptGuardianInvitationRequest): UserDto {
+        val invitation = guardianInvitationRepository.findByTokenHash(hashToken(request.token.trim()))
+            .orElseThrow { ValidationException("Invitation is invalid", code = "GUARDIAN_INVITATION_INVALID") }
+        val now = LocalDateTime.now()
+        if (invitation.acceptedAt != null) {
+            throw ResourceConflictException("Invitation was already accepted", "GUARDIAN_INVITATION_ALREADY_ACCEPTED")
+        }
+        if (!invitation.expiresAt.isAfter(now)) {
+            throw ValidationException("Invitation has expired", code = "GUARDIAN_INVITATION_EXPIRED")
+        }
+
+        val activated = userRepository.save(
+            invitation.user.copy(
+                password = passwordEncoder.encode(request.password),
+                status = AccountStatus.ACTIVE,
+                active = true,
+                updatedAt = now
+            )
+        )
+        guardianInvitationRepository.save(invitation.copy(acceptedAt = now))
+        return activated.toDto()
     }
 
     @Transactional(readOnly = true)
@@ -116,6 +209,40 @@ class AuthService(
             .orElseThrow { ResourceNotFoundException("User not found") }
 
         return user.toProfileDto()
+    }
+
+    fun changePassword(userId: Long, request: ChangePasswordRequest): UserDto {
+        val user = userRepository.findById(userId)
+            .orElseThrow { ResourceNotFoundException("User not found") }
+
+        if (!passwordEncoder.matches(request.currentPassword, user.password)) {
+            throw ValidationException(
+                message = "La contrasena actual no es correcta",
+                code = "CURRENT_PASSWORD_INVALID",
+                field = "currentPassword"
+            )
+        }
+
+        if (passwordEncoder.matches(request.newPassword, user.password)) {
+            throw ValidationException(
+                message = "La nueva contrasena debe ser diferente de la actual",
+                code = "PASSWORD_UNCHANGED",
+                field = "newPassword"
+            )
+        }
+
+        val now = LocalDateTime.now()
+        val updatedUser = userRepository.save(
+            user.copy(
+                password = passwordEncoder.encode(request.newPassword),
+                mustChangePassword = false,
+                passwordChangedAt = now,
+                updatedAt = now
+            )
+        )
+
+        logger.info("Password changed successfully for user id {}", userId)
+        return updatedUser.toDto()
     }
 
     @Transactional(readOnly = true)
@@ -329,8 +456,20 @@ class AuthService(
         lastName = lastName,
         role = role,
         status = status,
-        active = active
+        active = active,
+        mustChangePassword = mustChangePassword
     )
+
+    private fun secureToken(): String {
+        val bytes = ByteArray(32)
+        SecureRandom().nextBytes(bytes)
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
+    }
+
+    private fun hashToken(token: String): String =
+        MessageDigest.getInstance("SHA-256")
+            .digest(token.toByteArray(StandardCharsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
 
     private fun User.toProfileDto() = UserProfileDto(
         id = id!!,
@@ -345,7 +484,8 @@ class AuthService(
         emergencyContact = emergencyContact,
         role = role,
         status = status,
-        active = active
+        active = active,
+        mustChangePassword = mustChangePassword
     )
 
     private fun RegistrationRequest.toDto() = RegistrationRequestDto(

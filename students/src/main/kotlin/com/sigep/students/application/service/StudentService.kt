@@ -2,15 +2,20 @@ package com.sigep.students.application.service
 
 import com.sigep.common.application.dto.PageResponse
 import com.sigep.common.application.exception.ForbiddenException
+import com.sigep.common.application.exception.ResourceConflictException
+import com.sigep.common.application.exception.UnprocessableEntityException
 import com.sigep.common.application.exception.ValidationException
 import com.sigep.common.domain.exception.ResourceNotFoundException
-import com.sigep.common.domain.exception.DuplicateResourceException
 import com.sigep.common.domain.exception.BusinessException
 import com.sigep.common.application.service.EnrollmentServiceProvider
 import com.sigep.security.domain.model.UserRole
 import com.sigep.security.domain.repository.UserRepository
 import com.sigep.students.application.dto.*
 import com.sigep.students.domain.model.Student
+import com.sigep.students.domain.model.StudentGuardianLinkAction
+import com.sigep.students.domain.model.StudentGuardianLinkEvent
+import com.sigep.students.domain.model.StudentGuardianLinkOrigin
+import com.sigep.students.domain.repository.StudentGuardianLinkEventRepository
 import com.sigep.students.domain.repository.StudentRepository
 import org.slf4j.LoggerFactory
 import org.springframework.cache.annotation.CacheEvict
@@ -31,7 +36,9 @@ import java.util.Locale
 class StudentService(
     private val studentRepository: StudentRepository,
     private val enrollmentServiceProvider: EnrollmentServiceProvider,  // Inyectamos la interfaz, no el repositorio
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val guardianLinkEventRepository: StudentGuardianLinkEventRepository,
+    private val identityNormalizer: StudentIdentityNormalizer
 ) {
 
     private val logger = LoggerFactory.getLogger(StudentService::class.java)
@@ -58,8 +65,7 @@ class StudentService(
     fun getAllStudents(page: Int, size: Int, sortBy: String, sortDirection: String): PageResponse<StudentDto> {
         logger.info("Fetching all students - page: {}, size: {}", page, size)
 
-        val direction = if (sortDirection.uppercase() == "DESC") Sort.Direction.DESC else Sort.Direction.ASC
-        val pageable = PageRequest.of(page, size, Sort.by(direction, sortBy))
+        val pageable = studentPageRequest(page, size, sortBy, sortDirection)
 
         val studentsPage = studentRepository.findAll(pageable)
 
@@ -84,8 +90,7 @@ class StudentService(
             return PageResponse(emptyList(), page, size, 0, 0)
         }
 
-        val direction = if (sortDirection.uppercase() == "DESC") Sort.Direction.DESC else Sort.Direction.ASC
-        val pageable = PageRequest.of(page, size, Sort.by(direction, sortBy))
+        val pageable = studentPageRequest(page, size, sortBy, sortDirection)
         val studentsPage = studentRepository.findByIdIn(studentIds, pageable)
         return PageResponse(
             content = studentsPage.content.map { it.toDto() },
@@ -96,10 +101,16 @@ class StudentService(
         )
     }
 
-    fun searchStudents(search: String, page: Int, size: Int): PageResponse<StudentDto> {
-        logger.info("Searching students with query: {}", search)
+    fun searchStudents(
+        search: String,
+        page: Int,
+        size: Int,
+        sortBy: String,
+        sortDirection: String
+    ): PageResponse<StudentDto> {
+        logger.info("Searching students with a supplied query")
 
-        val pageable = PageRequest.of(page, size)
+        val pageable = studentPageRequest(page, size, sortBy, sortDirection)
         val studentsPage = studentRepository.searchStudents(search, pageable)
 
         return PageResponse(
@@ -111,13 +122,20 @@ class StudentService(
         )
     }
 
-    fun searchStudentsForTeacher(teacherUserId: Long, search: String, page: Int, size: Int): PageResponse<StudentDto> {
+    fun searchStudentsForTeacher(
+        teacherUserId: Long,
+        search: String,
+        page: Int,
+        size: Int,
+        sortBy: String,
+        sortDirection: String
+    ): PageResponse<StudentDto> {
         val studentIds = enrollmentServiceProvider.getActiveStudentIdsByTeacher(teacherUserId)
         if (studentIds.isEmpty()) {
             return PageResponse(emptyList(), page, size, 0, 0)
         }
 
-        val pageable = PageRequest.of(page, size)
+        val pageable = studentPageRequest(page, size, sortBy, sortDirection)
         val studentsPage = studentRepository.searchStudentsByIds(search, studentIds, pageable)
         return PageResponse(
             content = studentsPage.content.map { it.toDto() },
@@ -147,24 +165,45 @@ class StudentService(
         }
     }
 
+    private fun studentPageRequest(page: Int, size: Int, sortBy: String, sortDirection: String): PageRequest {
+        val sortField = sortBy.takeIf { it in ALLOWED_SORT_FIELDS } ?: "id"
+        val direction = if (sortDirection.uppercase(Locale.ROOT) == "DESC") {
+            Sort.Direction.DESC
+        } else {
+            Sort.Direction.ASC
+        }
+        val orders = buildList {
+            val primaryOrder = Sort.Order(direction, sortField)
+            add(if (sortField == "id") primaryOrder else primaryOrder.ignoreCase())
+            when (sortField) {
+                "lastName" -> add(Sort.Order(direction, "firstName").ignoreCase())
+                "firstName" -> add(Sort.Order(direction, "lastName").ignoreCase())
+            }
+            if (sortField != "id") add(Sort.Order.asc("id"))
+        }
+        return PageRequest.of(page, size, Sort.by(orders))
+    }
+
+    private companion object {
+        val ALLOWED_SORT_FIELDS = setOf("id", "lastName", "firstName", "studentNumber", "email")
+    }
+
     @CacheEvict(value = ["students", "students_detail"], allEntries = true)
-    fun createStudent(request: CreateStudentRequest): StudentDto {
-        logger.info("Creating new student with email: {}", request.email)
-
-        if (studentRepository.existsByEmail(request.email)) {
-            throw DuplicateResourceException("Student with email ${request.email} already exists")
-        }
-
-        if (studentRepository.existsByDocumentNumber(request.documentNumber)) {
-            throw DuplicateResourceException("Student with document number ${request.documentNumber} already exists")
-        }
+    fun createStudent(request: CreateStudentRequest, actorUserId: Long): StudentDto {
+        logger.info("Creating new student record")
+        val identity = identityNormalizer.normalize(request.documentType, request.documentCountry, request.documentNumber)
+        ensureDocumentAvailable(identity)
+        request.guardianId?.let(::validateActiveGuardian)
 
         val student = Student(
-            firstName = request.firstName,
-            lastName = request.lastName,
-            email = request.email,
+            firstName = request.firstName.trim(),
+            lastName = request.lastName.trim(),
+            email = request.email.trim().lowercase(),
             phoneNumber = request.phoneNumber,
-            documentNumber = request.documentNumber,
+            documentType = identity.type,
+            documentCountry = identity.country,
+            documentNumber = identity.displayNumber,
+            normalizedDocumentNumber = identity.normalizedNumber,
             dateOfBirth = request.dateOfBirth,
             address = request.address,
             emergencyContact = request.emergencyContact,
@@ -178,6 +217,9 @@ class StudentService(
         )
 
         val savedStudent = studentRepository.save(student)
+        savedStudent.guardianId?.let { guardianId ->
+            recordGuardianChange(savedStudent.id!!, null, guardianId, actorUserId, StudentGuardianLinkOrigin.ADMIN, "Guardian assigned during student creation")
+        }
         logger.info("Student created successfully with id: {}", savedStudent.id)
 
         return savedStudent.toDto()
@@ -199,27 +241,34 @@ class StudentService(
         val firstName = resolveRequiredField("firstName", request.firstName, guardianUser.firstName, useProfileData)
         val lastName = resolveRequiredField("lastName", request.lastName, guardianUser.lastName, useProfileData)
         val email = resolveRequiredField("email", request.email, guardianUser.email, useProfileData)
-        val documentNumber = resolveRequiredField("documentNumber", request.documentNumber, guardianUser.documentNumber, useProfileData)
+        val documentNumber = request.documentNumber ?: if (useProfileData) guardianUser.documentNumber else null
         val address = resolveRequiredField("address", request.address, guardianUser.address, useProfileData)
         val phoneNumber = resolveRequiredField("phoneNumber", request.phoneNumber, guardianUser.phoneNumber, useProfileData)
         val emergencyContact = resolveRequiredField("emergencyContact", request.emergencyContact, guardianUser.emergencyContact, useProfileData)
         val dateOfBirth: LocalDate = (request.dateOfBirth ?: if (useProfileData) guardianUser.dateOfBirth else null)
             ?: throw ValidationException("Field dateOfBirth is required for guardian self-registration")
 
-        if (studentRepository.existsByEmail(email)) {
-            throw DuplicateResourceException("Student with email $email already exists")
-        }
-
-        if (studentRepository.existsByDocumentNumber(documentNumber)) {
-            throw DuplicateResourceException("Student with document number $documentNumber already exists")
+        val identity = identityNormalizer.normalize(request.documentType, request.documentCountry, documentNumber)
+        val existing = findByIdentity(identity)
+        if (existing != null) {
+            if (existing.guardianId == guardianUserId) {
+                return existing.toDto()
+            }
+            throw UnprocessableEntityException(
+                message = "The student identity requires administrative verification",
+                code = "STUDENT_MATCH_REQUIRES_VERIFICATION"
+            )
         }
 
         val student = Student(
             firstName = firstName,
             lastName = lastName,
-            email = email,
+            email = email.trim().lowercase(),
             phoneNumber = phoneNumber,
-            documentNumber = documentNumber,
+            documentType = identity.type,
+            documentCountry = identity.country,
+            documentNumber = identity.displayNumber,
+            normalizedDocumentNumber = identity.normalizedNumber,
             dateOfBirth = dateOfBirth,
             address = address,
             emergencyContact = emergencyContact,
@@ -233,43 +282,46 @@ class StudentService(
         )
 
         val savedStudent = studentRepository.save(student)
+        recordGuardianChange(savedStudent.id!!, null, guardianUserId, guardianUserId, StudentGuardianLinkOrigin.GUARDIAN, "Guardian self-registration")
         logger.info("Student self-registered successfully with id: {} for guardian: {}", savedStudent.id, guardianUserId)
 
         return savedStudent.toDto()
     }
 
     @CacheEvict(value = ["students", "students_detail"], key = "#id")
-    fun updateStudent(id: Long, request: UpdateStudentRequest): StudentDto {
+    fun updateStudent(id: Long, request: UpdateStudentRequest, actorUserId: Long): StudentDto {
         logger.info("Updating student with id: {}", id)
 
         val student = studentRepository.findById(id)
             .orElseThrow { ResourceNotFoundException("Student not found with id: $id") }
 
-        // Check email uniqueness if being updated
-        if (request.email != null && request.email != student.email) {
-            if (studentRepository.existsByEmail(request.email)) {
-                throw DuplicateResourceException("Student with email ${request.email} already exists")
-            }
-        }
-
-        // Check document number uniqueness if being updated
-        if (request.documentNumber != null && request.documentNumber != student.documentNumber) {
-            if (studentRepository.existsByDocumentNumber(request.documentNumber)) {
-                throw DuplicateResourceException("Student with document number ${request.documentNumber} already exists")
-            }
+        val identityChanged = request.documentType != null || request.documentCountry != null || request.documentNumber != null
+        val identity = if (identityChanged) {
+            identityNormalizer.normalize(
+                request.documentType ?: student.documentType,
+                request.documentCountry ?: student.documentCountry,
+                request.documentNumber ?: student.documentNumber
+            ).also { ensureDocumentAvailable(it, excludingStudentId = id) }
+        } else null
+        val nextGuardianId = request.guardianId ?: student.guardianId
+        if (nextGuardianId != student.guardianId) {
+            nextGuardianId?.let(::validateActiveGuardian)
         }
 
         val updatedStudent = student.copy(
             firstName = request.firstName ?: student.firstName,
             lastName = request.lastName ?: student.lastName,
-            email = request.email ?: student.email,
-            documentNumber = request.documentNumber ?: student.documentNumber,
+            email = request.email?.trim()?.lowercase() ?: student.email,
+            documentType = identity?.type ?: student.documentType,
+            documentCountry = identity?.country ?: student.documentCountry,
+            documentNumber = if (identityChanged) identity?.displayNumber else student.documentNumber,
+            normalizedDocumentNumber = if (identityChanged) identity?.normalizedNumber else student.normalizedDocumentNumber,
             dateOfBirth = request.dateOfBirth ?: student.dateOfBirth,
             enrollmentDate = request.enrollmentDate ?: student.enrollmentDate,
             phoneNumber = request.phoneNumber ?: student.phoneNumber,
             address = request.address ?: student.address,
             emergencyContact = request.emergencyContact ?: student.emergencyContact,
-            guardianId = request.guardianId ?: student.guardianId,
+            guardianId = nextGuardianId,
             medicalNotes = request.medicalNotes ?: student.medicalNotes,
             photoUrl = student.photoUrl,
             active = request.active ?: student.active,
@@ -278,6 +330,16 @@ class StudentService(
         )
 
         val savedStudent = studentRepository.save(updatedStudent)
+        if (savedStudent.guardianId != student.guardianId) {
+            recordGuardianChange(
+                studentId = savedStudent.id!!,
+                previousGuardianId = student.guardianId,
+                guardianId = savedStudent.guardianId,
+                actorUserId = actorUserId,
+                origin = StudentGuardianLinkOrigin.ADMIN,
+                reason = "Guardian changed from student update"
+            )
+        }
         logger.info("Student updated successfully with id: {}", savedStudent.id)
 
         return savedStudent.toDto()
@@ -360,6 +422,55 @@ class StudentService(
             totalPages = studentsPage.totalPages
         )
     }
+
+    @Transactional(readOnly = true)
+    fun matchIdentity(actorUserId: Long, actorRole: String, request: StudentIdentityMatchRequest): StudentIdentityMatchDto {
+        val identity = identityNormalizer.normalize(request.documentType, request.documentCountry, request.documentNumber)
+        val matches = findIdentityCandidates(identity, request.firstName, request.lastName, request.dateOfBirth)
+        if (matches.isEmpty()) {
+            return StudentIdentityMatchDto(StudentIdentityMatchOutcome.NONE)
+        }
+        if (matches.size > 1) {
+            return StudentIdentityMatchDto(StudentIdentityMatchOutcome.VERIFICATION_REQUIRED)
+        }
+
+        val student = matches.single()
+        if (actorRole == UserRole.ADMIN.name) {
+            return StudentIdentityMatchDto(
+                outcome = if (student.guardianId == null) StudentIdentityMatchOutcome.UNASSIGNED else StudentIdentityMatchOutcome.OWNED,
+                studentId = student.id,
+                displayName = "${student.firstName} ${student.lastName}"
+            )
+        }
+        if (actorRole == UserRole.GUARDIAN.name && student.guardianId == actorUserId) {
+            return StudentIdentityMatchDto(
+                outcome = StudentIdentityMatchOutcome.OWNED,
+                studentId = student.id,
+                displayName = "${student.firstName} ${student.lastName}"
+            )
+        }
+        return StudentIdentityMatchDto(StudentIdentityMatchOutcome.VERIFICATION_REQUIRED)
+    }
+
+    @CacheEvict(value = ["students", "students_detail"], key = "#studentId")
+    fun linkGuardian(studentId: Long, guardianId: Long, actorUserId: Long, reason: String): StudentDto {
+        validateActiveGuardian(guardianId)
+        val student = studentRepository.findById(studentId)
+            .orElseThrow { ResourceNotFoundException("Student not found with id: $studentId") }
+        if (student.guardianId == guardianId) {
+            return student.toDto()
+        }
+        val saved = studentRepository.save(student.copy(guardianId = guardianId, updatedAt = LocalDateTime.now()))
+        recordGuardianChange(
+            studentId,
+            student.guardianId,
+            guardianId,
+            actorUserId,
+            StudentGuardianLinkOrigin.ADMIN,
+            reason.trim()
+        )
+        return saved.toDto()
+    }
     /**
      * Obtiene el estado de pagos de un estudiante
      * TODO: Esta es una implementación temporal.
@@ -388,19 +499,24 @@ class StudentService(
      * Convierte Student a StudentDto básico (con curso actual si existe)
      */
     private fun Student.toDto(): StudentDto {
-        val currentEnrollment = enrollmentServiceProvider.getCurrentEnrollmentByStudent(this.id!!)
+        val currentEnrollments = enrollmentServiceProvider.getEnrollmentsByStudentAndStatus(this.id!!, "ACTIVE")
+        val currentEnrollment = currentEnrollments.firstOrNull()
 
         return StudentDto(
             id = id!!,
+            studentNumber = studentNumber,
             firstName = firstName,
             lastName = lastName,
             email = email,
+            documentType = documentType,
+            documentCountry = documentCountry,
             documentNumber = documentNumber,
             dateOfBirth = dateOfBirth,
             enrollmentDate = enrollmentDate,
             guardianId = guardianId,
             currentCourseId = currentEnrollment?.courseId,
             currentCourseName = currentEnrollment?.courseName,
+            currentCourses = currentEnrollments,
             currentLevel = currentLevel,
             active = active,
             photoUrl = photoUrl,
@@ -415,14 +531,18 @@ class StudentService(
      * Convierte Student a StudentDetailDto (con toda la información + historial)
      */
     private fun Student.toDetailDto(): StudentDetailDto {
-        val currentEnrollment = enrollmentServiceProvider.getCurrentEnrollmentByStudent(this.id!!)
+        val currentEnrollments = enrollmentServiceProvider.getEnrollmentsByStudentAndStatus(this.id!!, "ACTIVE")
+        val currentEnrollment = currentEnrollments.firstOrNull()
         val allEnrollments = enrollmentServiceProvider.getEnrollmentsByStudent(this.id!!)
 
         return StudentDetailDto(
             id = id!!,
+            studentNumber = studentNumber,
             firstName = firstName,
             lastName = lastName,
             email = email,
+            documentType = documentType,
+            documentCountry = documentCountry,
             documentNumber = documentNumber,
             dateOfBirth = dateOfBirth,
             address = address,
@@ -433,6 +553,7 @@ class StudentService(
             medicalNotes = medicalNotes,
             currentCourseId = currentEnrollment?.courseId,
             currentCourseName = currentEnrollment?.courseName,
+            currentCourses = currentEnrollments,
             currentLevel = currentLevel,
             active = active,
             photoUrl = photoUrl,
@@ -453,6 +574,82 @@ class StudentService(
             throw ValidationException("Field $fieldName is required for guardian self-registration")
         }
         return resolvedValue
+    }
+
+    private fun validateActiveGuardian(guardianId: Long) {
+        val guardian = userRepository.findById(guardianId)
+            .orElseThrow { ResourceNotFoundException("Guardian user not found with id: $guardianId") }
+        if (guardian.role != UserRole.GUARDIAN || !guardian.active) {
+            throw ValidationException(
+                message = "Guardian must be an active GUARDIAN account",
+                code = "GUARDIAN_NOT_ACTIVE",
+                field = "guardianId"
+            )
+        }
+    }
+
+    private fun ensureDocumentAvailable(identity: NormalizedStudentDocument, excludingStudentId: Long? = null) {
+        val normalized = identity.normalizedNumber ?: return
+        val existing = studentRepository.findByDocumentTypeAndDocumentCountryAndNormalizedDocumentNumber(
+            identity.type,
+            identity.country,
+            normalized
+        ).orElse(null)
+        if (existing != null && existing.id != excludingStudentId) {
+            throw ResourceConflictException(
+                message = "A student with the same normalized identity already exists",
+                code = "STUDENT_IDENTITY_CONFLICT",
+                field = "documentNumber"
+            )
+        }
+    }
+
+    private fun findByIdentity(identity: NormalizedStudentDocument): Student? {
+        val normalized = identity.normalizedNumber ?: return null
+        return studentRepository.findByDocumentTypeAndDocumentCountryAndNormalizedDocumentNumber(
+            identity.type,
+            identity.country,
+            normalized
+        ).orElse(null)
+    }
+
+    private fun findIdentityCandidates(
+        identity: NormalizedStudentDocument,
+        firstName: String?,
+        lastName: String?,
+        dateOfBirth: LocalDate?
+    ): List<Student> {
+        findByIdentity(identity)?.let { return listOf(it) }
+        if (firstName.isNullOrBlank() || lastName.isNullOrBlank() || dateOfBirth == null) {
+            return emptyList()
+        }
+        return studentRepository.findPotentialMatches(firstName.trim(), lastName.trim(), dateOfBirth)
+    }
+
+    private fun recordGuardianChange(
+        studentId: Long,
+        previousGuardianId: Long?,
+        guardianId: Long?,
+        actorUserId: Long,
+        origin: StudentGuardianLinkOrigin,
+        reason: String
+    ) {
+        val action = when {
+            previousGuardianId == null && guardianId != null -> StudentGuardianLinkAction.LINKED
+            previousGuardianId != null && guardianId == null -> StudentGuardianLinkAction.UNLINKED
+            else -> StudentGuardianLinkAction.REASSIGNED
+        }
+        guardianLinkEventRepository.save(
+            StudentGuardianLinkEvent(
+                studentId = studentId,
+                previousGuardianUserId = previousGuardianId,
+                guardianUserId = guardianId,
+                action = action,
+                origin = origin,
+                actorUserId = actorUserId,
+                reason = reason
+            )
+        )
     }
 
     private fun extractAllowedExtension(originalFilename: String?): String {

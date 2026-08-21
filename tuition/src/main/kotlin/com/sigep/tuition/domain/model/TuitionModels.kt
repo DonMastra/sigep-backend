@@ -15,6 +15,7 @@ import jakarta.persistence.ManyToOne
 import jakarta.persistence.OneToOne
 import jakarta.persistence.Table
 import jakarta.persistence.UniqueConstraint
+import jakarta.persistence.Version
 import org.hibernate.annotations.ColumnDefault
 import java.math.BigDecimal
 import java.time.LocalDate
@@ -321,8 +322,25 @@ data class TuitionApplication(
     @Column(name = "guardian_user_id", nullable = false)
     val guardianUserId: Long,
 
+    @Column(name = "actor_user_id", nullable = false)
+    val actorUserId: Long = guardianUserId,
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    val origin: TuitionApplicationOrigin = TuitionApplicationOrigin.GUARDIAN,
+
     @Column(name = "student_id")
     val studentId: Long? = null,
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "student_resolution", nullable = false, length = 30)
+    val studentResolution: TuitionStudentResolution = TuitionStudentResolution.EXISTING,
+
+    @Column(name = "idempotency_key", length = 128, unique = true)
+    val idempotencyKey: String? = null,
+
+    @Column(name = "request_fingerprint", length = 64)
+    val requestFingerprint: String? = null,
 
     @Column(name = "student_first_name", length = 100)
     val studentFirstName: String? = null,
@@ -408,7 +426,10 @@ data class TuitionApplication(
     val createdAt: LocalDateTime = LocalDateTime.now(),
 
     @Column(name = "updated_at", nullable = false)
-    val updatedAt: LocalDateTime = LocalDateTime.now()
+    val updatedAt: LocalDateTime = LocalDateTime.now(),
+
+    @Version
+    val version: Long = 0
 ) : AggregateRoot
 
 @Entity
@@ -518,6 +539,8 @@ data class TuitionLedgerEntry(
 ) : AggregateRoot
 
 enum class TuitionAcademicYearStatus { DRAFT, OPEN, CLOSED }
+enum class TuitionApplicationOrigin { ADMIN, GUARDIAN }
+enum class TuitionStudentResolution { EXISTING, CREATED }
 enum class TuitionSegment { CHILDREN, TEENS, ADULTS }
 enum class TuitionProgressionRule { PASS_PREVIOUS_LEVEL, ADMIN_APPROVAL }
 enum class TuitionFeePlanStatus { ACTIVE, INACTIVE }
