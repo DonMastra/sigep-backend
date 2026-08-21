@@ -640,6 +640,7 @@ Base: `/api/v1/staff/teaching`
 | GET | `/` | ADMIN | Lista docentes. |
 | GET | `/{id}` | ADMIN, TEACHER | Detalle de docente. |
 | GET | `/search?query=` | ADMIN | Busca docentes. |
+| GET | `/assignable` | ADMIN | Lista personal activo enlazado a cuentas activas `TEACHER` o `ADMIN`; `id` pertenece a `users`. |
 | POST | `/resolve` | ADMIN, TEACHER | Resuelve ids a nombres. |
 | POST | `/` | ADMIN | Crea docente. |
 | PUT | `/{id}` | ADMIN | Actualiza docente. |
@@ -653,6 +654,10 @@ transaccionalmente. `UpdateTeachingStaffRequest` no acepta credenciales: recibe 
 personales/laborales, `linkedUserId`, `assignedCourseIds`, `confirmCourseReassignments` e
 `isActive`. Las asignaciones son exactas: cursos quitados quedan sin docente y las
 reasignaciones requieren confirmacion.
+
+`courses.teacher_id` y `AssignableTeacherDto.id` usan siempre el identificador de `users`,
+nunca el identificador de `teaching_staff`. Una cuenta `ADMIN` puede ser asignable cuando
+tambien esta enlazada a un legajo docente activo.
 
 ### Non-Teaching Staff
 

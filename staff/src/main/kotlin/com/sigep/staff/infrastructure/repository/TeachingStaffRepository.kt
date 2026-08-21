@@ -13,6 +13,8 @@ interface TeachingStaffRepository : JpaRepository<TeachingStaff, Long> {
 
     fun findByIsActiveTrue(pageable: Pageable): Page<TeachingStaff>
 
+    fun findAllByIsActiveTrueOrderByLastNameAscFirstNameAsc(): List<TeachingStaff>
+
     fun findByEmail(email: String): TeachingStaff?
 
     fun findByDocumentNumber(documentNumber: String): TeachingStaff?

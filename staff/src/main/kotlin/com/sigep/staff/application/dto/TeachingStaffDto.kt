@@ -142,3 +142,13 @@ data class TeacherResolutionDto(
     val fullName: String
 )
 
+data class AssignableTeacherDto(
+    /** ID de users; es el valor persistido en courses.teacher_id. */
+    val id: Long,
+    val staffId: Long,
+    val username: String,
+    val firstName: String,
+    val lastName: String,
+    val fullName: String
+)
+

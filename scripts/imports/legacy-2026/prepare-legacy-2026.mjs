@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { resolveLegacyTeacher } from "./teacher-account-mapping.mjs";
 
 const IMPORTER_VERSION = "legacy-2026-v2";
 const SQL_BOUNDARY = "-- SIGEP_STATEMENT_BOUNDARY";
@@ -282,9 +283,9 @@ function prepareTeachersAndCourses(rows, levels) {
     });
   }
   const teachers = [...teacherNames].sort().map((fullName, index) => {
-    const tokens = fullName.trim().split(/\s+/); const surnameTokens = tokens.length >= 4 ? 2 : 1;
+    const account = resolveLegacyTeacher(fullName);
     const hash = sourceHash("teacher", fullName);
-    return { sourceRow: index + 1, hash, firstName: tokens.slice(0, -surnameTokens).join(" ") || tokens[0], lastName: tokens.slice(-surnameTokens).join(" "), email: `docente-${hash.slice(0, 16)}@invalid.sigep.local`, document: `LEGACY-${hash.slice(0, 20)}` };
+    return { sourceRow: index + 1, hash, username: account.username, firstName: account.firstName, lastName: account.lastName, email: `docente-${hash.slice(0, 16)}@invalid.sigep.local`, document: `LEGACY-${hash.slice(0, 20)}` };
   });
   return { teachers, courses: courses.sort((a, b) => a.code.localeCompare(b.code)) };
 }
@@ -389,8 +390,8 @@ function stageStatements(input) {
     insertValues("stage_guardians", ["source_row","source_hash","first_name","last_name","email","phone","address","birth_date","document_number"], input.guardians.map((r) => [r.sourceRow,r.hash,r.firstName,r.lastName,r.email,r.phone,r.address,r.dateOfBirth,r.document])),
     `CREATE TEMP TABLE stage_students(source_row int,source_hash varchar(64),student_number varchar(32),first_name text,last_name text,email text,phone text,emergency_contact text,enrollment_date date,current_level text,active boolean,guardian_hash varchar(64)) ON COMMIT DROP`,
     insertValues("stage_students", ["source_row","source_hash","student_number","first_name","last_name","email","phone","emergency_contact","enrollment_date","current_level","active","guardian_hash"], input.students.map((r) => [r.sourceRow,r.hash,r.studentNumber,r.firstName,r.lastName,r.email,r.phone,r.emergencyContact,r.enrollmentDate,r.currentLevel,r.active,r.primaryGuardianHash])),
-    `CREATE TEMP TABLE stage_teachers(source_row int,source_hash varchar(64),first_name text,last_name text,email text,document_number text) ON COMMIT DROP`,
-    insertValues("stage_teachers", ["source_row","source_hash","first_name","last_name","email","document_number"], input.teachers.map((r) => [r.sourceRow,r.hash,r.firstName,r.lastName,r.email,r.document])),
+    `CREATE TEMP TABLE stage_teachers(source_row int,source_hash varchar(64),username text,first_name text,last_name text,email text,document_number text) ON COMMIT DROP`,
+    insertValues("stage_teachers", ["source_row","source_hash","username","first_name","last_name","email","document_number"], input.teachers.map((r) => [r.sourceRow,r.hash,r.username,r.firstName,r.lastName,r.email,r.document])),
     `CREATE TEMP TABLE stage_levels(source_row int,source_hash varchar(64),code text,name text,segment text,level_order int,course_level text) ON COMMIT DROP`,
     insertValues("stage_levels", ["source_row","source_hash","code","name","segment","level_order","course_level"], input.levels.map((r) => [r.sourceRow,r.hash,r.code,r.name,r.segment,r.levelOrder,r.courseLevel])),
     `CREATE TEMP TABLE stage_courses(source_row int,source_hash varchar(64),code text,name text,level_code text,course_level text,teacher_hash varchar(64),max_students int,price numeric(12,2)) ON COMMIT DROP`,
@@ -450,9 +451,11 @@ function importStudentsSql(runId) {
 }
 
 function importTeachersSql(runId) {
-  return `DO $$ DECLARE r record; new_id bigint; BEGIN FOR r IN SELECT * FROM stage_teachers ORDER BY source_row LOOP
-    INSERT INTO teaching_staff(created_at,created_by,is_active,updated_at,updated_by,address,assigned_students_count,birth_date,document_number,email,emergency_contact_name,emergency_contact_phone,first_name,hire_date,last_name,monthly_salary,payment_status,phone_number,specialization,qualifications,observations,notes) VALUES(now(),'legacy-import',true,now(),'legacy-import','${UNKNOWN_TEXT}',0,DATE '${UNKNOWN_DATE}',r.document_number,r.email,'${UNKNOWN_TEXT}','${UNKNOWN_TEXT}',r.first_name,DATE '2026-04-01',r.last_name,0,'UP_TO_DATE','${UNKNOWN_TEXT}','Ingles',NULL,'Datos de legajo pendientes de completar','Importado desde asignaciones de cursadas 2026') RETURNING id INTO new_id;
-    INSERT INTO legacy_import_entity_map(run_id,entity_type,source_key_hash,source_row,target_table,target_id,mapping_status,notes) VALUES(${sql(runId)},'TEACHER',r.source_hash,r.source_row,'teaching_staff',new_id,'PLACEHOLDER_FIELDS','Only teacher name was present in course export');
+  return `DO $$ DECLARE r record; staff_id_value bigint; user_id_value bigint; BEGIN FOR r IN SELECT * FROM stage_teachers ORDER BY source_row LOOP
+    INSERT INTO users(username,email,password,first_name,last_name,phone_number,address,date_of_birth,document_number,role,status,active,must_change_password,created_at,updated_at) VALUES(r.username,r.email,'${DISABLED_PASSWORD_HASH}',r.first_name,r.last_name,'${UNKNOWN_TEXT}','${UNKNOWN_TEXT}',DATE '${UNKNOWN_DATE}',r.document_number,'TEACHER','ACTIVE',true,true,now(),now()) RETURNING id INTO user_id_value;
+    INSERT INTO legacy_import_entity_map(run_id,entity_type,source_key_hash,source_row,target_table,target_id,mapping_status,notes) VALUES(${sql(runId)},'TEACHER_ACCOUNT',r.source_hash,r.source_row,'users',user_id_value,'PLACEHOLDER_FIELDS','Account requires an out-of-band temporary password before first login');
+    INSERT INTO teaching_staff(created_at,created_by,is_active,updated_at,updated_by,address,assigned_students_count,birth_date,document_number,email,emergency_contact_name,emergency_contact_phone,first_name,hire_date,last_name,linked_user_id,monthly_salary,payment_status,phone_number,specialization,qualifications,observations,notes) VALUES(now(),'legacy-import',true,now(),'legacy-import','${UNKNOWN_TEXT}',0,DATE '${UNKNOWN_DATE}',r.document_number,r.email,'${UNKNOWN_TEXT}','${UNKNOWN_TEXT}',r.first_name,DATE '2026-04-01',r.last_name,user_id_value,0,'UP_TO_DATE','${UNKNOWN_TEXT}','Ingles',NULL,'Datos de legajo pendientes de completar','Importado desde asignaciones de cursadas 2026') RETURNING id INTO staff_id_value;
+    INSERT INTO legacy_import_entity_map(run_id,entity_type,source_key_hash,source_row,target_table,target_id,mapping_status,notes) VALUES(${sql(runId)},'TEACHER',r.source_hash,r.source_row,'teaching_staff',staff_id_value,'PLACEHOLDER_FIELDS','Only teacher name was present in course export');
   END LOOP; END $$`;
 }
 
@@ -479,7 +482,7 @@ function importCatalogSql(runId) {
 
 function importCoursesSql(runId) {
   return `DO $$ DECLARE r record; new_id bigint; teacher_id_value bigint; BEGIN FOR r IN SELECT * FROM stage_courses ORDER BY code LOOP
-    SELECT target_id INTO teacher_id_value FROM legacy_import_entity_map WHERE run_id=${sql(runId)} AND source_key_hash=r.teacher_hash AND target_table='teaching_staff';
+    SELECT target_id INTO teacher_id_value FROM legacy_import_entity_map WHERE run_id=${sql(runId)} AND source_key_hash=r.teacher_hash AND target_table='users' AND entity_type='TEACHER_ACCOUNT';
     INSERT INTO courses(code,created_at,description,duration,end_date,is_published,level,max_students,min_students,name,price,start_date,status,teacher_id,updated_at) VALUES(r.code,now(),'Cursada 2026 importada del sistema legacy. Horario y modalidad pendientes de conciliacion.',60,DATE '2026-12-31',true,r.course_level,r.max_students,1,r.name,r.price,DATE '2026-04-01','ACTIVE',teacher_id_value,now()) RETURNING id INTO new_id;
     INSERT INTO legacy_import_entity_map(run_id,entity_type,source_key_hash,source_row,target_table,target_id,mapping_status,notes) VALUES(${sql(runId)},'COURSE',r.source_hash,r.source_row,'courses',new_id,'IMPORTED','Duration 60 hours and capacity 20 confirmed; scheduling remains pending');
   END LOOP; END $$`;
@@ -491,7 +494,7 @@ function importEnrollmentsSql(runId) {
     SELECT target_id INTO course_id_value FROM legacy_import_entity_map WHERE run_id=${sql(runId)} AND source_key_hash=r.course_hash AND target_table='courses';
     INSERT INTO enrollments(completion_date,created_at,enrollment_date,final_grade,notes,status,student_id,updated_at,course_id) VALUES(NULL,now(),DATE '2026-04-01',NULL,'Importacion legacy 2026; estado original: '||r.original_status,r.status,student_id_value,now(),course_id_value) RETURNING id INTO new_id;
     INSERT INTO legacy_import_entity_map(run_id,entity_type,source_key_hash,source_row,target_table,target_id,mapping_status) VALUES(${sql(runId)},'ENROLLMENT',r.source_hash,r.source_row,'enrollments',new_id,'IMPORTED');
-  END LOOP; UPDATE teaching_staff t SET assigned_students_count=(SELECT count(*) FROM enrollments e JOIN courses c ON c.id=e.course_id WHERE c.teacher_id=t.id AND e.status='ACTIVE'),updated_at=now(); END $$`;
+  END LOOP; UPDATE teaching_staff t SET assigned_students_count=(SELECT count(*) FROM enrollments e JOIN courses c ON c.id=e.course_id WHERE c.teacher_id=t.linked_user_id AND e.status='ACTIVE'),updated_at=now(); END $$`;
 }
 
 function importApplicationsSql(runId) {
@@ -526,7 +529,9 @@ function importBillingSql(runId) {
 
 function postflightSql(input) {
   return `DO $$ BEGIN
-    IF (SELECT count(*) FROM users) <> ${input.summary.guardianUsers + 1} THEN RAISE EXCEPTION 'User count mismatch'; END IF; IF (SELECT count(*) FROM students) <> ${input.summary.canonicalStudents} THEN RAISE EXCEPTION 'Student count mismatch'; END IF; IF (SELECT count(*) FROM teaching_staff) <> ${input.summary.teachingStaff} THEN RAISE EXCEPTION 'Teacher count mismatch'; END IF; IF (SELECT count(*) FROM tuition_levels) <> ${input.summary.tuitionLevels} THEN RAISE EXCEPTION 'Level count mismatch'; END IF; IF (SELECT count(*) FROM courses) <> ${input.summary.courses} THEN RAISE EXCEPTION 'Course count mismatch'; END IF; IF (SELECT count(*) FROM enrollments) <> ${input.summary.enrollments} THEN RAISE EXCEPTION 'Enrollment count mismatch'; END IF; IF (SELECT count(*) FROM tuition_applications) <> ${input.summary.billingReadyStudents} THEN RAISE EXCEPTION 'Application count mismatch'; END IF; IF (SELECT count(*) FROM tuition_ledger_entries) <> ${input.summary.monthlyLedgerEntries} THEN RAISE EXCEPTION 'Ledger count mismatch'; END IF; IF (SELECT count(*) FROM billing_charges) <> ${input.summary.monthlyLedgerEntries} THEN RAISE EXCEPTION 'Charge count mismatch'; END IF;
+    IF (SELECT count(*) FROM users) <> ${input.summary.guardianUsers + input.summary.teachingStaff + 1} THEN RAISE EXCEPTION 'User count mismatch'; END IF; IF (SELECT count(*) FROM students) <> ${input.summary.canonicalStudents} THEN RAISE EXCEPTION 'Student count mismatch'; END IF; IF (SELECT count(*) FROM teaching_staff) <> ${input.summary.teachingStaff} THEN RAISE EXCEPTION 'Teacher count mismatch'; END IF; IF (SELECT count(*) FROM tuition_levels) <> ${input.summary.tuitionLevels} THEN RAISE EXCEPTION 'Level count mismatch'; END IF; IF (SELECT count(*) FROM courses) <> ${input.summary.courses} THEN RAISE EXCEPTION 'Course count mismatch'; END IF; IF (SELECT count(*) FROM enrollments) <> ${input.summary.enrollments} THEN RAISE EXCEPTION 'Enrollment count mismatch'; END IF; IF (SELECT count(*) FROM tuition_applications) <> ${input.summary.billingReadyStudents} THEN RAISE EXCEPTION 'Application count mismatch'; END IF; IF (SELECT count(*) FROM tuition_ledger_entries) <> ${input.summary.monthlyLedgerEntries} THEN RAISE EXCEPTION 'Ledger count mismatch'; END IF; IF (SELECT count(*) FROM billing_charges) <> ${input.summary.monthlyLedgerEntries} THEN RAISE EXCEPTION 'Charge count mismatch'; END IF;
+    IF EXISTS (SELECT 1 FROM teaching_staff t LEFT JOIN users u ON u.id=t.linked_user_id WHERE t.is_active=true AND (u.id IS NULL OR u.role NOT IN ('TEACHER','ADMIN') OR u.status<>'ACTIVE' OR u.active=false)) THEN RAISE EXCEPTION 'Active teaching staff without an eligible account'; END IF;
+    IF EXISTS (SELECT 1 FROM courses c LEFT JOIN users u ON u.id=c.teacher_id WHERE c.teacher_id IS NOT NULL AND (u.id IS NULL OR u.role NOT IN ('TEACHER','ADMIN') OR u.status<>'ACTIVE' OR u.active=false)) THEN RAISE EXCEPTION 'Course references an ineligible teacher account'; END IF;
     IF EXISTS (SELECT 1 FROM enrollments e LEFT JOIN students s ON s.id=e.student_id LEFT JOIN courses c ON c.id=e.course_id WHERE s.id IS NULL OR c.id IS NULL) THEN RAISE EXCEPTION 'Broken enrollment references'; END IF; IF EXISTS (SELECT 1 FROM tuition_ledger_entries l LEFT JOIN billing_charges c ON c.source_type='TUITION_LEDGER' AND c.source_id=l.id WHERE c.id IS NULL) THEN RAISE EXCEPTION 'Ledger without billing charge'; END IF;
   END $$`;
 }
