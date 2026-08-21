@@ -310,6 +310,7 @@ alumno cambie de pagina entre consultas equivalentes.
 ```ts
 interface StudentDto {
   id: number;
+  studentNumber: string;
   firstName: string;
   lastName: string;
   email: string;
@@ -322,6 +323,9 @@ interface StudentDto {
   guardianPhone?: string;
   guardianEmail?: string;
   documentNumber?: string;
+  currentCourseId?: number;
+  currentCourseName?: string;
+  currentCourses: EnrollmentSummaryDto[];
   currentLevel?: string;
   emergencyContact?: string;
   active: boolean;
@@ -330,6 +334,13 @@ interface StudentDto {
   updatedAt?: string;
 }
 ```
+
+`studentNumber` es el identificador de negocio inmutable del alumno. Para la migracion
+legacy conserva `Matricula`; para altas nuevas el backend genera un valor `SIGEP-*`.
+`currentCourses` contiene todas las inscripciones `ACTIVE`. Los campos singulares
+`currentCourseId` y `currentCourseName` se conservan temporalmente por compatibilidad y
+representan el primer curso activo en orden estable. Un alumno puede estar activo en varios
+cursos distintos; solo se rechaza duplicar el mismo par alumno-curso.
 
 La identidad documental se compara por `(documentCountry, documentType, normalizedDocumentNumber)`.
 Para `AR + DNI` se eliminan separadores y se completa a 8 digitos; pasaporte y documento
@@ -629,6 +640,7 @@ Base: `/api/v1/staff/teaching`
 | GET | `/` | ADMIN | Lista docentes. |
 | GET | `/{id}` | ADMIN, TEACHER | Detalle de docente. |
 | GET | `/search?query=` | ADMIN | Busca docentes. |
+| GET | `/assignable` | ADMIN | Lista personal activo enlazado a cuentas activas `TEACHER` o `ADMIN`; `id` pertenece a `users`. |
 | POST | `/resolve` | ADMIN, TEACHER | Resuelve ids a nombres. |
 | POST | `/` | ADMIN | Crea docente. |
 | PUT | `/{id}` | ADMIN | Actualiza docente. |
@@ -642,6 +654,10 @@ transaccionalmente. `UpdateTeachingStaffRequest` no acepta credenciales: recibe 
 personales/laborales, `linkedUserId`, `assignedCourseIds`, `confirmCourseReassignments` e
 `isActive`. Las asignaciones son exactas: cursos quitados quedan sin docente y las
 reasignaciones requieren confirmacion.
+
+`courses.teacher_id` y `AssignableTeacherDto.id` usan siempre el identificador de `users`,
+nunca el identificador de `teaching_staff`. Una cuenta `ADMIN` puede ser asignable cuando
+tambien esta enlazada a un legajo docente activo.
 
 ### Non-Teaching Staff
 

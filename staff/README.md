@@ -78,6 +78,7 @@ staff/
 | GET | `/api/v1/staff/teaching` | Listar docentes (paginado) | ADMIN |
 | GET | `/api/v1/staff/teaching/{id}` | Detalle con asistencia del mes | ADMIN, TEACHER |
 | GET | `/api/v1/staff/teaching/search?query=` | Buscar por nombre/email/documento | ADMIN |
+| GET | `/api/v1/staff/teaching/assignable` | Cuentas activas enlazadas a docentes; el `id` es de `users` | ADMIN |
 | POST | `/api/v1/staff/teaching` | Crear docente | ADMIN |
 | PUT | `/api/v1/staff/teaching/{id}` | Actualizar docente | ADMIN |
 | DELETE | `/api/v1/staff/teaching/{id}` | Desactivar docente (soft delete) | ADMIN |

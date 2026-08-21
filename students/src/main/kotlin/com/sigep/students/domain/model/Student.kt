@@ -4,19 +4,24 @@ import com.sigep.common.domain.AggregateRoot
 import jakarta.persistence.*
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.util.UUID
 
 @Entity
 @Table(
     name = "students",
     indexes = [
         Index(name = "idx_students_guardian", columnList = "guardian_id"),
-        Index(name = "idx_students_document_identity", columnList = "document_country,document_type,normalized_document_number")
+        Index(name = "idx_students_document_identity", columnList = "document_country,document_type,normalized_document_number"),
+        Index(name = "uq_students_student_number", columnList = "student_number", unique = true)
     ]
 )
 data class Student(
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     val id: Long? = null,
+
+    @Column(name = "student_number", nullable = false, unique = true, updatable = false, length = 32)
+    val studentNumber: String = StudentNumberGenerator.next(),
 
     @Column(nullable = false)
     val firstName: String,
@@ -77,6 +82,10 @@ data class Student(
     @Column(nullable = false)
     val updatedAt: LocalDateTime = LocalDateTime.now()
 ) : AggregateRoot
+
+private object StudentNumberGenerator {
+    fun next(): String = "SIGEP-${UUID.randomUUID().toString().replace("-", "").take(12).uppercase()}"
+}
 
 enum class StudentDocumentType {
     DNI,

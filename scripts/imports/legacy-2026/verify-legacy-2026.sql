@@ -28,6 +28,17 @@ FROM enrollments
 GROUP BY status
 ORDER BY status;
 
+SELECT
+    count(*) AS students,
+    count(DISTINCT student_number) AS distinct_student_numbers,
+    count(*) FILTER (WHERE student_number IS NULL OR btrim(student_number) = '') AS missing_student_numbers
+FROM students;
+
+SELECT duration, max_students, count(*) AS courses
+FROM courses
+GROUP BY duration, max_students
+ORDER BY duration, max_students;
+
 SELECT due_date, count(*) AS charges, sum(amount) AS nominal_amount
 FROM billing_charges
 WHERE source_type = 'TUITION_LEDGER'

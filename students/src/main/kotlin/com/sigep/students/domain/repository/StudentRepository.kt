@@ -47,6 +47,7 @@ interface StudentRepository : JpaRepository<Student, Long> {
         LOWER(s.lastName) LIKE LOWER(CONCAT('%', :search, '%')) OR 
         LOWER(CONCAT(TRIM(s.firstName), ' ', TRIM(s.lastName))) LIKE LOWER(CONCAT('%', :search, '%')) OR
         LOWER(s.email) LIKE LOWER(CONCAT('%', :search, '%')) OR
+        LOWER(s.studentNumber) LIKE LOWER(CONCAT('%', :search, '%')) OR
         LOWER(COALESCE(s.documentNumber, '')) LIKE LOWER(CONCAT('%', :search, '%'))
     """)
     fun searchStudents(@Param("search") search: String, pageable: Pageable): Page<Student>
@@ -57,6 +58,7 @@ interface StudentRepository : JpaRepository<Student, Long> {
         LOWER(s.lastName) LIKE LOWER(CONCAT('%', :search, '%')) OR
         LOWER(CONCAT(TRIM(s.firstName), ' ', TRIM(s.lastName))) LIKE LOWER(CONCAT('%', :search, '%')) OR
         LOWER(s.email) LIKE LOWER(CONCAT('%', :search, '%')) OR
+        LOWER(s.studentNumber) LIKE LOWER(CONCAT('%', :search, '%')) OR
         LOWER(COALESCE(s.documentNumber, '')) LIKE LOWER(CONCAT('%', :search, '%')))
     """)
     fun searchStudentsByIds(

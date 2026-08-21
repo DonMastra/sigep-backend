@@ -499,10 +499,12 @@ class StudentService(
      * Convierte Student a StudentDto básico (con curso actual si existe)
      */
     private fun Student.toDto(): StudentDto {
-        val currentEnrollment = enrollmentServiceProvider.getCurrentEnrollmentByStudent(this.id!!)
+        val currentEnrollments = enrollmentServiceProvider.getEnrollmentsByStudentAndStatus(this.id!!, "ACTIVE")
+        val currentEnrollment = currentEnrollments.firstOrNull()
 
         return StudentDto(
             id = id!!,
+            studentNumber = studentNumber,
             firstName = firstName,
             lastName = lastName,
             email = email,
@@ -514,6 +516,7 @@ class StudentService(
             guardianId = guardianId,
             currentCourseId = currentEnrollment?.courseId,
             currentCourseName = currentEnrollment?.courseName,
+            currentCourses = currentEnrollments,
             currentLevel = currentLevel,
             active = active,
             photoUrl = photoUrl,
@@ -528,11 +531,13 @@ class StudentService(
      * Convierte Student a StudentDetailDto (con toda la información + historial)
      */
     private fun Student.toDetailDto(): StudentDetailDto {
-        val currentEnrollment = enrollmentServiceProvider.getCurrentEnrollmentByStudent(this.id!!)
+        val currentEnrollments = enrollmentServiceProvider.getEnrollmentsByStudentAndStatus(this.id!!, "ACTIVE")
+        val currentEnrollment = currentEnrollments.firstOrNull()
         val allEnrollments = enrollmentServiceProvider.getEnrollmentsByStudent(this.id!!)
 
         return StudentDetailDto(
             id = id!!,
+            studentNumber = studentNumber,
             firstName = firstName,
             lastName = lastName,
             email = email,
@@ -548,6 +553,7 @@ class StudentService(
             medicalNotes = medicalNotes,
             currentCourseId = currentEnrollment?.courseId,
             currentCourseName = currentEnrollment?.courseName,
+            currentCourses = currentEnrollments,
             currentLevel = currentLevel,
             active = active,
             photoUrl = photoUrl,

@@ -5,6 +5,7 @@ import com.sigep.common.application.dto.PageResponse
 import com.sigep.security.application.annotation.RequireAdmin
 import com.sigep.security.application.annotation.RequireAdminOrTeacher
 import com.sigep.staff.application.dto.CreateTeachingStaffRequest
+import com.sigep.staff.application.dto.AssignableTeacherDto
 import com.sigep.staff.application.dto.ResolveTeachersRequest
 import com.sigep.staff.application.dto.TeachingStaffDto
 import com.sigep.staff.application.dto.TeacherResolutionDto
@@ -61,6 +62,12 @@ class TeachingStaffController(
         val staff = teachingStaffService.searchTeachingStaff(query, page, limit)
         return ResponseEntity.ok(ApiResponse.success(staff))
     }
+
+    @GetMapping("/assignable")
+    @RequireAdmin
+    @Operation(summary = "List assignable teachers", description = "Lists active teaching staff linked to an eligible active user account")
+    fun getAssignableTeachers(): ResponseEntity<ApiResponse<List<AssignableTeacherDto>>> =
+        ResponseEntity.ok(ApiResponse.success(teachingStaffService.getAssignableTeachers()))
 
     @PostMapping("/resolve")
     @RequireAdminOrTeacher

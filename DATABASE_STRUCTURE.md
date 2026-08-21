@@ -56,13 +56,15 @@ Orden de prioridad:
 
 ### Cambios de V14/V15 (primer flujo manual)
 
-- `teaching_staff.linked_user_id` enlaza un docente con una cuenta `users` activa de rol
-  `TEACHER`; `photo_data`, `photo_content_type` y `photo_filename` almacenan la foto en
+- `teaching_staff.linked_user_id` enlaza un docente con una cuenta `users` activa habilitada
+  para docencia (`TEACHER` o una cuenta `ADMIN` que tambien posee legajo docente);
+  `photo_data`, `photo_content_type` y `photo_filename` almacenan la foto en
   PostgreSQL. V26 garantiza que `photo_data` use `BYTEA`, en concordancia con la entidad JPA,
   y falla de forma explicita si encuentra fotos legacy que requieran una conversion dirigida.
   El indice parcial evita dos docentes con la misma cuenta.
-- `courses.teacher_id` pasa a ser nullable y `uk_courses_code_ci` garantiza codigo unico
-  sin distinguir mayusculas.
+- `courses.teacher_id` es nullable, referencia `users.id` mediante
+  `fk_courses_teacher_user`, y `uk_courses_code_ci` garantiza codigo unico sin distinguir
+  mayusculas.
 - `tuition_levels.course_level` explicita el mapeo al nivel de cursos; la migracion conserva
   `BEGINNER`/`ELEMENTARY` y traduce `A1`/`A2` a esos valores.
 - `tuition_applications.progression_rule` y `requires_admin_override` registran excepciones

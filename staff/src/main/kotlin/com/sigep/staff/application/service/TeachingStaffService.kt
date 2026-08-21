@@ -107,6 +107,28 @@ class TeachingStaffService(
             .sortedBy { it.id }
     }
 
+    @Transactional(readOnly = true)
+    fun getAssignableTeachers(): List<AssignableTeacherDto> {
+        val activeStaff = teachingStaffRepository.findAllByIsActiveTrueOrderByLastNameAscFirstNameAsc()
+        val linkedUserIds = activeStaff.mapNotNull { it.linkedUserId }.distinct()
+        val eligibleUsers = userRepository.findAllById(linkedUserIds)
+            .filter(::isEligibleTeachingAccount)
+            .associateBy { it.id!! }
+
+        return activeStaff.mapNotNull { staff ->
+            val linkedUserId = staff.linkedUserId ?: return@mapNotNull null
+            val user = eligibleUsers[linkedUserId] ?: return@mapNotNull null
+            AssignableTeacherDto(
+                id = linkedUserId,
+                staffId = staff.id!!,
+                username = user.username,
+                firstName = staff.firstName,
+                lastName = staff.lastName,
+                fullName = staff.fullName
+            )
+        }
+    }
+
     @CacheEvict(value = ["teachingStaff"], allEntries = true)
     fun createTeachingStaff(request: CreateTeachingStaffRequest): TeachingStaffDto {
         log.info("Creating new teaching staff record")
@@ -366,8 +388,8 @@ class TeachingStaffService(
     private fun validateTeacherAccount(userId: Long, currentStaffId: Long?): User {
         val user = userRepository.findById(userId)
             .orElseThrow { ResourceNotFoundException("Teacher account not found with id: $userId") }
-        if (user.role != UserRole.TEACHER || user.status != AccountStatus.ACTIVE || !user.active) {
-            throw BusinessException("Linked account must be an active TEACHER")
+        if (!isEligibleTeachingAccount(user)) {
+            throw BusinessException("Linked account must be an active TEACHER or ADMIN assigned to teaching staff")
         }
         teachingStaffRepository.findByLinkedUserId(userId)?.let { linked ->
             if (linked.id != currentStaffId) throw BusinessException("Teacher account is already linked to another staff record")
@@ -381,7 +403,7 @@ class TeachingStaffService(
         confirmReassignments: Boolean
     ) {
         val teacherUserId = staff.linkedUserId
-            ?: throw BusinessException("Teaching staff must be linked to an active TEACHER account before assigning courses")
+            ?: throw BusinessException("Teaching staff must be linked to an eligible active account before assigning courses")
         validateTeacherAccount(teacherUserId, staff.id)
 
         val targetIds = requestedCourseIds.distinct().toSet()
@@ -402,6 +424,11 @@ class TeachingStaffService(
         targets.filter { it.teacherId != teacherUserId }
             .forEach { courseRepository.save(it.copy(teacherId = teacherUserId, updatedAt = java.time.LocalDateTime.now())) }
     }
+
+    private fun isEligibleTeachingAccount(user: User): Boolean =
+        user.role in setOf(UserRole.TEACHER, UserRole.ADMIN) &&
+            user.status == AccountStatus.ACTIVE &&
+            user.active
 
     private fun Course.toAssignmentDto() = CourseAssignmentDto(
         courseId = id!!,
