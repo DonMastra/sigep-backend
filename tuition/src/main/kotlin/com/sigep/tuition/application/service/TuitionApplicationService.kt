@@ -13,6 +13,7 @@ import com.sigep.common.application.service.BillingChargeProvider
 import com.sigep.common.application.service.GuardianAccountProvider
 import com.sigep.common.application.service.StudentProfileProvider
 import com.sigep.common.application.service.StudentProfileCreateRequest
+import com.sigep.common.application.service.StudentProfileInfo
 import com.sigep.common.application.service.StudentProfileResolutionType
 import com.sigep.tuition.application.dto.CreateTuitionApplicationRequest
 import com.sigep.tuition.application.dto.CreateTuitionEnrollmentChargeRequest
@@ -253,7 +254,7 @@ class TuitionApplicationService(
     @Transactional(readOnly = true)
     fun getMyApplications(guardianUserId: Long, page: Int, size: Int): PageResponse<TuitionApplicationDto> {
         val pageable = PageRequest.of(page.coerceAtLeast(0), size.coerceIn(1, 100), Sort.by(Sort.Direction.DESC, "createdAt"))
-        return applicationRepository.findByGuardianUserId(guardianUserId, pageable).toPageResponse { it.toDto() }
+        return applicationRepository.findByGuardianUserId(guardianUserId, pageable).toApplicationPageResponse()
     }
 
     @Transactional(readOnly = true)
@@ -264,7 +265,7 @@ class TuitionApplicationService(
         size: Int
     ): PageResponse<TuitionApplicationDto> {
         val pageable = PageRequest.of(page.coerceAtLeast(0), size.coerceIn(1, 100), Sort.by(Sort.Direction.DESC, "createdAt"))
-        return applicationRepository.findByFilters(status, academicYearId, pageable).toPageResponse { it.toDto() }
+        return applicationRepository.findByFilters(status, academicYearId, pageable).toApplicationPageResponse()
     }
 
     @Transactional(readOnly = true)
@@ -839,9 +840,12 @@ class TuitionApplicationService(
         return AppliedDiscount(discount, rawAmount.min(grossAmount).normalizeMoney())
     }
 
-    private fun TuitionApplication.toDto(): TuitionApplicationDto {
+    private fun TuitionApplication.toDto(studentProfile: StudentProfileInfo? = null): TuitionApplicationDto {
         val placement = id?.let { placementAssessmentRepository.findByApplicationId(it).orElse(null) }
         val ledgerEntries = id?.let { ledgerEntryRepository.findByApplicationId(it) }.orEmpty()
+        val resolvedStudentProfile = studentProfile ?: studentId
+            ?.takeIf { studentFirstName.isNullOrBlank() || studentLastName.isNullOrBlank() }
+            ?.let(studentProfileProvider::getStudentProfile)
         return TuitionApplicationDto(
             id = id!!,
             guardianUserId = guardianUserId,
@@ -849,10 +853,10 @@ class TuitionApplicationService(
             origin = origin,
             studentId = studentId,
             studentResolution = studentResolution,
-            studentFirstName = studentFirstName,
-            studentLastName = studentLastName,
-            studentEmail = studentEmail,
-            studentDocumentNumber = studentDocumentNumber,
+            studentFirstName = studentFirstName?.takeIf { it.isNotBlank() } ?: resolvedStudentProfile?.firstName,
+            studentLastName = studentLastName?.takeIf { it.isNotBlank() } ?: resolvedStudentProfile?.lastName,
+            studentEmail = studentEmail?.takeIf { it.isNotBlank() } ?: resolvedStudentProfile?.email,
+            studentDocumentNumber = studentDocumentNumber?.takeIf { it.isNotBlank() } ?: resolvedStudentProfile?.documentNumber,
             assignedAcademicYearId = academicYear?.id,
             assignedAcademicYearName = academicYear?.name,
             assignedLevelId = assignedLevel?.id,
@@ -957,6 +961,17 @@ class TuitionApplicationService(
             totalElements = totalElements,
             totalPages = totalPages
         )
+
+    private fun Page<TuitionApplication>.toApplicationPageResponse(): PageResponse<TuitionApplicationDto> {
+        val studentIdsMissingNames = content
+            .filter { it.studentFirstName.isNullOrBlank() || it.studentLastName.isNullOrBlank() }
+            .mapNotNull(TuitionApplication::studentId)
+        val studentProfiles = studentProfileProvider.getStudentProfiles(studentIdsMissingNames)
+
+        return toPageResponse { application ->
+            application.toDto(application.studentId?.let(studentProfiles::get))
+        }
+    }
 
     private fun BigDecimal.normalizeMoney(): BigDecimal = setScale(2, RoundingMode.HALF_UP)
 
