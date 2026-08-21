@@ -14,6 +14,7 @@ dependencies {
     implementation(project(":scheduling"))
     implementation(project(":payments"))
     implementation(project(":tuition"))
+    implementation(project(":guardians"))
     implementation(project(":exams"))
     implementation(project(":communications"))
     implementation(project(":reports"))
