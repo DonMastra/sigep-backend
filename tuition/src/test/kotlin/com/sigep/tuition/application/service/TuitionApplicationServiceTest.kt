@@ -22,6 +22,7 @@ import io.mockk.mockk
 import io.mockk.verify
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.springframework.data.domain.PageImpl
 import java.math.BigDecimal
 import java.time.LocalDate
 import java.time.YearMonth
@@ -95,6 +96,27 @@ class TuitionApplicationServiceTest {
         assertNull(result.assignedCourseId)
         verify(exactly = 0) { academicYearRepository.findById(any()) }
         verify(exactly = 0) { courseProvider.getCourseSeatAvailability(any()) }
+    }
+
+    @Test
+    fun `admin list resolves imported student names from current student profiles`() {
+        val importedApplication = application(status = TuitionApplicationStatus.APPROVED).copy(
+            studentFirstName = null,
+            studentLastName = null,
+            studentEmail = null,
+            studentDocumentNumber = null
+        )
+        val currentProfile = studentInfo().copy(firstName = "Martina", lastName = "Abregu")
+        every { applicationRepository.findByFilters(null, null, any()) } returns PageImpl(listOf(importedApplication))
+        every { studentProvider.getStudentProfiles(listOf(20L)) } returns mapOf(20L to currentProfile)
+
+        val result = service.listApplications(null, null, 0, 20)
+
+        assertEquals("Martina", result.content.single().studentFirstName)
+        assertEquals("Abregu", result.content.single().studentLastName)
+        assertEquals(currentProfile.email, result.content.single().studentEmail)
+        assertEquals(currentProfile.documentNumber, result.content.single().studentDocumentNumber)
+        verify(exactly = 1) { studentProvider.getStudentProfiles(listOf(20L)) }
     }
 
     @Test
