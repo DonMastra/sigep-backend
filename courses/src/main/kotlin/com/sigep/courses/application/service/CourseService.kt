@@ -7,13 +7,13 @@ import com.sigep.common.application.dto.PageResponse
 import com.sigep.common.application.service.ReservationAssignmentProvider
 import com.sigep.common.application.service.ReservationInfoProvider
 import com.sigep.common.application.service.StudentProfileProvider
+import com.sigep.common.application.service.TeacherInfoProvider
 import com.sigep.courses.application.dto.*
 import com.sigep.courses.application.event.CourseEventPublisher
 import com.sigep.courses.domain.event.CoursePublishedEvent
 import com.sigep.courses.domain.model.*
 import com.sigep.courses.domain.repository.CourseRepository
 import com.sigep.courses.domain.repository.EnrollmentRepository
-import com.sigep.security.domain.repository.UserRepository
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.cache.annotation.CacheEvict
@@ -29,7 +29,7 @@ class CourseService(
     private val courseRepository: CourseRepository,
     private val enrollmentRepository: EnrollmentRepository,
     private val eventPublisher: CourseEventPublisher,
-    private val userRepository: UserRepository,
+    private val teacherInfoProvider: TeacherInfoProvider,
     private val reservationInfoProvider: ReservationInfoProvider,
     private val reservationAssignmentProviderProvider: ObjectProvider<ReservationAssignmentProvider>,
     private val studentProfileProviderProvider: ObjectProvider<StudentProfileProvider>
@@ -129,6 +129,7 @@ class CourseService(
         if (request.startDate != null && request.endDate != null && request.endDate.isBefore(request.startDate)) {
             throw BusinessException("End date cannot be before start date")
         }
+        validateAssignableTeacher(request.teacherId)
 
         val course = Course(
             code = request.code,
@@ -187,6 +188,8 @@ class CourseService(
             throw BusinessException("End date cannot be before start date")
         }
 
+        validateAssignableTeacher(request.teacherId)
+
         val updatedCourse = course.copy(
             code = request.code ?: course.code,
             name = request.name ?: course.name,
@@ -195,7 +198,7 @@ class CourseService(
             duration = request.duration ?: course.duration,
             maxStudents = newMaxStudents,
             minStudents = newMinStudents,
-            teacherId = request.teacherId ?: course.teacherId,
+            teacherId = request.teacherId,
             price = request.price ?: course.price,
             startDate = newStartDate,
             endDate = newEndDate,
@@ -352,7 +355,7 @@ class CourseService(
             )
         }
 
-        if (course.teacherId == null) {
+        if (course.teacherId == null || teacherInfoProvider.getTeacherNameById(course.teacherId) == null) {
             throw BusinessException(
                 message = "No se puede publicar el curso sin un docente asignado",
                 code = "BUSINESS_RULE_VIOLATION",
@@ -422,9 +425,7 @@ class CourseService(
     private fun Course.toDto(teacherNameCache: MutableMap<Long, String?> = mutableMapOf()): CourseDto {
         val enrolledCount = enrollmentRepository.countActiveEnrollmentsByCourse(id!!).toInt()
         val resolvedTeacherName = teacherId?.let { id -> teacherNameCache.getOrPut(id) {
-            userRepository.findById(id)
-                .map { user -> "${user.firstName} ${user.lastName}".trim() }
-                .orElse(null)
+            teacherInfoProvider.getTeacherNameById(id)
         } }
         val totalEnrollmentCount = enrollmentRepository.countByCourseId(id).toInt()
         val availableSeats = maxStudents - enrolledCount
@@ -472,6 +473,17 @@ class CourseService(
 
     private fun requireActorUserId(actorUserId: Long?): Long =
         actorUserId ?: throw ForbiddenException("Authenticated user id is required")
+
+    private fun validateAssignableTeacher(teacherId: Long?) {
+        if (teacherId != null && teacherInfoProvider.getTeacherNameById(teacherId) == null) {
+            throw BusinessException(
+                message = "El docente seleccionado no está habilitado para recibir cursos",
+                code = "INVALID_TEACHER_ASSIGNMENT",
+                field = "teacherId",
+                details = "Teacher must be active teaching staff linked to an eligible active account"
+            )
+        }
+    }
 
     private fun Course.toSimpleDto(): CourseSimpleDto {
         val enrolledCount = enrollmentRepository.countActiveEnrollmentsByCourse(id!!).toInt()

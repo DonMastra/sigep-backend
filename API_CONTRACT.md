@@ -383,12 +383,14 @@ type CourseLevel = 'BEGINNER' | 'ELEMENTARY' | 'PRE_INTERMEDIATE' | 'INTERMEDIAT
 
 Nota: la asignacion de aula/horario se maneja con reservas en `scheduling`; los cursos pueden consumir providers de scheduling.
 
-`CourseDto.teacherId` puede ser `null`. `enrolledStudents` representa exclusivamente
-inscripciones `ACTIVE`; `totalEnrollments` incluye todas las inscripciones. El codigo de
-curso admite de 1 a 50 caracteres alfanumericos, espacios, guion, guion bajo y punto, con
-unicidad insensible a mayusculas. Publicar no exige una matricula minima, pero si docente,
-reserva, estado valido y disponibilidad. `durationHours` es la carga horaria total planificada
-del curso, no la duracion de cada clase.
+`CourseDto.teacherId` puede ser `null`; `teacherName` solo se informa cuando ese id corresponde
+a personal docente activo vinculado a una cuenta activa `TEACHER` o `ADMIN`. `POST` y `PUT`
+rechazan cualquier otro `teacherId` con `INVALID_TEACHER_ASSIGNMENT`. `enrolledStudents`
+representa exclusivamente inscripciones `ACTIVE`; `totalEnrollments` incluye todas las
+inscripciones. El codigo de curso admite de 1 a 50 caracteres alfanumericos, espacios, guion,
+guion bajo y punto, con unicidad insensible a mayusculas. Publicar no exige una matricula
+minima, pero si docente asignable, reserva, estado valido y disponibilidad. `durationHours` es
+la carga horaria total planificada del curso, no la duracion de cada clase.
 
 ## Enrollments
 
