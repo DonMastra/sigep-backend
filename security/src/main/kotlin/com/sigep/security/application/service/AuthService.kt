@@ -6,6 +6,7 @@ import com.sigep.common.application.exception.ResourceNotFoundException
 import com.sigep.common.application.exception.ResourceConflictException
 import com.sigep.common.application.exception.UnauthorizedException
 import com.sigep.common.application.exception.ValidationException
+import com.sigep.common.application.service.GuardianClientProfileProvisioner
 import com.sigep.security.application.dto.*
 import com.sigep.security.domain.model.AccountStatus
 import com.sigep.security.domain.model.RegistrationRequest
@@ -36,7 +37,8 @@ class AuthService(
     private val registrationRequestRepository: RegistrationRequestRepository,
     private val guardianInvitationRepository: GuardianInvitationRepository,
     private val passwordEncoder: PasswordEncoder,
-    private val jwtTokenProvider: JwtTokenProvider
+    private val jwtTokenProvider: JwtTokenProvider,
+    private val guardianClientProfileProvisioners: List<GuardianClientProfileProvisioner> = emptyList()
 ) {
 
     private val logger = LoggerFactory.getLogger(AuthService::class.java)
@@ -113,6 +115,12 @@ class AuthService(
             )
         )
 
+        if (savedUser.role == UserRole.GUARDIAN) {
+            guardianClientProfileProvisioners.forEach {
+                it.provisionGuardianClient(savedUser.id!!)
+            }
+        }
+
         logger.info("Public registration completed for user id {}", savedUser.id)
 
         return savedUser.toDto()
@@ -160,6 +168,10 @@ class AuthService(
                 updatedAt = now
             )
         )
+
+        guardianClientProfileProvisioners.forEach {
+            it.provisionGuardianClient(user.id!!, createdBy)
+        }
 
         val invitation = invitationToken?.let { token ->
             guardianInvitationRepository.save(

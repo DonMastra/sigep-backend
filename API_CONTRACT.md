@@ -1,6 +1,6 @@
 # API Contract - SiGEP Backend
 
-Contrato REST para integracion del frontend Angular SiGEP con el backend. Este documento refleja el estado del workspace al 2026-08-18.
+Contrato REST para integracion del frontend Angular SiGEP con el backend. Este documento refleja el estado del workspace al 2026-08-21.
 
 ## Informacion General
 
@@ -272,6 +272,91 @@ Query:
 - `size?: number`
 - `sort?: string` default `username`
 - `order?: ASC | DESC` default `ASC`
+
+## Tutores y clientes (ADMIN)
+
+Base: `/api/v1/admin/guardian-clients`
+
+Este recurso es una proyeccion administrativa. `users` sigue siendo la fuente de identidad y acceso;
+`students.guardian_id` conserva el unico tutor vigente; tuition conserva solicitudes/ledger; billing
+conserva cuentas, cargos, pagos, recibos y facturas. El recurso no duplica ni sustituye esos datos.
+
+| Metodo | Ruta | Roles | Descripcion |
+|---|---|---|---|
+| GET | `/` | ADMIN | Lista paginada con resumen de estudiantes, cursadas, matriculaciones y cobranza. |
+| GET | `/stats` | ADMIN | Indicadores globales de cartera, vinculos, cuenta de cobro, saldo y contacto. |
+| GET | `/{guardianUserId}` | ADMIN | Ficha integral con estudiantes, solicitudes, cargos y pagos asignados. |
+| PATCH | `/{guardianUserId}/profile` | ADMIN | Actualiza canal preferido y notas internas con version optimista. |
+
+Query del listado:
+
+- `search?: string`: nombre, apellido, email, documento, numero de cliente o datos identificatorios
+  del estudiante vinculado.
+- `accountStatus?: PENDING_APPROVAL | ACTIVE | REJECTED | ALL`.
+- `relationship?: WITH_STUDENTS | WITHOUT_STUDENTS | ALL`.
+- `billing?: WITH_DEBT | NO_DEBT | NO_ACCOUNT | ALL`.
+- `page?: number`, default `0`.
+- `limit?: number`, rango `1..100`, default `20`.
+- `sort?: clientNumber | firstName | lastName | studentCount | outstandingAmount | accountStatus`.
+- `order?: ASC | DESC`.
+
+Respuesta del listado: `ApiResponse<PageResponse<GuardianClientSummaryDto>>`.
+
+```ts
+interface GuardianClientSummaryDto {
+  guardianUserId: number;
+  clientNumber: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phoneNumber?: string | null;
+  documentNumber?: string | null;
+  accountStatus: 'PENDING_APPROVAL' | 'ACTIVE' | 'REJECTED';
+  accountActive: boolean;
+  preferredContactChannel: 'EMAIL' | 'PHONE' | 'WHATSAPP';
+  studentCount: number;
+  activeStudentCount: number;
+  activeEnrollmentCount: number;
+  tuitionApplicationCount: number;
+  billingAccountId?: number | null;
+  billingAccountStatus?: 'ACTIVE' | 'INACTIVE' | null;
+  billingProfileStatus?: 'INCOMPLETE' | 'READY' | null;
+  openChargeCount: number;
+  overdueChargeCount: number;
+  outstandingAmount: number;
+  lastPaymentDate?: string | null;
+  missingContactData: boolean;
+  profileVersion: number;
+}
+
+interface GuardianClientStatsDto {
+  totalClients: number;
+  withStudents: number;
+  withoutStudents: number;
+  withBillingAccount: number;
+  withOpenDebt: number;
+  missingContactData: number;
+}
+
+interface UpdateGuardianClientProfileRequest {
+  preferredContactChannel: 'EMAIL' | 'PHONE' | 'WHATSAPP';
+  administrativeNotes?: string | null; // maximo 1000
+  version: number;
+}
+```
+
+La ficha `GuardianClientDetailDto` agrega domicilio, nacimiento, contacto de emergencia, notas y:
+
+- `students[]`: estudiante, matricula, cursada activa, ultima solicitud y saldo por estudiante.
+- `tuitionApplications[]`: solicitud, origen, estado, estudiante, enrollment y curso asignado.
+- `charges[]`: cargo, total, pagado, saldo, vencimiento, estado, decision fiscal y factura por cargo si existe.
+- `payments[]`: pago, importe asignado mediante `payment_allocations`, recibo y factura si existen.
+
+Errores especificos:
+
+- `404 RESOURCE_NOT_FOUND`: el ID no corresponde a un usuario GUARDIAN.
+- `409 GUARDIAN_CLIENT_VERSION_CONFLICT`: el perfil fue modificado; recargar antes de reintentar.
+- `400 VALIDATION_ERROR`: filtro, canal, version o longitud de notas invalido.
 
 ## Students
 
