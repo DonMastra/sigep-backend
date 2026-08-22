@@ -1,399 +1,328 @@
-# DATABASE_STRUCTURE.md
+# Estructura de base de datos de SiGEP
 
-## Estado actual de estructura de Base de Datos (SiGEP)
+## 1. Alcance y fuente de verdad
 
-**Fecha de relevamiento:** 2026-05-31  
-**Ultima actualizacion:** 2026-08-10 (incluye V26: foto docente normalizada a BYTEA)
-**Entorno auditado:** `sigep_db` (PostgreSQL 15), validado contra codigo Kotlin actual y migraciones SQL.
+**Última auditoría:** 2026-08-21
 
-## 1) Fuente de verdad operativa
+**Entorno auditado:** Neon, base productiva `sigep_prod`, esquema `public`
 
-Orden de prioridad:
-1. **BD real en ejecucion**.
-2. **Entidades JPA** (`**/domain/model/*.kt`).
-3. **Migraciones SQL** (`scripts/migrations/*.sql`).
-4. **Contrato API** (`API_CONTRACT.md`).
+**Motor informado por el servidor:** PostgreSQL 18.6
 
-## 2) Snapshot estructural actual
+**Modo de auditoría:** conexión con `default_transaction_read_only=on` y consultas sin datos personales.
 
-### Tablas detectadas/modeladas: 47
-`automatic_debit_events`, `automatic_debit_instructions`, `automatic_debit_mandates`,
-`billing_accounts`, `billing_charge_adjustments`, `billing_charge_fiscal_decisions`,
-`billing_charges`, `billing_outbox`, `billing_profiles`, `billing_run_items`, `billing_runs`,
-`classrooms`, `course_attendance`, `course_certificates`, `course_materials`, `course_sessions`,
-`courses`, `enrollments`, `exam_grade_history`, `exam_submissions`, `exams`,
-`fiscal_invoice_attempts`, `fiscal_invoice_taxes`, `fiscal_invoice_vat_subtotals`,
-`fiscal_invoices`, `non_teaching_staff`, `payment_allocations`, `payment_receipts`, `payments`,
-`registration_requests`, `reservations`, `schedule_slots`, `session_exceptions`,
-`staff_attendance`, `students`, `teaching_staff`,
-`tuition_academic_years`, `tuition_applications`, `tuition_discounts`,
-`tuition_enrollment_fee_policies`, `tuition_fee_plans`, `tuition_placement_assessments`,
-`tuition_ledger_entries`, `tuition_level_progression`, `tuition_levels`,
-`users`, `voucher_sequences`.
+El orden de precedencia para describir el estado actual es:
 
-### Cambios de V12 (Scheduling)
-- Se elimina tabla legacy `course_schedules`.
-- Se crean tablas nuevas:
-  - `classrooms`
-  - `schedule_slots`
-  - `reservations`
-- Se agrega indice unico parcial `uq_slot_active_reservation` para garantizar maximo una reserva activa por slot (`status <> 'INACTIVE'`).
+1. Catálogo y constraints reales de `sigep_prod`.
+2. Entidades y repositorios Kotlin.
+3. Scripts manuales de `scripts/migrations`.
+4. Contrato REST de `API_CONTRACT.md`.
 
-### Cambios de V13 (Tuition)
-- Se agrega bounded context `tuition` para matriculacion como proceso.
-- Tablas nuevas:
-  - `tuition_academic_years`
-  - `tuition_levels`
-  - `tuition_level_progression`
-  - `tuition_fee_plans`
-  - `tuition_discounts`
-  - `tuition_applications`
-  - `tuition_ledger_entries`
-- `tuition_level_progression` usa indice unico parcial `uq_tuition_progression_active_from` para permitir una sola progresion activa por nivel origen.
-- V25 elimina `tuition_seat_reservations`; el cupo se valida exclusivamente durante la asignacion administrativa.
-- `tuition_ledger_entries` modela deuda academica; V18 sincroniza cada entrada con un
-  `billing_charge`. Tuition no emite CAE ni almacena datos de tarjeta.
+Los scripts SQL son migraciones manuales; el proyecto no usa Flyway ni Liquibase. QA y producción
+deben arrancar con `JPA_DDL_AUTO=validate`: Hibernate valida, pero no repara el esquema.
 
-### Cambios de V14/V15 (primer flujo manual)
+## 2. Snapshot productivo antes de V33
 
-- `teaching_staff.linked_user_id` enlaza un docente con una cuenta `users` activa habilitada
-  para docencia (`TEACHER` o una cuenta `ADMIN` que tambien posee legajo docente);
-  `photo_data`, `photo_content_type` y `photo_filename` almacenan la foto en
-  PostgreSQL. V26 garantiza que `photo_data` use `BYTEA`, en concordancia con la entidad JPA,
-  y falla de forma explicita si encuentra fotos legacy que requieran una conversion dirigida.
-  El indice parcial evita dos docentes con la misma cuenta.
-- `courses.teacher_id` es nullable, referencia `users.id` mediante
-  `fk_courses_teacher_user`, y `uk_courses_code_ci` garantiza codigo unico sin distinguir
-  mayusculas.
-- `tuition_levels.course_level` explicita el mapeo al nivel de cursos; la migracion conserva
-  `BEGINNER`/`ELEMENTARY` y traduce `A1`/`A2` a esos valores.
-- `tuition_applications.progression_rule` y `requires_admin_override` registran excepciones
-  de progresion.
-- `course_attendance.course_session_id` referencia la sesion real; el indice unico parcial
-  `uk_attendance_enrollment_session` permite una asistencia por alumno/sesion y varias sesiones
-  en una misma fecha.
-- V15 solo reemplaza el hash BCrypt legacy conocido de los usuarios de prueba; no migra
-  contrasenas arbitrarias.
+`sigep_prod` contiene **59 tablas públicas**. `guardian_client_profiles` todavía no existe en este
+snapshot y será incorporada por V33; por lo tanto, no debe presentarse como desplegada hasta aplicar
+la migración de forma controlada.
 
-### Cambios de V16 (facturacion persistente)
+### Seguridad e identidad
 
-- `payments` conserva filas legacy y suma moneda, referencias externas, claves/fingerprints
-  idempotentes, confirmacion auditada y `@Version`; `payment_date` pasa a nullable para pagos
-  `PENDING` y el monto se normaliza a `NUMERIC(12,2)`.
-- `payment_receipts` mantiene una instantanea inmutable por pago del recibo X no fiscal, con
-  la leyenda `DOCUMENTO NO VALIDO COMO FACTURA`.
-- `fiscal_invoices` mantiene una factura por pago, preflight, datos WSFE, numero, CAE,
-  observaciones/errores sanitizados y version optimista.
-- `fiscal_invoice_attempts` audita autorizaciones y conciliaciones sin guardar XML, Token o Sign.
-- `billing_outbox` desacopla la transaccion local de la llamada fiscal y distingue resultados
-  pendientes, procesados, fallidos o en conciliacion.
-- `voucher_sequences` serializa por CUIT emisor, punto de venta y tipo de comprobante; el worker
-  usa bloqueo pesimista antes de asignar numero.
+| Tabla | Filas observadas | Función |
+|---|---:|---|
+| `users` | 615 | Identidad, credenciales, rol y estado de acceso. |
+| `registration_requests` | 0 | Solicitudes de registro público. |
+| `guardian_invitations` | 0 | Invitación administrativa de tutores. |
+| `schema_version` | 4 | Registro operativo agregado desde V27. |
 
-### Cambios de V17 (detalle fiscal)
+Distribución exacta de `users` durante la auditoría:
 
-- `fiscal_invoices.receiver_address` conserva el domicilio del receptor requerido por el PDF.
-- `fiscal_invoice_vat_subtotals` persiste codigo, base e importe por alicuota IVA.
-- `fiscal_invoice_taxes` persiste codigo, descripcion, base, alicuota e importe por tributo.
-- Ambas colecciones conservan orden, restringen valores invalidos y referencian la factura.
+- 4 ADMIN `ACTIVE`, 1 ADMIN `REJECTED`.
+- 602 GUARDIAN `PENDING_APPROVAL` con `active=false`.
+- 8 TEACHER `ACTIVE`.
 
-### Cambios de V18 (cuentas, cargos y ejecuciones manuales)
+El estado de acceso no representa por sí solo el estado comercial: de esos 602 tutores, 312 tienen
+estudiantes vinculados y 180 ya tienen cuenta de facturación activa. El módulo de tutores/clientes
+debe exponer ambas dimensiones sin mezclarlas.
 
-- `billing_accounts` agrupa al responsable de pago y `billing_profiles` conserva sus datos
-  fiscales reutilizables, con estado `INCOMPLETE` o `READY`.
-- `billing_charges` representa deudas originadas por matricula o cuota y evita duplicados por
-  `(source_type, source_id)`.
-- `payment_allocations` registra la imputacion de un pago al cargo que liquida.
-- `billing_runs` y `billing_run_items` auditan preparaciones individuales, seleccionadas o
-  filtradas, con idempotencia y resultado por cargo.
-- `fiscal_invoices` puede referenciar exactamente un pago legacy o un cargo.
-- La configuracion del primer cliente fuerza `rg_5866_applicable=false`.
+### Estudiantes y vínculo con tutor
 
-### Cambios de V22 a V24
+| Tabla | Filas observadas | Función |
+|---|---:|---|
+| `students` | 546 | Perfil académico del estudiante. |
+| `student_guardian_link_events` | 357 | Auditoría inmutable de vínculos y reasignaciones. |
 
-- V22 agrega `base_amount`, `paid_amount`, `PARTIALLY_PAID` y `fiscal_disposition` a
-  `billing_charges`; elimina la unicidad por cargo de `payment_allocations` y crea
-  `billing_charge_fiscal_decisions`. El ledger de matricula replica pagado y recargo.
-- V23 agrega al plan `monthly_due_day`, `late_fee_percentage`, elegibilidad de debito para cuota y
-  matricula, y guarda la instantanea en cada cargo. `billing_charge_adjustments` conserva base,
-  porcentaje, importe, fecha efectiva, origen y reversa del unico recargo activo.
-- V24 agrega `billing_charges.collection_channel` y crea `automatic_debit_mandates`,
-  `automatic_debit_instructions` y `automatic_debit_events`. La adhesion es por cuenta y guarda
-  procesadora, tipo de instrumento, alcance, vigencia, referencia opaca y etiqueta enmascarada.
-  Cada instruccion referencia obligatoriamente una factura fiscal autorizada y persiste presentacion,
-  resultado y resolucion contable manual. No existen columnas para PAN, CVV, token de navegador,
-  CBU completo ni archivos de exportacion.
-- `billing_charges.amount` sigue siendo el total compatible; `base_amount` es capital y la diferencia
-  es recargo. `paid_amount <= amount` y el saldo se deriva como `amount - paid_amount`.
-- La primera version de V24 nunca fue promovida; por eso el script fue corregido directamente y
-  no requiere una migracion compensatoria.
-- V1-V24 se reprodujeron en orden numerico sobre PostgreSQL 15 Alpine descartable el 2026-08-07.
-  Un fixture creado luego de V18 con cargo de 100 e imputacion confirmada de 40 fue migrado por V22
-  a `PARTIALLY_PAID`, `paid_amount=40`, saldo 60 y `fiscal_disposition=PENDING`; V24 agrego
-  `collection_channel=REGULAR` y las tres tablas de debito. Se verifico `invoice_id NOT NULL`,
-  `processing_date NOT NULL`, cero columnas PAN/CVV/CBU/token/export y cero tablas de exportacion.
-  El contenedor descartable se elimino al terminar.
+- `students.guardian_id -> users.id` es nullable y representa **un único tutor vigente**.
+- `student_guardian_link_events` no reemplaza ese vínculo: registra actor, origen, acción, tutor
+  anterior/nuevo, motivo y fecha.
+- Hay 357 estudiantes vinculados y 189 sin tutor; 308 estudiantes están activos.
+- 312 tutores tienen al menos un estudiante; 290 no tienen ninguno. El máximo observado es 3.
+- Los 357 eventos productivos son `LINKED` con origen `ADMIN`.
+- No se detectaron tutores inexistentes o con rol distinto de `GUARDIAN` en `students.guardian_id`.
 
-### Cambios de V25
+### Cursos, cursadas y asistencia
 
-- `tuition_enrollment_fee_policies` independiza importe, vencimiento y elegibilidad de debito
-  de la matricula respecto del plan de cuotas. Un indice unico parcial permite una sola politica
-  predeterminada.
-- `tuition_applications` permite ciclo, nivel, curso y plan nulos hasta la asignacion y referencia
-  la politica aplicada. Se agregan estados de nivelacion, asignacion y lista de espera.
-- `tuition_placement_assessments` audita resultado, nivel recomendado, evaluador, notas y fecha.
-- Las aplicaciones historicas conservan sus referencias y reciben una politica migrada desde
-  el plan seleccionado. El 2026-08-08 se reconstruyo la base local desde cero y se reprodujeron
-  V1-V25 en orden: quedaron 47 tablas, sin `tuition_seat_reservations`, sin columnas
-  `requested_*` y con los ocho estados nuevos como unica restriccion valida. El arranque posterior
-  con `ddl-auto=validate` y `/actuator/health` confirmo JPA, PostgreSQL y Redis en estado `UP`.
+| Tabla | Filas observadas |
+|---|---:|
+| `courses` | 40 |
+| `enrollments` | 320 |
+| `course_sessions` | 1205 |
+| `course_attendance` | 0 |
+| `course_materials` | 0 |
+| `course_certificates` | 0 |
 
-### Cambios de V26
+`enrollments.student_id -> students.id` y `enrollments.course_id -> courses.id`. Hay 308 cursadas
+`ACTIVE` y 12 `DROPPED`. En producción, `courses.teacher_id` está definido `NOT NULL`, referencia
+`users.id` y la FK declara `ON DELETE SET NULL`; esta contradicción se registra como deuda técnica.
 
-- Normaliza `teaching_staff.photo_data` desde el tipo legacy `OID` a `BYTEA` cuando la columna
-  no contiene fotos. La migracion es reejecutable si la columna ya esta en `BYTEA` y se detiene
-  antes de modificar datos cuando detecta contenido legacy.
-- QA deja de usar Hibernate como modificador de esquema: `render.yaml` y el fallback de
-  `application-qa.yml` configuran `JPA_DDL_AUTO=validate`.
+### Matriculación (`tuition`)
 
-### PK por modulo
-- Modulos generales (`users`, `students`, `courses`, `staff`, `scheduling`, `tuition`, etc.): **BIGINT**.
-- Modulo exams (`exams`, `exam_submissions`, `exam_grade_history`): **UUID** en PK.
+| Tabla | Filas observadas |
+|---|---:|
+| `tuition_academic_years` | 1 |
+| `tuition_levels` | 24 |
+| `tuition_level_progression` | 18 |
+| `tuition_fee_plans` | 2 |
+| `tuition_enrollment_fee_policies` | 2 |
+| `tuition_discounts` | 0 |
+| `tuition_applications` | 211 |
+| `tuition_placement_assessments` | 0 |
+| `tuition_ledger_entries` | 1055 |
 
-### FK cross-modulo (vigentes)
-- `exams.course_id` -> `courses.id` (BIGINT)
-- `exams.created_by` -> `users.id` (BIGINT)
-- `exam_submissions.student_id` -> `students.id` (BIGINT)
-- `exam_submissions.graded_by` -> `users.id` (BIGINT)
-- `exam_grade_history.changed_by` -> `users.id` (BIGINT)
-- `tuition_applications.guardian_user_id` -> `users.id` (BIGINT)
-- `tuition_applications.actor_user_id` -> `users.id` (BIGINT)
-- `tuition_applications.student_id` -> `students.id` (BIGINT, resuelto antes del cargo)
-- `students.guardian_id` -> `users.id` (BIGINT, nullable; un unico tutor vigente)
-- `student_guardian_link_events.student_id` -> `students.id` (BIGINT)
-- `student_guardian_link_events.guardian_user_id` -> `users.id` (BIGINT, nullable)
-- `guardian_invitations.user_id` -> `users.id` (BIGINT, unico)
-- `tuition_applications.assigned_level_id` -> `tuition_levels.id` (BIGINT, nullable hasta la asignacion)
-- `tuition_applications.assigned_course_id` -> `courses.id` (BIGINT, nullable hasta la asignacion)
-- `tuition_applications.enrollment_id` -> `enrollments.id` (BIGINT, nullable)
-- `tuition_discounts.student_id` -> `students.id` (BIGINT, nullable)
-- `tuition_ledger_entries.student_id` -> `students.id` (BIGINT, nullable)
-- `billing_accounts.guardian_user_id` -> `users.id` (BIGINT, unico, `ON DELETE RESTRICT`)
-- `billing_profiles.account_id` -> `billing_accounts.id` (BIGINT, unico, `ON DELETE RESTRICT`)
-- `billing_profiles.updated_by` -> `users.id` (BIGINT, nullable, `ON DELETE RESTRICT`)
-- `billing_charges.account_id` -> `billing_accounts.id` (BIGINT, `ON DELETE RESTRICT`)
-- `billing_charges.student_id` -> `students.id` (BIGINT, nullable)
-- `payment_allocations.payment_id` -> `payments.id` (BIGINT, `ON DELETE RESTRICT`)
-- `payment_allocations.charge_id` -> `billing_charges.id` (BIGINT, no unico, `ON DELETE RESTRICT`);
-  la unicidad vigente es `(payment_id, charge_id)` para permitir varios pagos por cargo.
-- `billing_runs.requested_by` -> `users.id` (BIGINT, `ON DELETE RESTRICT`)
-- `billing_run_items.run_id` -> `billing_runs.id` (BIGINT, `ON DELETE RESTRICT`)
-- `billing_run_items.charge_id` -> `billing_charges.id` (BIGINT, `ON DELETE RESTRICT`)
-- `billing_run_items.invoice_id` -> `fiscal_invoices.id` (BIGINT, unico, `ON DELETE RESTRICT`)
-- `teaching_staff.linked_user_id` -> `users.id` (BIGINT, `ON DELETE SET NULL`)
-- `course_attendance.course_session_id` -> `course_sessions.id` (BIGINT, `ON DELETE RESTRICT`)
-- `payment_receipts.payment_id` -> `payments.id` (BIGINT, unico, `ON DELETE RESTRICT`)
-- `fiscal_invoices.payment_id` -> `payments.id` (BIGINT, unico y nullable, `ON DELETE RESTRICT`)
-- `fiscal_invoices.charge_id` -> `billing_charges.id` (BIGINT, unico y nullable, `ON DELETE RESTRICT`)
-- `fiscal_invoice_attempts.invoice_id` -> `fiscal_invoices.id` (BIGINT, `ON DELETE RESTRICT`)
-- `billing_outbox.invoice_id` -> `fiscal_invoices.id` (BIGINT, `ON DELETE RESTRICT`)
-- `fiscal_invoice_vat_subtotals.invoice_id` -> `fiscal_invoices.id` (BIGINT, `ON DELETE RESTRICT`)
-- `fiscal_invoice_taxes.invoice_id` -> `fiscal_invoices.id` (BIGINT, `ON DELETE RESTRICT`)
+Relaciones principales:
 
-### Calificaciones de idiomas (V21)
+- `tuition_applications.guardian_user_id -> users.id` identifica al tutor representado.
+- `actor_user_id -> users.id` identifica quién ejecutó la operación y `origin` distingue ADMIN/GUARDIAN.
+- `student_id -> students.id` se resuelve antes de generar cargos.
+- `enrollment_id -> enrollments.id`, `assigned_course_id -> courses.id` y las referencias a ciclo,
+  nivel, plan y política conservan la decisión académica.
+- `tuition_ledger_entries.application_id -> tuition_applications.id` y `student_id -> students.id`.
 
-- `exam_submissions.reading_score`, `writing_score` y `listening_score` son enteros nullable con
-  restriccion `0..100`; permiten guardar progreso parcial sin inventar una nota final.
-- `exam_submissions.score` conserva la nota final calculada y las notas legacy previas a V21.
-- `exam_grade_history` conserva los valores anterior/nuevo de cada categoria y permite
-  `new_score` nullable cuando la nueva carga queda incompleta.
-- `exam_submissions.version` es el control de concurrencia optimista usado por el guardado en lote.
-- `scripts/migrations/V21__add_language_skill_exam_grades.sql` es una migracion manual e idempotente;
-  debe aplicarse en la base del ambiente antes de desplegar el backend que lee estas columnas.
+Estado exacto observado:
 
-### FK de scheduling (V12)
-- `schedule_slots.classroom_id` -> `classrooms.id` (`ON DELETE RESTRICT`)
-- `reservations.slot_id` -> `schedule_slots.id` (`ON DELETE RESTRICT`)
+- 211 solicitudes `APPROVED`, todas `REGULAR_PROMOTION`, origen `ADMIN` y estudiante `EXISTING`.
+- 1055 entradas de ledger `PENDING` por ARS 94.650.000 en total.
+- 180 tutores distintos tienen solicitudes; no hay discrepancias entre el tutor de la solicitud y
+  `students.guardian_id`.
 
-## 3) Cambios recientes relevantes (V10 a V18)
+El ledger es deuda académica. No es un recibo, pago ni factura fiscal.
 
-| Version | Archivo | Resultado |
-|---|---|---|
-| V10 | `scripts/migrations/V10__auth_registration_approval_workflow.sql` | `users.status` + tabla `registration_requests` para aprobacion de registro |
-| V11 | `scripts/migrations/V11__extend_users_profile_fields.sql` | nuevos campos de perfil en `users` |
-| V12 | `scripts/migrations/V12__create_scheduling_module.sql` | nuevo esquema de scheduling (`classrooms`, `schedule_slots`, `reservations`) y drop de `course_schedules` |
-| V13 | `scripts/migrations/V13__create_tuition_module.sql` | nuevo esquema tuition para ciclo lectivo, niveles, planes, solicitudes, reservas y ledger |
-| V14 | `scripts/migrations/V14__fix_first_manual_flow.sql` | compatibilidad del primer flujo manual |
-| V15 | `scripts/migrations/V15__repair_legacy_test_password_hash.sql` | reparacion acotada de hashes legacy de prueba |
-| V16 | `scripts/migrations/V16__create_billing_persistence.sql` | pagos compatibles, recibos X, facturas, intentos, outbox y secuencias |
-| V17 | `scripts/migrations/V17__add_fiscal_tax_breakdown.sql` | domicilio receptor y detalle IVA/tributos |
-| V18 | `scripts/migrations/V18__create_billing_accounts_charges_and_runs.sql` | cuentas, perfiles, cargos, imputaciones y ejecuciones manuales |
-| V19 | `scripts/migrations/V19__repair_tuition_ledger_statuses.sql` | normalizacion de estados heredados del ledger de matriculacion |
-| V20 | `scripts/migrations/V20__repair_hibernate_tuition_ledger_status_constraint.sql` | reemplazo del `CHECK` legacy generado por Hibernate y correccion del valor por defecto |
-| V25 | `scripts/migrations/V25__separate_tuition_request_placement_and_assignment.sql` | politica de matricula, nivelacion y referencias academicas opcionales hasta la asignacion |
-| V26 | `scripts/migrations/V26__convert_teaching_staff_photo_to_bytea.sql` | normalizacion segura de la foto docente legacy desde `OID` a `BYTEA` |
-| V27 | `scripts/migrations/V27__unify_guardian_student_tuition_identity.sql` | identidad documental normalizada, email no unico, auditoria tutor-estudiante, invitaciones, actor/origen/idempotencia de matriculacion y FKs |
+### Cobranza, pagos y facturación
 
-### Validacion V27 en Neon QA (2026-08-12)
+| Tabla | Filas observadas |
+|---|---:|
+| `billing_accounts` | 180 |
+| `billing_profiles` | 180 |
+| `billing_charges` | 1055 |
+| `payment_allocations` | 0 |
+| `payments` | 0 |
+| `payment_receipts` | 0 |
+| `fiscal_invoices` | 0 |
+| `fiscal_invoice_attempts` | 0 |
+| `fiscal_invoice_vat_subtotals` | 0 |
+| `fiscal_invoice_taxes` | 0 |
+| `billing_charge_fiscal_decisions` | 0 |
+| `billing_charge_adjustments` | 0 |
+| `billing_runs` | 0 |
+| `billing_run_items` | 0 |
+| `billing_outbox` | 0 |
+| `automatic_debit_mandates` | 0 |
+| `automatic_debit_instructions` | 0 |
+| `automatic_debit_events` | 0 |
+| `voucher_sequences` | 0 |
 
-- Base y rama verificadas: `sigep_qa` / `sigep-qa`.
-- Se vaciaron las 47 tablas preexistentes con `TRUNCATE ... RESTART IDENTITY CASCADE` y
-  comprobacion posterior de cero filas; se conservo el esquema.
-- V27 finalizo con `COMMIT` y dejo 49 tablas publicas, incluidas
-  `student_guardian_link_events` y `guardian_invitations`.
-- Se verificaron 3 columnas nuevas de identidad en `students`, 6 controles nuevos en
-  `tuition_applications`, 6 indices unicos requeridos y 10 FKs principales.
-- `students.email` quedo sin constraint de unicidad. `students`, `users`,
-  `tuition_applications`, `billing_charges` y `payments` permanecieron con cero filas.
+Relaciones y separación de documentos:
 
-## 4) Validacion ejecutada en BD (2026-05-31)
+- `billing_accounts.guardian_user_id -> users.id` es único: una cuenta por tutor.
+- `billing_profiles.account_id -> billing_accounts.id` es único: un perfil fiscal reutilizable.
+- `billing_charges.account_id -> billing_accounts.id`; `student_id -> students.id` es nullable.
+- `(source_type, source_id)` evita duplicar el cargo proveniente del ledger.
+- `payment_allocations` es la relación muchos-a-muchos entre pagos y cargos, única por
+  `(payment_id, charge_id)`.
+- `payment_receipts` es el recibo X no fiscal de un pago.
+- `fiscal_invoices` referencia exactamente un pago o un cargo y conserva el circuito fiscal.
 
-### Ejecucion de migracion
-- Script ejecutado: `scripts/migrations/V12__create_scheduling_module.sql`
-- Resultado: `DROP TABLE`, `CREATE TABLE` e indices creados sin error.
+Los 180 `billing_accounts` están `ACTIVE`, todos tienen `billing_profile`; los 1055 cargos están
+`OPEN`, sin importes pagados, por ARS 94.650.000. No hay pagos, recibos ni facturas. No se
+detectaron cuentas cuyo titular no fuera GUARDIAN, cargos cuyo tutor difiriera del tutor vigente
+del estudiante ni cuentas sin perfil.
 
-### Estado del esquema scheduling
-- `classrooms`: columnas y defaults correctos (`active=true`, timestamps con `now()`).
-- `schedule_slots`: constraint `chk_slot_day_of_week` vigente y FK a `classrooms` vigente.
-- `reservations`: constraints `chk_reservation_target_type` y `chk_reservation_status` vigentes.
-- Indices detectados:
-  - `idx_classroom_name`
-  - `idx_slot_classroom`
-  - `idx_slot_day`
-  - `idx_reservation_slot`
-  - `idx_reservation_status`
-  - `idx_reservation_target`
-  - `uq_slot_active_reservation` (unico parcial)
+### Staff, scheduling, exámenes y comunicaciones
 
-### Estado de datos al cierre de validacion
-- `classrooms`: 0 filas
-- `schedule_slots`: 0 filas
-- `reservations`: 0 filas
+| Dominio | Tablas y filas observadas |
+|---|---|
+| Staff | `teaching_staff` 10; `non_teaching_staff` 0; `staff_attendance` 0. |
+| Scheduling | `classrooms` 0; `schedule_slots` 0; `reservations` 0; `session_exceptions` 0. |
+| Exams | `exams` 0; `exam_submissions` 0; `exam_grade_history` 0. |
 
-### Verificacion de deprecacion legacy
-- `course_schedules_exists = false` (tabla removida correctamente).
+### Auditoría de importación legacy
 
-### Validacion complementaria de V16 (2026-07-21)
+| Tabla | Filas observadas |
+|---|---:|
+| `legacy_import_runs` | 1 |
+| `legacy_import_entity_map` | 3736 |
+| `legacy_import_relationships` | 391 |
+| `legacy_import_issues` | 148 |
+| `legacy_reconciliation_runs` | 2 |
+| `legacy_reconciliation_decisions` | 840 |
+| `legacy_reconciliation_changes` | 2161 |
+| `legacy_teacher_linkage_repair_runs` | 2 |
+| `legacy_teacher_linkage_repair_backup` | 80 |
 
-- Se creo una base PostgreSQL 15 descartable con la tabla `payments` legacy y una fila previa.
-- V16 se aplico con `ON_ERROR_STOP=1` y se volvio a aplicar para comprobar idempotencia.
-- La fila legacy se preservo con moneda `ARS`, version `0` y su fecha original.
-- Se verifico la existencia de las cinco tablas nuevas: `payment_receipts`, `fiscal_invoices`,
-  `fiscal_invoice_attempts`, `billing_outbox` y `voucher_sequences`.
-- La aplicacion arranco contra ese esquema y expuso el controller protegido; la base descartable
-  se elimino al terminar.
+Estas tablas son evidencia de importación/reconciliación y no deben usarse como fuente operativa
+de la ficha actual de estudiantes, tutores o cobros.
 
-### Validacion complementaria de V17 (2026-07-21)
+## 3. Inventario completo de tablas en `sigep_prod`
 
-- V16 y V17 se aplicaron en orden sobre PostgreSQL 15 descartable con una factura previa a V17.
-- Se verifico el backfill de `receiver_address`, la insercion de una alicuota IVA y un tributo.
-- V17 se reaplico con `ON_ERROR_STOP=1` para confirmar idempotencia; el contenedor se elimino.
-
-### Alcance de V18 (2026-07-28)
-
-- Agrega `billing_accounts`, `billing_profiles`, `billing_charges`, `payment_allocations`,
-  `billing_runs` y `billing_run_items`.
-- Permite que `fiscal_invoices` se origine en un pago legacy o en un cargo, exactamente uno.
-- Hizo `payments.student_id` nullable para compatibilidad con el flujo historico que cobraba antes
-  de crear al estudiante. Desde V27 el estudiante se resuelve antes del cargo, aunque la columna
-  conserva nullabilidad para registros y circuitos legacy.
-- Migra el ledger `MOCK_PENDING/MOCK_PAID` a `PENDING/PAID` y renombra
-  `mock_reference` a `billing_reference`.
-- Fija `rg_5866_applicable=false` mediante constraint para el primer cliente.
-- V18 se valido y reaplico sobre PostgreSQL 15 Alpine descartable sin tocar la base del proyecto.
-  Preservo filas legacy, migro estado/referencia, creo seis tablas y mantuvo los constraints.
-
-## 5) Validacion complementaria de `users`
-
-- Se ejecuto `scripts/validate-db-schema.sql` y se verifico:
-  - Persisten los campos extendidos (`phone_number`, `address`, `date_of_birth`, `document_number`, `emergency_contact`).
-  - No hubo regresiones funcionales por V12 sobre `users`.
-- Observacion: la base actual muestra indices `uk...` para `email` y `username`; no aparece `idx_users_document_number` en este entorno auditado.
-
-## 6) Trazabilidad BD <-> Codigo <-> API
-
-### Seguridad/Auth
-- `POST /api/v1/auth/register` persiste perfil extendido en `users`.
-- `GET /api/v1/users/me` expone esos campos desde `users`.
-
-### Scheduling
-- `CourseSchedule` queda deprecado en modelo y BD.
-- La asignacion horaria se modela con:
-  - `schedule_slots` (franjas por aula)
-  - `reservations` (asignacion a `COURSE` o `SESSION`)
-
-### Tuition
-- `POST /api/v1/tuition/applications` resuelve o crea `students` antes del cargo y sirve tanto a
-  ADMIN como a GUARDIAN. Persiste actor, tutor representado, origen, resolucion e idempotencia.
-- `POST /api/v1/tuition/applications/{id}/enrollment-charge` aplica una politica independiente y
-  crea el ledger/cargo de matricula idempotente.
-- `POST /api/v1/billing/charges/{id}/payments` crea/imputa el pago y recibo X; el observer de
-  tuition marca el ledger `PAID` sobre el estudiante ya resuelto y bloquea la asignacion si el
-  pago se revierte.
-- `PUT /api/v1/tuition/applications/{id}/placement` registra la entrevista o su dispensa.
-- `PUT /api/v1/tuition/applications/{id}/assignment` valida cupo y progresion, crea `Enrollment`
-  y materializa ledger/cargos de cuotas.
-
-## 7) Scripts operativos de validacion
-
-- `scripts/migrations/V12__create_scheduling_module.sql` -> migracion de scheduling.
-- `scripts/migrations/V13__create_tuition_module.sql` -> migracion de tuition.
-- `scripts/migrations/V16__create_billing_persistence.sql` -> migracion de pagos/facturacion.
-- `scripts/migrations/V17__add_fiscal_tax_breakdown.sql` -> domicilio y desglose impositivo.
-- `scripts/migrations/V18__create_billing_accounts_charges_and_runs.sql` -> cuentas, perfiles,
-  cargos, imputaciones y ejecuciones manuales de facturas.
-- `scripts/migrations/V25__separate_tuition_request_placement_and_assignment.sql` -> separacion
-  de solicitud, politica de matricula, nivelacion y asignacion academica; elimina la reserva legacy.
-- `scripts/migrations/V27__unify_guardian_student_tuition_identity.sql` -> identidad y vinculo
-  tutor-estudiante, invitaciones administrativas y controles de matriculacion unificados.
-- `scripts/validate-db-schema.sql` -> validacion de esquema de `users`.
-- `scripts/validate-db-schema.sh` -> validacion por consola (psql).
-
-## 8) Brechas residuales
-
-1. **Pipeline unico de migraciones**:
-   - Pendiente consolidar ejecucion automatica para todo el monolito.
-
-2. **Script de validacion general**:
-   - `scripts/validate-db-schema.sql` hoy valida principalmente `users`; conviene extenderlo para incluir `classrooms`, `schedule_slots`, `reservations` y tablas `tuition_*`.
-
-3. **Datos semilla scheduling**:
-   - No hay seed inicial de aulas/slots/reservas; el estado actual queda vacio por diseno.
-
-4. **Datos semilla tuition**:
-   - No hay seed inicial de ciclos, niveles, progresiones ni planes de cuota; deben cargarse por API admin antes de usar el flujo.
-
-5. **Aplicacion de V14/V15/V16/V17/V18**:
-   - Los scripts estan versionados como artefactos operativos. Validarlos primero en una
-     base descartable o en una transaccion revertida; el contenedor local existente no debe
-     modificarse automaticamente durante el desarrollo.
-
-    - V16/V17/V18 ya fueron validadas en una base descartable; aun deben incorporarse al
-      procedimiento controlado de despliegue de cada ambiente.
-
-    - En bases legacy con filas existentes, V16 agrega `currency` y `version` como columnas
-      rellenables, aplica `ARS`/`0` y recien despues las fija como `NOT NULL`. El mapeo JPA conserva
-      esos defaults como salvaguarda adicional cuando `ddl-auto=update` esta activo en `dev`.
-
-6. **Ledger y cargos**:
-   - Las cuotas mensuales se generan desde el mes de asignacion, sin deuda retroactiva, y se
-     limitan por inicio/fin del plan, inicio/fin del ciclo y `installments`. Si el vencimiento
-     nominal del primer mes ya paso, esa primera cuota vence en la fecha de asignacion.
-     No se reescriben filas historicas y este cambio no requiere una migracion de esquema.
-
-## 9) Comandos de auditoria rapida
-
-```powershell
-Get-Content "scripts/migrations/V12__create_scheduling_module.sql" | docker exec -i sigep-postgres psql -U sigep_user -d sigep_db -v ON_ERROR_STOP=1
-Get-Content "scripts/migrations/V13__create_tuition_module.sql" | docker exec -i sigep-postgres psql -U sigep_user -d sigep_db -v ON_ERROR_STOP=1
-Get-Content "scripts/migrations/V16__create_billing_persistence.sql" | docker exec -i sigep-postgres psql -U sigep_user -d sigep_db -v ON_ERROR_STOP=1
-Get-Content "scripts/migrations/V17__add_fiscal_tax_breakdown.sql" | docker exec -i sigep-postgres psql -U sigep_user -d sigep_db -v ON_ERROR_STOP=1
-docker exec sigep-postgres psql -U sigep_user -d sigep_db -c "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' ORDER BY table_name;"
-docker exec sigep-postgres psql -U sigep_user -d sigep_db -c "SELECT tablename, indexname FROM pg_indexes WHERE schemaname='public' AND tablename IN ('classrooms','schedule_slots','reservations') ORDER BY tablename, indexname;"
-docker exec sigep-postgres psql -U sigep_user -d sigep_db -c "SELECT tablename, indexname FROM pg_indexes WHERE schemaname='public' AND tablename LIKE 'tuition_%' ORDER BY tablename, indexname;"
-docker exec sigep-postgres psql -U sigep_user -d sigep_db -c "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='course_schedules') AS course_schedules_exists;"
+```text
+automatic_debit_events
+automatic_debit_instructions
+automatic_debit_mandates
+billing_accounts
+billing_charge_adjustments
+billing_charge_fiscal_decisions
+billing_charges
+billing_outbox
+billing_profiles
+billing_run_items
+billing_runs
+classrooms
+course_attendance
+course_certificates
+course_materials
+course_sessions
+courses
+enrollments
+exam_grade_history
+exam_submissions
+exams
+fiscal_invoice_attempts
+fiscal_invoice_taxes
+fiscal_invoice_vat_subtotals
+fiscal_invoices
+guardian_invitations
+legacy_import_entity_map
+legacy_import_issues
+legacy_import_relationships
+legacy_import_runs
+legacy_reconciliation_changes
+legacy_reconciliation_decisions
+legacy_reconciliation_runs
+legacy_teacher_linkage_repair_backup
+legacy_teacher_linkage_repair_runs
+non_teaching_staff
+payment_allocations
+payment_receipts
+payments
+registration_requests
+reservations
+schedule_slots
+schema_version
+session_exceptions
+staff_attendance
+student_guardian_link_events
+students
+teaching_staff
+tuition_academic_years
+tuition_applications
+tuition_discounts
+tuition_enrollment_fee_policies
+tuition_fee_plans
+tuition_ledger_entries
+tuition_level_progression
+tuition_levels
+tuition_placement_assessments
+users
+voucher_sequences
 ```
 
+Secuencias detectadas: 12, correspondientes a cuentas/cargos/perfiles/ejecuciones de facturación,
+imputaciones, auditorías legacy/reconciliación y eventos tutor-estudiante. Entidades principales
+importadas conservan IDs explícitos; no se debe inferir que toda PK BIGINT tiene secuencia.
 
+## 4. Registro de migraciones productivo
 
+`schema_version` tiene columnas `version`, `git_commit`, `applied_at`, `description` y contiene:
 
+| Versión | Aplicada (UTC) | Descripción registrada |
+|---|---|---|
+| V27 | 2026-08-14 19:26 | baseline de esquema QA validada para UAT de capacitación |
+| V28 | 2026-08-14 22:25 | auditoría de importación legacy y dataset 2026 |
+| V29 | 2026-08-15 15:08 | reconciliación institucional legacy 2026 |
+| V30 | 2026-08-15 15:08 | identificador de negocio del estudiante |
+
+La presencia física de `users.must_change_password` y de la FK docente de cursos demuestra cambios
+posteriores, pero V31/V32 no están registrados en esa tabla. El registro debe corregirse en el
+procedimiento de despliegue; no debe inventarse un hash Git ni insertarse desde una migración de
+dominio.
+
+## 5. V33: perfil administrativo de tutor/cliente
+
+Archivo: `scripts/migrations/V33__create_guardian_client_profiles.sql`.
+
+V33 crea `guardian_client_profiles`, con relación 1:1 a `users`:
+
+| Columna | Tipo | Regla |
+|---|---|---|
+| `guardian_user_id` | BIGINT | PK y FK a `users(id)`, `ON DELETE CASCADE`. |
+| `client_number` | VARCHAR(32) | único, estable, formato `CLI-` + ID rellenado. |
+| `preferred_contact_channel` | VARCHAR(20) | `EMAIL`, `PHONE` o `WHATSAPP`. |
+| `administrative_notes` | VARCHAR(1000) | nullable; observación interna, no dato fiscal. |
+| `updated_by` | BIGINT | FK nullable a `users(id)`, `ON DELETE RESTRICT`. |
+| `created_at`, `updated_at` | TIMESTAMP | auditoría temporal. |
+| `version` | BIGINT | concurrencia optimista. |
+
+La migración:
+
+- Es reejecutable (`IF NOT EXISTS`, `ON CONFLICT DO NOTHING`).
+- Retrocompleta exactamente los usuarios con rol `GUARDIAN`; no crea perfiles para ADMIN/TEACHER.
+- Valida las dos FKs después del backfill; la migración falla si detecta un perfil huérfano.
+- No crea otra tabla de relación tutor-estudiante: `students.guardian_id` sigue siendo la fuente
+  vigente y `student_guardian_link_events` su auditoría.
+- No copia ni duplica ledger, cargos, pagos, recibos o facturas.
+- Llevará el total del esquema a 60 tablas cuando sea promovida.
+
+## 6. Constraints e índices relevantes
+
+- `users`: únicos por `username` y `email`; checks de rol y estado.
+- `students`: PK BIGINT, único `student_number`; índice de tutor e identidad normalizada creado por V27.
+- `student_guardian_link_events`: índices por estudiante/fecha y tutor.
+- `tuition_applications`: FKs a tutor, actor, estudiante, ciclo, nivel, plan y política; idempotencia
+  opcional y unicidad parcial para solicitudes abiertas.
+- `tuition_ledger_entries`: único `billing_reference`; unicidades parciales por matrícula y período.
+- `enrollments`: unicidad parcial de cursada activa por estudiante/curso.
+- `billing_accounts`: único `guardian_user_id`.
+- `billing_profiles`: único `account_id`.
+- `billing_charges`: único `(source_type, source_id)`; índices por cuenta, estudiante y estado/vencimiento.
+- `payment_allocations`: único `(payment_id, charge_id)`.
+- V33: único `client_number` e índice de canal preferido.
+
+## 7. Desvíos reales a conservar en diagnóstico
+
+1. `courses.teacher_id` es `NOT NULL` pero `fk_courses_teacher_user` usa `ON DELETE SET NULL`.
+2. `billing_charges.student_id` tiene `billing_charges_student_id_fkey` y
+   `fk_billing_charge_student`; la segunda está `NOT VALID`.
+3. Varias FKs agregadas por V27 permanecen `NOT VALID`: aplican a filas nuevas, pero PostgreSQL no
+   certificó todo el histórico.
+4. `billing_charges.fiscal_disposition` es `VARCHAR(30)` en producción y `length=20` en JPA.
+5. `schema_version` no registra V31/V32 pese a que sus cambios físicos están presentes.
+
+Estos puntos no forman parte de V33. Deben resolverse mediante una migración de reparación separada,
+con preflight y verificación histórica.
+
+## 8. Validaciones mínimas para promover V33
+
+```sql
+SELECT count(*) FROM users WHERE role = 'GUARDIAN';
+SELECT count(*) FROM guardian_client_profiles;
+SELECT count(*) FROM guardian_client_profiles p
+LEFT JOIN users u ON u.id = p.guardian_user_id
+WHERE u.id IS NULL OR u.role <> 'GUARDIAN';
+SELECT client_number, count(*) FROM guardian_client_profiles
+GROUP BY client_number HAVING count(*) > 1;
+```
+
+Resultados esperados inmediatamente después de V33 sobre el snapshot auditado: 602 perfiles,
+cero perfiles huérfanos/no-GUARDIAN y cero números duplicados. Después debe arrancarse la aplicación
+con `JPA_DDL_AUTO=validate` y probarse la API ADMIN sin realizar escrituras en producción durante el
+preflight.
