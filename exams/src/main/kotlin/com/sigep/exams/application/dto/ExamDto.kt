@@ -11,6 +11,8 @@ data class ExamDto(
     val courseId: Long,
     val courseCode: String? = null,
     val courseName: String? = null,
+    val sourceExamId: UUID? = null,
+    val sourceExamTitle: String? = null,
     val title: String,
     val description: String?,
     val modality: ExamModality,
@@ -34,6 +36,7 @@ data class ExamDto(
 
 data class CreateExamRequest(
     val courseId: Long,
+    val sourceExamId: UUID? = null,
     val title: String,
     val description: String? = null,
     val modality: ExamModality = ExamModality.OFFLINE,
@@ -67,6 +70,8 @@ data class ExamSummaryDto(
     val courseId: Long,
     val courseCode: String? = null,
     val courseName: String? = null,
+    val sourceExamId: UUID? = null,
+    val sourceExamTitle: String? = null,
     val title: String,
     val modality: ExamModality,
     val status: ExamStatus,

@@ -26,6 +26,8 @@ interface CourseSessionRepository : JpaRepository<CourseSession, Long> {
         endDate: LocalDate
     ): List<CourseSession>
 
+    fun findByCourseIdAndSessionDate(courseId: Long, sessionDate: LocalDate): List<CourseSession>
+
     fun findByCourseTeacherIdAndSessionDateBetween(
         teacherId: Long,
         startDate: LocalDate,

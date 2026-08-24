@@ -1,6 +1,8 @@
 package com.sigep.staff.application.dto
 
 import com.sigep.staff.domain.model.AttendanceStatus
+import com.fasterxml.jackson.annotation.JsonIgnore
+import jakarta.validation.constraints.AssertTrue
 import java.time.LocalDate
 import java.time.LocalTime
 
@@ -31,7 +33,17 @@ data class CreateAttendanceRequest(
     val status: AttendanceStatus,
     val notes: String? = null,
     val hoursWorked: Double? = null
-)
+) {
+    @get:JsonIgnore
+    @get:AssertTrue(message = "Debe indicar exactamente un docente o un no docente")
+    val hasExactlyOneStaffReference: Boolean
+        get() = (teachingStaffId != null) xor (nonTeachingStaffId != null)
+
+    @get:JsonIgnore
+    @get:AssertTrue(message = "La hora de salida no puede ser anterior a la hora de entrada")
+    val hasValidTimeRange: Boolean
+        get() = checkInTime == null || checkOutTime == null || !checkOutTime.isBefore(checkInTime)
+}
 
 data class UpdateAttendanceRequest(
     val checkInTime: LocalTime? = null,

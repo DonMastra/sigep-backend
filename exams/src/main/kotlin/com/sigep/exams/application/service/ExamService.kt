@@ -11,7 +11,6 @@ import com.sigep.common.domain.exception.ResourceNotFoundException
 import com.sigep.common.application.exception.ValidationException
 import com.sigep.exams.application.dto.*
 import com.sigep.exams.domain.model.Exam
-import com.sigep.exams.domain.model.ExamModality
 import com.sigep.exams.domain.model.ExamStatus
 import com.sigep.exams.domain.repository.ExamRepository
 import com.sigep.exams.domain.repository.ExamSubmissionRepository
@@ -170,6 +169,11 @@ class ExamService(
     @CacheEvict(value = ["exams"], allEntries = true)
     fun createExam(request: CreateExamRequest, createdBy: Long, actorRole: String?): ExamDto {
         validateCourseAccess(request.courseId, createdBy, actorRole)
+        val sourceExam = request.sourceExamId?.let { sourceId ->
+            examRepository.findById(sourceId)
+                .orElseThrow { ResourceNotFoundException("Examen de origen no encontrado con ID: $sourceId") }
+                .also { source -> validateRecoverySource(source, request.courseId) }
+        }
         // Validar que no exista otro examen con el mismo título en el curso
         val exists = examRepository.existsByCourseIdAndTitleAndIdNot(
             request.courseId,
@@ -182,6 +186,7 @@ class ExamService(
 
         val exam = Exam(
             courseId = request.courseId,
+            sourceExamId = sourceExam?.id,
             title = request.title,
             description = request.description,
             modality = request.modality,
@@ -303,6 +308,8 @@ class ExamService(
             courseId = exam.courseId,
             courseCode = courseInfo?.code,
             courseName = courseInfo?.name,
+            sourceExamId = exam.sourceExamId,
+            sourceExamTitle = resolveSourceExamTitle(exam.sourceExamId),
             title = exam.title,
             description = exam.description,
             modality = exam.modality,
@@ -338,6 +345,8 @@ class ExamService(
             courseId = exam.courseId,
             courseCode = courseInfo?.code,
             courseName = courseInfo?.name,
+            sourceExamId = exam.sourceExamId,
+            sourceExamTitle = resolveSourceExamTitle(exam.sourceExamId),
             title = exam.title,
             modality = exam.modality,
             status = exam.status,
@@ -362,6 +371,21 @@ class ExamService(
 
         val namesById = teacherInfoProvider.getTeacherNamesByIds(assignedTeachers)
         return assignedTeachers.map { teacherId -> namesById[teacherId] ?: teacherId.toString() }
+    }
+
+    private fun resolveSourceExamTitle(sourceExamId: UUID?): String? = sourceExamId
+        ?.let { examRepository.findById(it).orElse(null)?.title }
+
+    private fun validateRecoverySource(source: Exam, requestedCourseId: Long) {
+        if (source.courseId != requestedCourseId) {
+            throw ValidationException("El examen de origen debe pertenecer al mismo curso")
+        }
+        if (source.sourceExamId != null) {
+            throw ValidationException("El examen de origen debe ser un examen regular")
+        }
+        if (source.status !in setOf(ExamStatus.PUBLISHED, ExamStatus.CLOSED)) {
+            throw ValidationException("El examen de origen debe estar publicado o cerrado")
+        }
     }
 
     fun validateExamAccess(examId: UUID, actorUserId: Long, actorRole: String?) {

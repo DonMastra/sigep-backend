@@ -244,7 +244,7 @@ class NonTeachingStaffService(
         ).toInt()
 
         val totalDays = presentDays + absentDays + lateDays
-        val attendanceRate = if (totalWorkingDays > 0) (presentDays.toDouble() / totalWorkingDays.toDouble()) * 100 else 0.0
+        val attendanceRate = if (totalWorkingDays > 0) ((presentDays + lateDays).toDouble() / totalWorkingDays.toDouble()) * 100 else 0.0
 
         return dto.copy(
             hoursWorkedThisMonth = hoursWorked,

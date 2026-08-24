@@ -144,6 +144,16 @@ class AttendanceController(
         return ResponseEntity.ok(ApiResponse.success(statistics))
     }
 
+    @GetMapping("/course/{courseId}/statistics")
+    @RequireAdminOrTeacher
+    @Operation(summary = "Get cumulative attendance statistics for a course and its enrollments")
+    fun getCourseAttendanceStatistics(
+        @PathVariable courseId: Long
+    ): ResponseEntity<ApiResponse<CourseAttendanceStatisticsDto>> {
+        val statistics = attendanceService.getCourseAttendanceStatistics(courseId)
+        return ResponseEntity.ok(ApiResponse.success(statistics))
+    }
+
     @GetMapping("/course/{courseId}/report/{date}")
     @RequireAdminOrTeacher
     @Operation(summary = "Get attendance report for a course on a specific date")

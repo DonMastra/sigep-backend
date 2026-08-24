@@ -385,6 +385,7 @@ Parametros comunes de listado:
 - `limit?: number`
 - `sort?: id | lastName | firstName | studentNumber | email`
 - `order?: ASC | DESC`
+- `hasAssignedCourse?: boolean` (`true`: al menos una inscripcion activa; `false`: ninguna)
 
 El listado y la busqueda aplican el orden en backend antes de paginar. Para `lastName` y
 `firstName` se agregan criterios secundarios estables y `id` como desempate, evitando que un
@@ -647,6 +648,7 @@ Base: `/api/v1/attendance`
 | GET | `/{id}` | ADMIN, TEACHER | Obtiene asistencia. |
 | GET | `/enrollment/{enrollmentId}` | ADMIN, TEACHER | Asistencia por inscripcion. |
 | GET | `/course/{courseId}` | ADMIN, TEACHER | Asistencia por curso. |
+| GET | `/course/{courseId}/statistics` | ADMIN, TEACHER | Acumulado del curso y estadisticas por estudiante. |
 | GET | `/student/{studentId}` | ADMIN, TEACHER, GUARDIAN | Asistencia por estudiante. |
 | GET | `/course/{courseId}/date/{date}` | ADMIN, TEACHER | Asistencia del curso en fecha. |
 | POST | `/` | ADMIN, TEACHER | Registra asistencia. |
@@ -663,7 +665,7 @@ El body es un objeto (no un array raiz):
 
 ```json
 {
-  "courseSessionId": 42,
+  "courseId": 21,
   "date": "2026-07-20",
   "records": [
     { "enrollmentId": 13, "status": "PRESENT", "notes": null },
@@ -673,9 +675,12 @@ El body es un objeto (no un array raiz):
 ```
 
 `attendanceDate` es un alias de `date` y `attendances` un alias de `records` para
-compatibilidad. La fecha debe coincidir con `courseSessionId`; la clave idempotente
-es `(enrollmentId, courseSessionId)`. Las respuestas exponen `courseSessionId`,
-`attendanceDate` y `studentName` cuando existe el estudiante.
+compatibilidad. El flujo habitual envia `courseId` y `date`: si hay una unica sesion
+no cancelada en esa fecha se reutiliza; si no hay ninguna, se crea internamente desde
+el horario/aula asignados al curso. Si existen varias sesiones en la fecha, el cliente
+debe reenviar indicando `courseSessionId`. Al enviarlo, su curso y fecha deben coincidir.
+La clave idempotente permanece `(enrollmentId, courseSessionId)` y las respuestas
+exponen `courseSessionId`, `attendanceDate` y `studentName` cuando existe el estudiante.
 
 ## Course Materials
 
@@ -768,7 +773,7 @@ Base: `/api/v1/staff/attendance`
 |---|---|---|---|
 | POST | `/` | ADMIN | Registra asistencia de personal. |
 | PUT | `/{id}` | ADMIN | Actualiza asistencia. |
-| GET | `/teaching/{staffId}?startDate=&endDate=` | ADMIN, TEACHER | Asistencia docente. |
+| GET | `/teaching/{staffId}?startDate=&endDate=` | ADMIN, TEACHER | Asistencia docente; TEACHER solo puede consultar su propio legajo vinculado. |
 | GET | `/non-teaching/{staffId}?startDate=&endDate=` | ADMIN, TEACHER | Asistencia no docente. |
 | DELETE | `/{id}` | ADMIN | Elimina asistencia. |
 
@@ -776,7 +781,7 @@ Enums relevantes:
 
 ```ts
 type StaffType = 'TEACHING' | 'NON_TEACHING';
-type AttendanceStatus = 'PRESENT' | 'ABSENT' | 'LATE' | 'JUSTIFIED';
+type AttendanceStatus = 'PRESENT' | 'ABSENT' | 'LATE' | 'EXCUSED' | 'SICK_LEAVE' | 'VACATION';
 type PaymentStatus = 'PENDING' | 'PAID' | 'PARTIAL' | 'OVERDUE';
 ```
 
@@ -793,14 +798,14 @@ Importante: estos endpoints no siempre usan `ApiResponse<T>`.
 | GET | `/course/{courseId}` | Autenticado | Lista examenes por curso. | `PageResponse<ExamDto>` |
 | GET | `/my-exams?courseIds=` | ADMIN, TEACHER | Examenes del docente autenticado. | `PageResponse<ExamDto>` |
 | GET | `/visible` | Autenticado | Examenes visibles para estudiantes. | `PageResponse<ExamDto>` |
-| POST | `/` | ADMIN, TEACHER | Crea examen. | `ExamDto`, `201` |
+| POST | `/` | ADMIN, TEACHER | Crea examen regular o recuperatorio (`sourceExamId`). | `ExamDto`, `201` |
 | PUT | `/{id}` | ADMIN, TEACHER | Actualiza examen. | `ExamDto` |
 | POST | `/{id}/publish` | ADMIN, TEACHER | Publica examen. | `ExamDto` |
 | POST | `/{id}/close` | ADMIN, TEACHER | Cierra examen. | `ExamDto` |
 | POST | `/{id}/cancel` | ADMIN | Cancela examen. | `ExamDto` |
 | DELETE | `/{id}` | ADMIN | Elimina examen draft sin submissions. | `204` |
 | GET | `/{id}/statistics` | ADMIN, TEACHER | Estadisticas de examen. | `ExamStatisticsDto` |
-| GET | `/{id}/gradebook` | ADMIN, TEACHER | Sincroniza alumnos activos y devuelve la grilla de notas. Un TEACHER debe estar asignado al curso. | `ExamGradebookDto` |
+| GET | `/{id}/gradebook` | ADMIN, TEACHER | Regular: sincroniza alumnos activos. Recuperatorio: sincroniza solo calificados con categorias menores a 60. | `ExamGradebookDto` |
 | PATCH | `/{id}/grades` | ADMIN, TEACHER | Guarda hasta 200 filas por lote con control de version. Un TEACHER debe estar asignado al curso. | `ExamGradebookDto` |
 | GET | `/course/{courseId}/statistics` | ADMIN, TEACHER | Estadisticas por curso. | `CourseExamStatisticsDto` |
 
@@ -813,13 +818,17 @@ type ExamModality = 'OFFLINE' | 'ONLINE';
 
 Calificaciones por categorias:
 
-- `readingScore`, `writingScore` y `listeningScore` son enteros opcionales entre `0` y `100`.
+- `readingScore`, `writingScore`, `listeningScore` y `speakingScore` son enteros opcionales entre `0` y `100`.
 - `finalScore`/`score` es de solo lectura para clientes: el backend calcula el promedio simple de
-  las tres categorias y redondea a entero con `HALF_UP`.
-- La aprobacion se determina con nota final mayor o igual a `60`.
-- Una carga parcial permanece `PENDING` y no tiene nota final. Si ya existe una nota final, las
-  tres categorias deben enviarse completas para reemplazarla.
-- Cada item de `PATCH /{id}/grades` envia `submissionId`, `expectedVersion`, las tres categorias,
+  las categorias informadas y redondea a entero con `HALF_UP`. Las notas historicas de tres
+  categorias no se recalculan y se identifican como `LEGACY_THREE_SKILLS`.
+- En nuevas cargas de cuatro categorias, se aprueba cuando cada categoria alcanza `60`.
+  Los registros historicos sin Speaking conservan su criterio anterior por nota final.
+- Una carga regular nueva requiere las cuatro categorias en frontend. En un recuperatorio,
+  `skillsToRecover` indica las categorias desaprobadas y solo esas pueden modificarse; las
+  categorias aprobadas se copian del examen de origen y quedan bloqueadas.
+- Los resultados historicos sin desglose por categoria no se incorporan automaticamente a un recuperatorio.
+- Cada item de `PATCH /{id}/grades` envia `submissionId`, `expectedVersion`, las cuatro categorias,
   `feedback?` y `reason?`. El motivo es obligatorio al modificar una nota ya existente.
 - Una version desactualizada responde conflicto `409` con codigo `GRADE_VERSION_CONFLICT`; el lote
   es transaccional y no se aplican cambios parciales.
