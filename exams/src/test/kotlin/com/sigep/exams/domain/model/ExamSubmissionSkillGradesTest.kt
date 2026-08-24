@@ -26,6 +26,46 @@ class ExamSubmissionSkillGradesTest {
     }
 
     @Test
+    fun `incluye speaking en el promedio cuando se informa`() {
+        val submission = newSubmission()
+
+        submission.updateSkillGrades(
+            readingScore = 65,
+            writingScore = 50,
+            listeningScore = 80,
+            speakingScore = 90,
+            updatedBy = 20
+        )
+
+        assertEquals(BigDecimal("71"), submission.score)
+        assertEquals(90, submission.speakingScore)
+    }
+
+    @Test
+    fun `completa un recuperatorio cuando se carga solo la categoria desaprobada`() {
+        val submission = ExamSubmission(
+            examId = UUID.randomUUID(),
+            studentId = 1,
+            readingScore = 65,
+            listeningScore = 80,
+            speakingScore = 90,
+            recoverySkills = RecoverySkill.WRITING.name,
+            createdBy = 10
+        )
+
+        submission.updateSkillGrades(
+            readingScore = 65,
+            writingScore = 60,
+            listeningScore = 80,
+            speakingScore = 90,
+            updatedBy = 20
+        )
+
+        assertEquals(BigDecimal("74"), submission.score)
+        assertEquals(SubmissionStatus.GRADED, submission.status)
+    }
+
+    @Test
     fun `mantiene pendiente una carga parcial sin nota final`() {
         val submission = newSubmission()
 

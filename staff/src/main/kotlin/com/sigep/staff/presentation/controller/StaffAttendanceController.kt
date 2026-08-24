@@ -12,6 +12,7 @@ import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
+import jakarta.servlet.http.HttpServletRequest
 import org.springframework.format.annotation.DateTimeFormat
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -57,9 +58,18 @@ class StaffAttendanceController(
         @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) startDate: LocalDate,
         @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) endDate: LocalDate,
         @RequestParam(defaultValue = "0") page: Int,
-        @RequestParam(defaultValue = "10") limit: Int
+        @RequestParam(defaultValue = "10") limit: Int,
+        httpRequest: HttpServletRequest
     ): ResponseEntity<ApiResponse<PageResponse<StaffAttendanceDto>>> {
-        val attendance = attendanceService.getTeachingStaffAttendance(staffId, startDate, endDate, page, limit)
+        val attendance = attendanceService.getTeachingStaffAttendance(
+            staffId,
+            startDate,
+            endDate,
+            page,
+            limit,
+            httpRequest.getAttribute("userId") as? Long,
+            httpRequest.getAttribute("userRole") as? String
+        )
         return ResponseEntity.ok(ApiResponse.success(attendance))
     }
 

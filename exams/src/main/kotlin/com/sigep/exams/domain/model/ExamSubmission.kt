@@ -65,6 +65,15 @@ data class ExamSubmission(
     @Column(name = "listening_score")
     var listeningScore: Int? = null,
 
+    @Column(name = "speaking_score")
+    var speakingScore: Int? = null,
+
+    @Column(name = "source_submission_id", columnDefinition = "UUID")
+    val sourceSubmissionId: UUID? = null,
+
+    @Column(name = "recovery_skills", length = 100)
+    val recoverySkills: String? = null,
+
     // Información del evaluador
     @Column(name = "graded_by")
     var gradedBy: Long? = null,
@@ -126,6 +135,7 @@ data class ExamSubmission(
         readingScore: Int?,
         writingScore: Int?,
         listeningScore: Int?,
+        speakingScore: Int? = null,
         updatedBy: Long,
         feedback: String? = null
     ) {
@@ -135,25 +145,34 @@ data class ExamSubmission(
         validateSkillScore("Reading", readingScore)
         validateSkillScore("Writing", writingScore)
         validateSkillScore("Listening", listeningScore)
+        validateSkillScore("Speaking", speakingScore)
 
-        val complete = readingScore != null && writingScore != null && listeningScore != null
+        val scoresBySkill = mapOf(
+            RecoverySkill.READING to readingScore,
+            RecoverySkill.WRITING to writingScore,
+            RecoverySkill.LISTENING to listeningScore,
+            RecoverySkill.SPEAKING to speakingScore
+        )
+        val recoveryTargets = recoverySkillSet()
+        val complete = if (recoveryTargets.isEmpty()) {
+            readingScore != null && writingScore != null && listeningScore != null
+        } else {
+            recoveryTargets.all { scoresBySkill[it] != null }
+        }
         require(score == null || complete) {
-            "Una calificación final existente solo puede reemplazarse cargando las tres categorías"
+            "Una calificación final existente solo puede reemplazarse completando las categorías requeridas"
         }
 
         this.readingScore = readingScore
         this.writingScore = writingScore
         this.listeningScore = listeningScore
+        this.speakingScore = speakingScore
         this.feedback = feedback
         this.updatedBy = updatedBy
         this.updatedAt = LocalDateTime.now()
 
         if (complete) {
-            this.score = calculateFinalScore(
-                requireNotNull(readingScore),
-                requireNotNull(writingScore),
-                requireNotNull(listeningScore)
-            )
+            this.score = calculateFinalScore(scoresBySkill.values.filterNotNull())
             this.gradedBy = updatedBy
             this.gradedAt = LocalDateTime.now()
             this.status = SubmissionStatus.GRADED
@@ -182,10 +201,28 @@ data class ExamSubmission(
         }
     }
 
+    fun recoverySkillSet(): Set<RecoverySkill> = recoverySkills
+        ?.split(',')
+        ?.mapNotNull { value -> runCatching { RecoverySkill.valueOf(value.trim()) }.getOrNull() }
+        ?.toSet()
+        .orEmpty()
+
     companion object {
+        fun calculateFinalScore(scores: Collection<Int>): BigDecimal {
+            require(scores.isNotEmpty()) { "Debe existir al menos una categoría calificada" }
+            return BigDecimal(scores.sum())
+                .divide(BigDecimal(scores.size), 0, RoundingMode.HALF_UP)
+        }
+
         fun calculateFinalScore(readingScore: Int, writingScore: Int, listeningScore: Int): BigDecimal =
-            BigDecimal(readingScore + writingScore + listeningScore)
-                .divide(BigDecimal(3), 0, RoundingMode.HALF_UP)
+            calculateFinalScore(listOf(readingScore, writingScore, listeningScore))
     }
+}
+
+enum class RecoverySkill {
+    READING,
+    WRITING,
+    LISTENING,
+    SPEAKING
 }
 

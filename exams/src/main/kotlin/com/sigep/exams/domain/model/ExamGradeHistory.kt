@@ -55,6 +55,12 @@ data class ExamGradeHistory(
     @Column(name = "new_listening_score")
     val newListeningScore: Int? = null,
 
+    @Column(name = "previous_speaking_score")
+    val previousSpeakingScore: Int? = null,
+
+    @Column(name = "new_speaking_score")
+    val newSpeakingScore: Int? = null,
+
     @Column(columnDefinition = "TEXT")
     val reason: String? = null,
 

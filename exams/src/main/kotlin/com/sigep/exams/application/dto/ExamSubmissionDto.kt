@@ -22,6 +22,9 @@ data class ExamSubmissionDto(
     val readingScore: Int?,
     val writingScore: Int?,
     val listeningScore: Int?,
+    val speakingScore: Int? = null,
+    val sourceSubmissionId: UUID? = null,
+    val recoverySkills: List<String> = emptyList(),
     val gradedBy: Long?,
     val gradedByName: String? = null,
     val gradedAt: LocalDateTime?,
@@ -66,6 +69,8 @@ data class SubmissionWithStudentDto(
     val readingScore: Int? = null,
     val writingScore: Int? = null,
     val listeningScore: Int? = null,
+    val speakingScore: Int? = null,
+    val recoverySkills: List<String> = emptyList(),
     val gradedBy: Long?,
     val gradedByName: String? = null,
     val gradedAt: LocalDateTime?,
@@ -92,6 +97,7 @@ data class ExamResultSummary(
     val readingScore: Int? = null,
     val writingScore: Int? = null,
     val listeningScore: Int? = null,
+    val speakingScore: Int? = null,
     val status: SubmissionStatus,
     val gradedBy: Long?,
     val gradedByName: String? = null,
@@ -103,6 +109,7 @@ enum class GradeCompletionStatus {
     NOT_STARTED,
     INCOMPLETE,
     COMPLETE,
+    LEGACY_THREE_SKILLS,
     LEGACY_FINAL_ONLY
 }
 
@@ -112,6 +119,8 @@ data class ExamGradebookDto(
     val courseId: Long,
     val courseCode: String?,
     val courseName: String?,
+    val sourceExamId: UUID? = null,
+    val sourceExamTitle: String? = null,
     val totalStudents: Int,
     val completedCount: Int,
     val incompleteCount: Int,
@@ -131,6 +140,8 @@ data class GradebookRowDto(
     val readingScore: Int?,
     val writingScore: Int?,
     val listeningScore: Int?,
+    val speakingScore: Int?,
+    val skillsToRecover: List<String> = emptyList(),
     val finalScore: BigDecimal?,
     val passed: Boolean?,
     val feedback: String?,
@@ -164,6 +175,10 @@ data class BatchGradeItemRequest(
     @field:Min(value = 0, message = "Listening debe estar entre 0 y 100")
     @field:Max(value = 100, message = "Listening debe estar entre 0 y 100")
     val listeningScore: Int?,
+
+    @field:Min(value = 0, message = "Speaking debe estar entre 0 y 100")
+    @field:Max(value = 100, message = "Speaking debe estar entre 0 y 100")
+    val speakingScore: Int?,
 
     @field:Size(max = 4000, message = "La devolución no puede superar los 4000 caracteres")
     val feedback: String? = null,

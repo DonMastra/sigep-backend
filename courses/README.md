@@ -69,9 +69,14 @@ Este módulo proporciona un sistema completo de gestión de cursos para un insti
 
 ### Asistencia
 - `POST /api/v1/attendance` - Registrar asistencia individual
-- `POST /api/v1/attendance/bulk` - Registro masivo
+- `POST /api/v1/attendance/bulk` - Registro masivo por curso y fecha; resuelve o crea internamente la sesión desde el horario asignado
 - `GET /api/v1/attendance/enrollment/{enrollmentId}/statistics` - Estadísticas
 - `GET /api/v1/attendance/course/{courseId}/report/{date}` - Reporte detallado
+- `GET /api/v1/attendance/course/{courseId}/statistics` - Acumulado del curso y porcentajes por estudiante
+
+La sesión se conserva como ancla de trazabilidad para horarios, aula, cancelaciones,
+reprogramaciones e idempotencia. El usuario solo debe elegirla cuando un curso tiene
+más de una clase en la misma fecha.
 
 ### Materiales
 - `POST /api/v1/materials` - Subir material

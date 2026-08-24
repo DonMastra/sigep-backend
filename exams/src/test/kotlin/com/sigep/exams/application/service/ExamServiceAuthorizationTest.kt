@@ -8,6 +8,7 @@ import com.sigep.common.application.service.TeacherInfoProvider
 import com.sigep.exams.application.dto.CreateExamRequest
 import com.sigep.exams.domain.model.Exam
 import com.sigep.exams.domain.model.ExamModality
+import com.sigep.exams.domain.model.ExamStatus
 import com.sigep.exams.domain.repository.ExamRepository
 import com.sigep.exams.domain.repository.ExamSubmissionRepository
 import io.mockk.every
@@ -88,6 +89,28 @@ class ExamServiceAuthorizationTest {
         )
 
         assertEquals(ExamModality.ONLINE, result.modality)
+    }
+
+    @Test
+    fun `vincula un recuperatorio con un examen publicado del mismo curso`() {
+        val source = exam().copy(status = ExamStatus.PUBLISHED)
+        every { examRepository.findById(source.id) } returns Optional.of(source)
+        every { examRepository.existsByCourseIdAndTitleAndIdNot(7, "Recuperatorio final", any()) } returns false
+        every { examRepository.save(any()) } answers { firstArg() }
+        every { courseAccessProvider.getCourseInfo(7) } returns courseInfo(7, 20)
+
+        val result = service.createExam(
+            request = CreateExamRequest(
+                courseId = 7,
+                sourceExamId = source.id,
+                title = "Recuperatorio final"
+            ),
+            createdBy = 1,
+            actorRole = "ADMIN"
+        )
+
+        assertEquals(source.id, result.sourceExamId)
+        assertEquals(source.title, result.sourceExamTitle)
     }
 
     private fun exam() = Exam(
