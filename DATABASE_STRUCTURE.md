@@ -2,7 +2,9 @@
 
 ## 1. Alcance y fuente de verdad
 
-**Última auditoría:** 2026-08-21
+**Última actualización documental:** 2026-08-23
+
+**Última auditoría productiva:** 2026-08-21
 
 **Entorno auditado:** Neon, base productiva `sigep_prod`, esquema `public`
 
@@ -10,7 +12,14 @@
 
 **Modo de auditoría:** conexión con `default_transaction_read_only=on` y consultas sin datos personales.
 
-El orden de precedencia para describir el estado actual es:
+El documento distingue dos estados que no deben mezclarse:
+
+- **Snapshot productivo observado:** catálogo real de `sigep_prod` el 21/08/2026, antes de promover
+  V33, V34 y V35.
+- **Esquema objetivo actual:** entidades y scripts manuales del repositorio hasta V35, coincidente
+  con el entorno local informado como actualizado con V34 y V35 el 23/08/2026.
+
+El orden de precedencia para describir un ambiente desplegado es:
 
 1. Catálogo y constraints reales de `sigep_prod`.
 2. Entidades y repositorios Kotlin.
@@ -19,6 +28,18 @@ El orden de precedencia para describir el estado actual es:
 
 Los scripts SQL son migraciones manuales; el proyecto no usa Flyway ni Liquibase. QA y producción
 deben arrancar con `JPA_DDL_AUTO=validate`: Hibernate valida, pero no repara el esquema.
+
+### Esquema objetivo del repositorio hasta V35
+
+El estado objetivo agrega sobre el snapshot productivo:
+
+1. **V33:** tabla `guardian_client_profiles`; el total pasa de 59 a 60 tablas.
+2. **V34:** soporte persistente de Speaking y recuperatorios por categoría en las tablas de exámenes.
+3. **V35:** integridad y unicidad diaria de asistencia para personal docente y no docente.
+
+V34 y V35 no crean tablas nuevas. Los filtros de estudiantes, la visualización acumulada de
+asistencia y la toma de asistencia por fecha son cambios de consulta, servicio y UI. La asistencia
+por fecha reutiliza `course_sessions` y `course_attendance`; no requiere una V36.
 
 ## 2. Snapshot productivo antes de V33
 
@@ -256,7 +277,9 @@ posteriores, pero V31/V32 no están registrados en esa tabla. El registro debe c
 procedimiento de despliegue; no debe inventarse un hash Git ni insertarse desde una migración de
 dominio.
 
-## 5. V33: perfil administrativo de tutor/cliente
+## 5. Migraciones objetivo V33 a V35
+
+### V33: perfil administrativo de tutor/cliente
 
 Archivo: `scripts/migrations/V33__create_guardian_client_profiles.sql`.
 
@@ -282,6 +305,49 @@ La migración:
 - No copia ni duplica ledger, cargos, pagos, recibos o facturas.
 - Llevará el total del esquema a 60 tablas cuando sea promovida.
 
+### V34: Speaking y recuperatorios por categoría
+
+Archivo: `scripts/migrations/V34__add_speaking_and_recovery_exam_support.sql`.
+
+V34 es aditiva y no retrocompleta calificaciones históricas:
+
+- `exams.source_exam_id` referencia de forma nullable al examen original.
+- `exam_submissions.speaking_score` agrega Speaking con check entre 0 y 100.
+- `exam_submissions.source_submission_id` referencia la entrega original.
+- `exam_submissions.recovery_skills` conserva las categorías a recuperar como nombres de enum
+  separados por coma (`READING`, `WRITING`, `LISTENING`, `SPEAKING`).
+- `exam_grade_history.previous_speaking_score` y `new_speaking_score` incorporan Speaking al historial.
+- `idx_exam_source_exam_id` e `idx_submission_source_submission_id` aceleran las búsquedas de origen.
+
+La selección de desaprobados y el bloqueo de categorías aprobadas se implementan en el servicio. El
+modelo permite copiar las notas aprobadas y dejar vacías solo las categorías inferiores a 60. Los
+registros legacy sin desglose completo se conservan sin inferir notas inexistentes.
+
+### V35: integridad de asistencia del personal
+
+Archivo: `scripts/migrations/V35__enforce_unique_staff_attendance.sql`.
+
+V35 ejecuta preflight y aborta si encuentra filas con ambos tipos de personal, sin ningún tipo o con
+duplicados por persona y fecha. Luego agrega:
+
+- `chk_staff_attendance_one_staff`: cada fila referencia exactamente un docente o un no docente;
+- `uq_staff_attendance_teaching_date`: unicidad parcial por docente y fecha;
+- `uq_staff_attendance_non_teaching_date`: unicidad parcial por no docente y fecha.
+
+La aplicación también valida duplicados antes de guardar para ofrecer un error funcional, pero los
+índices son la garantía final ante concurrencia.
+
+### Asistencia de cursos por fecha sin migración adicional
+
+`course_attendance.course_session_id` sigue vinculando cada asistencia con una clase concreta. Al
+guardar por fecha, el backend reutiliza una sesión activa de ese día o crea una sesión interna a
+partir de la reserva horaria asignada al curso. Si existen varias sesiones, el cliente debe indicar
+cuál corresponde; las canceladas no admiten asistencia.
+
+La unicidad existente por `(enrollment_id, course_session_id)` evita duplicar la asistencia de una
+persona en la misma clase. Las estadísticas del curso, la columna de Inscripciones y la ficha del
+estudiante se calculan desde `course_attendance`; no almacenan porcentajes redundantes.
+
 ## 6. Constraints e índices relevantes
 
 - `users`: únicos por `username` y `email`; checks de rol y estado.
@@ -296,6 +362,10 @@ La migración:
 - `billing_charges`: único `(source_type, source_id)`; índices por cuenta, estudiante y estado/vencimiento.
 - `payment_allocations`: único `(payment_id, charge_id)`.
 - V33: único `client_number` e índice de canal preferido.
+- V34: check 0-100 para Speaking, FKs e índices de examen y entrega de origen.
+- V35: referencia XOR de personal y unicidad parcial por persona/fecha en `staff_attendance`.
+- `course_attendance`: unicidad por inscripción/sesión; la fecha se resuelve mediante
+  `course_sessions` sin persistir porcentajes redundantes.
 
 ## 7. Desvíos reales a conservar en diagnóstico
 
@@ -307,10 +377,10 @@ La migración:
 4. `billing_charges.fiscal_disposition` es `VARCHAR(30)` en producción y `length=20` en JPA.
 5. `schema_version` no registra V31/V32 pese a que sus cambios físicos están presentes.
 
-Estos puntos no forman parte de V33. Deben resolverse mediante una migración de reparación separada,
+Estos puntos no forman parte de V33-V35. Deben resolverse mediante una migración de reparación separada,
 con preflight y verificación histórica.
 
-## 8. Validaciones mínimas para promover V33
+## 8. Validaciones mínimas para promover V33-V35
 
 ```sql
 SELECT count(*) FROM users WHERE role = 'GUARDIAN';
@@ -326,3 +396,34 @@ Resultados esperados inmediatamente después de V33 sobre el snapshot auditado: 
 cero perfiles huérfanos/no-GUARDIAN y cero números duplicados. Después debe arrancarse la aplicación
 con `JPA_DDL_AUTO=validate` y probarse la API ADMIN sin realizar escrituras en producción durante el
 preflight.
+
+Antes de V34 y V35 también deben ejecutarse, en modo de solo lectura, los preflights incluidos en
+ambos scripts. Después de aplicarlas en un ambiente autorizado, verificar como mínimo:
+
+```sql
+SELECT column_name FROM information_schema.columns
+WHERE table_schema = 'public'
+  AND table_name IN ('exams', 'exam_submissions', 'exam_grade_history')
+  AND column_name IN (
+    'source_exam_id', 'speaking_score', 'source_submission_id', 'recovery_skills',
+    'previous_speaking_score', 'new_speaking_score'
+  );
+
+SELECT conname FROM pg_constraint
+WHERE conrelid IN ('exams'::regclass, 'exam_submissions'::regclass, 'staff_attendance'::regclass)
+  AND conname IN (
+    'fk_exam_source_exam', 'chk_submission_speaking_score',
+    'fk_submission_source_submission', 'chk_staff_attendance_one_staff'
+  );
+
+SELECT indexname FROM pg_indexes
+WHERE schemaname = 'public'
+  AND indexname IN (
+    'idx_exam_source_exam_id', 'idx_submission_source_submission_id',
+    'uq_staff_attendance_teaching_date', 'uq_staff_attendance_non_teaching_date'
+  );
+```
+
+La promoción termina con `JPA_DDL_AUTO=validate`, pruebas focalizadas de exámenes/asistencia y una
+verificación explícita de `schema_version` según el procedimiento de despliegue. La existencia del
+archivo SQL o su aplicación local no demuestra que QA o producción ya lo tengan.

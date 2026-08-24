@@ -21,6 +21,8 @@ import org.slf4j.LoggerFactory
 import org.springframework.cache.annotation.CacheEvict
 import org.springframework.cache.annotation.Cacheable
 import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Page
+import org.springframework.data.domain.Pageable
 import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -62,12 +64,18 @@ class StudentService(
         return student.toDetailDto()
     }
 
-    fun getAllStudents(page: Int, size: Int, sortBy: String, sortDirection: String): PageResponse<StudentDto> {
+    fun getAllStudents(
+        page: Int,
+        size: Int,
+        sortBy: String,
+        sortDirection: String,
+        hasAssignedCourse: Boolean? = null
+    ): PageResponse<StudentDto> {
         logger.info("Fetching all students - page: {}, size: {}", page, size)
 
         val pageable = studentPageRequest(page, size, sortBy, sortDirection)
 
-        val studentsPage = studentRepository.findAll(pageable)
+        val studentsPage = findStudentsByCourseAssignment(pageable, hasAssignedCourse)
 
         return PageResponse(
             content = studentsPage.content.map { it.toDto() },
@@ -83,8 +91,12 @@ class StudentService(
         page: Int,
         size: Int,
         sortBy: String,
-        sortDirection: String
+        sortDirection: String,
+        hasAssignedCourse: Boolean? = null
     ): PageResponse<StudentDto> {
+        if (hasAssignedCourse == false) {
+            return PageResponse(emptyList(), page, size, 0, 0)
+        }
         val studentIds = enrollmentServiceProvider.getActiveStudentIdsByTeacher(teacherUserId)
         if (studentIds.isEmpty()) {
             return PageResponse(emptyList(), page, size, 0, 0)
@@ -106,12 +118,13 @@ class StudentService(
         page: Int,
         size: Int,
         sortBy: String,
-        sortDirection: String
+        sortDirection: String,
+        hasAssignedCourse: Boolean? = null
     ): PageResponse<StudentDto> {
         logger.info("Searching students with a supplied query")
 
         val pageable = studentPageRequest(page, size, sortBy, sortDirection)
-        val studentsPage = studentRepository.searchStudents(search, pageable)
+        val studentsPage = searchStudentsByCourseAssignment(search, pageable, hasAssignedCourse)
 
         return PageResponse(
             content = studentsPage.content.map { it.toDto() },
@@ -128,8 +141,12 @@ class StudentService(
         page: Int,
         size: Int,
         sortBy: String,
-        sortDirection: String
+        sortDirection: String,
+        hasAssignedCourse: Boolean? = null
     ): PageResponse<StudentDto> {
+        if (hasAssignedCourse == false) {
+            return PageResponse(emptyList(), page, size, 0, 0)
+        }
         val studentIds = enrollmentServiceProvider.getActiveStudentIdsByTeacher(teacherUserId)
         if (studentIds.isEmpty()) {
             return PageResponse(emptyList(), page, size, 0, 0)
@@ -182,6 +199,37 @@ class StudentService(
             if (sortField != "id") add(Sort.Order.asc("id"))
         }
         return PageRequest.of(page, size, Sort.by(orders))
+    }
+
+    private fun findStudentsByCourseAssignment(
+        pageable: Pageable,
+        hasAssignedCourse: Boolean?
+    ): Page<Student> {
+        if (hasAssignedCourse == null) return studentRepository.findAll(pageable)
+
+        val activeStudentIds = enrollmentServiceProvider.getActiveStudentIds()
+        return when {
+            hasAssignedCourse && activeStudentIds.isEmpty() -> Page.empty(pageable)
+            hasAssignedCourse -> studentRepository.findByIdIn(activeStudentIds, pageable)
+            activeStudentIds.isEmpty() -> studentRepository.findAll(pageable)
+            else -> studentRepository.findByIdNotIn(activeStudentIds, pageable)
+        }
+    }
+
+    private fun searchStudentsByCourseAssignment(
+        search: String,
+        pageable: Pageable,
+        hasAssignedCourse: Boolean?
+    ): Page<Student> {
+        if (hasAssignedCourse == null) return studentRepository.searchStudents(search, pageable)
+
+        val activeStudentIds = enrollmentServiceProvider.getActiveStudentIds()
+        return when {
+            hasAssignedCourse && activeStudentIds.isEmpty() -> Page.empty(pageable)
+            hasAssignedCourse -> studentRepository.searchStudentsByIds(search, activeStudentIds, pageable)
+            activeStudentIds.isEmpty() -> studentRepository.searchStudents(search, pageable)
+            else -> studentRepository.searchStudentsExcludingIds(search, activeStudentIds, pageable)
+        }
     }
 
     private companion object {

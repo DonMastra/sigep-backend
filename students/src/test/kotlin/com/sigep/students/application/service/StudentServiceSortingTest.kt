@@ -8,6 +8,7 @@ import com.sigep.students.domain.repository.StudentRepository
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
+import io.mockk.verify
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.data.domain.Page
@@ -57,5 +58,25 @@ class StudentServiceSortingTest {
 
         assertEquals(listOf("id"), pageable.captured.sort.map { it.property }.toList())
         assertEquals(Sort.Direction.DESC, pageable.captured.sort.getOrderFor("id")?.direction)
+    }
+
+    @Test
+    fun `assigned course filter pages only active enrollment students`() {
+        every { enrollmentServiceProvider.getActiveStudentIds() } returns setOf(10L, 20L)
+        every { studentRepository.findByIdIn(setOf(10L, 20L), any()) } returns Page.empty<Student>()
+
+        service.getAllStudents(0, 10, "lastName", "ASC", hasAssignedCourse = true)
+
+        verify(exactly = 1) { studentRepository.findByIdIn(setOf(10L, 20L), any()) }
+    }
+
+    @Test
+    fun `unassigned course filter excludes active enrollment students during search`() {
+        every { enrollmentServiceProvider.getActiveStudentIds() } returns setOf(10L, 20L)
+        every { studentRepository.searchStudentsExcludingIds("ana", setOf(10L, 20L), any()) } returns Page.empty<Student>()
+
+        service.searchStudents("ana", 0, 10, "lastName", "ASC", hasAssignedCourse = false)
+
+        verify(exactly = 1) { studentRepository.searchStudentsExcludingIds("ana", setOf(10L, 20L), any()) }
     }
 }

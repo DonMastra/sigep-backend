@@ -20,6 +20,7 @@ import java.util.UUID
     name = "exams",
     indexes = [
         Index(name = "idx_exam_course", columnList = "course_id"),
+        Index(name = "idx_exam_source", columnList = "source_exam_id"),
         Index(name = "idx_exam_status", columnList = "status"),
         Index(name = "idx_exam_scheduled_at", columnList = "scheduled_at")
     ]
@@ -31,6 +32,9 @@ data class Exam(
 
     @Column(name = "course_id", nullable = false)
     val courseId: Long,
+
+    @Column(name = "source_exam_id", columnDefinition = "UUID")
+    val sourceExamId: UUID? = null,
 
     @Column(nullable = false, length = 200)
     val title: String,

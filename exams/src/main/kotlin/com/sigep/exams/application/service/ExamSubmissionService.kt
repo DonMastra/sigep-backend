@@ -12,6 +12,7 @@ import com.sigep.common.application.exception.ValidationException
 import com.sigep.exams.application.dto.*
 import com.sigep.exams.domain.model.ExamGradeHistory
 import com.sigep.exams.domain.model.ExamSubmission
+import com.sigep.exams.domain.model.RecoverySkill
 import com.sigep.exams.domain.model.SubmissionStatus
 import com.sigep.exams.domain.repository.ExamGradeHistoryRepository
 import com.sigep.exams.domain.repository.ExamRepository
@@ -143,6 +144,7 @@ class ExamSubmissionService(
             val sameValues = submission.readingScore == change.readingScore &&
                 submission.writingScore == change.writingScore &&
                 submission.listeningScore == change.listeningScore &&
+                submission.speakingScore == change.speakingScore &&
                 submission.feedback.orEmpty() == change.feedback.orEmpty()
             if (submission.version != change.expectedVersion) {
                 if (sameValues) return@forEach
@@ -155,13 +157,17 @@ class ExamSubmissionService(
             }
             if (sameValues) return@forEach
 
+            validateRecoverySkillScope(submission, change)
+
             val gradeChanged = submission.readingScore != change.readingScore ||
                 submission.writingScore != change.writingScore ||
-                submission.listeningScore != change.listeningScore
+                submission.listeningScore != change.listeningScore ||
+                submission.speakingScore != change.speakingScore
             val hadPreviousGrade = submission.score != null ||
                 submission.readingScore != null ||
                 submission.writingScore != null ||
-                submission.listeningScore != null
+                submission.listeningScore != null ||
+                submission.speakingScore != null
             if (gradeChanged && hadPreviousGrade && change.reason.isNullOrBlank()) {
                 throw ValidationException(
                     message = "Debe indicar el motivo al modificar una calificación existente",
@@ -172,7 +178,9 @@ class ExamSubmissionService(
             val newFinalScore = calculateFinalScore(
                 change.readingScore,
                 change.writingScore,
-                change.listeningScore
+                change.listeningScore,
+                change.speakingScore,
+                submission.recoverySkillSet()
             )
             histories += ExamGradeHistory(
                 submissionId = submission.id,
@@ -185,6 +193,8 @@ class ExamSubmissionService(
                 newWritingScore = change.writingScore,
                 previousListeningScore = submission.listeningScore,
                 newListeningScore = change.listeningScore,
+                previousSpeakingScore = submission.speakingScore,
+                newSpeakingScore = change.speakingScore,
                 reason = change.reason?.trim()?.takeIf { it.isNotEmpty() }
                     ?: if (hadPreviousGrade) "Actualización de calificación por categorías" else "Carga inicial por categorías",
                 createdBy = actorUserId
@@ -195,6 +205,7 @@ class ExamSubmissionService(
                     readingScore = change.readingScore,
                     writingScore = change.writingScore,
                     listeningScore = change.listeningScore,
+                    speakingScore = change.speakingScore,
                     updatedBy = actorUserId,
                     feedback = change.feedback?.trim()?.takeIf { it.isNotEmpty() }
                 )
@@ -227,6 +238,7 @@ class ExamSubmissionService(
                 readingScore = submission.readingScore,
                 writingScore = submission.writingScore,
                 listeningScore = submission.listeningScore,
+                speakingScore = submission.speakingScore,
                 status = submission.status,
                 gradedBy = submission.gradedBy,
                 gradedByName = submission.gradedBy?.let { teacherInfoProvider.getTeacherNameById(it) ?: it.toString() },
@@ -413,6 +425,9 @@ class ExamSubmissionService(
         readingScore = submission.readingScore,
         writingScore = submission.writingScore,
         listeningScore = submission.listeningScore,
+        speakingScore = submission.speakingScore,
+        sourceSubmissionId = submission.sourceSubmissionId,
+        recoverySkills = submission.recoverySkillSet().map { it.name },
         gradedBy = submission.gradedBy,
         gradedByName = submission.gradedBy?.let { teacherInfoProvider.getTeacherNameById(it) ?: it.toString() },
         gradedAt = submission.gradedAt,
@@ -438,6 +453,8 @@ class ExamSubmissionService(
         newWritingScore = history.newWritingScore,
         previousListeningScore = history.previousListeningScore,
         newListeningScore = history.newListeningScore,
+        previousSpeakingScore = history.previousSpeakingScore,
+        newSpeakingScore = history.newSpeakingScore,
         reason = history.reason
     )
 
@@ -461,9 +478,12 @@ class ExamSubmissionService(
             courseId = exam.courseId,
             courseCode = courseInfo?.code,
             courseName = courseInfo?.name,
+            sourceExamId = exam.sourceExamId,
+            sourceExamTitle = exam.sourceExamId?.let { examRepository.findById(it).orElse(null)?.title },
             totalStudents = rows.size,
             completedCount = rows.count {
                 it.completionStatus == GradeCompletionStatus.COMPLETE ||
+                    it.completionStatus == GradeCompletionStatus.LEGACY_THREE_SKILLS ||
                     it.completionStatus == GradeCompletionStatus.LEGACY_FINAL_ONLY
             },
             incompleteCount = rows.count { it.completionStatus == GradeCompletionStatus.INCOMPLETE },
@@ -474,6 +494,10 @@ class ExamSubmissionService(
     }
 
     private fun synchronizeActiveStudents(exam: com.sigep.exams.domain.model.Exam, actorUserId: Long) {
+        if (exam.sourceExamId != null) {
+            synchronizeRecoveryStudents(exam, actorUserId)
+            return
+        }
         val activeStudentIds = courseAccessProvider.getActiveStudentIds(exam.courseId)
         if (activeStudentIds.isEmpty()) return
 
@@ -491,6 +515,101 @@ class ExamSubmissionService(
         if (missingSubmissions.isNotEmpty()) submissionRepository.saveAllAndFlush(missingSubmissions)
     }
 
+    private fun synchronizeRecoveryStudents(exam: com.sigep.exams.domain.model.Exam, actorUserId: Long) {
+        val sourceExamId = requireNotNull(exam.sourceExamId)
+        val failedSourceSubmissions = submissionRepository
+            .findAllByExamIdOrderByStudentIdAscAttemptNumberAsc(sourceExamId)
+            .filter { it.status == SubmissionStatus.GRADED }
+            .groupBy { it.studentId }
+            .mapNotNull { (_, attempts) ->
+                attempts.maxByOrNull { it.attemptNumber }
+                    ?.takeIf { failedSkills(it).isNotEmpty() }
+            }
+        if (failedSourceSubmissions.isEmpty()) return
+
+        val existingStudentIds = submissionRepository
+            .findAllByExamIdOrderByStudentIdAscAttemptNumberAsc(exam.id)
+            .mapTo(mutableSetOf()) { it.studentId }
+        val missingSubmissions = failedSourceSubmissions
+            .filterNot { it.studentId in existingStudentIds }
+            .map { source ->
+                val recoverySkills = failedSkills(source)
+                ExamSubmission(
+                    examId = exam.id,
+                    studentId = source.studentId,
+                    status = SubmissionStatus.PENDING,
+                    readingScore = source.readingScore.takeUnless { RecoverySkill.READING in recoverySkills },
+                    writingScore = source.writingScore.takeUnless { RecoverySkill.WRITING in recoverySkills },
+                    listeningScore = source.listeningScore.takeUnless { RecoverySkill.LISTENING in recoverySkills },
+                    speakingScore = source.speakingScore.takeUnless { RecoverySkill.SPEAKING in recoverySkills },
+                    sourceSubmissionId = source.id,
+                    recoverySkills = recoverySkills.joinToString(",") { it.name },
+                    createdBy = actorUserId
+                )
+            }
+        if (missingSubmissions.isNotEmpty()) submissionRepository.saveAllAndFlush(missingSubmissions)
+    }
+
+    private fun failedSkills(submission: ExamSubmission): Set<RecoverySkill> = buildSet {
+        if (submission.readingScore != null && submission.readingScore!! < PASSING_SCORE) add(RecoverySkill.READING)
+        if (submission.writingScore != null && submission.writingScore!! < PASSING_SCORE) add(RecoverySkill.WRITING)
+        if (submission.listeningScore != null && submission.listeningScore!! < PASSING_SCORE) add(RecoverySkill.LISTENING)
+        if (submission.speakingScore != null && submission.speakingScore!! < PASSING_SCORE) add(RecoverySkill.SPEAKING)
+    }
+
+    private fun validateRecoverySkillScope(
+        submission: ExamSubmission,
+        change: BatchGradeItemRequest
+    ) {
+        val targets = submission.recoverySkillSet()
+        if (targets.isEmpty()) return
+        val current = scoresBySkill(
+            submission.readingScore,
+            submission.writingScore,
+            submission.listeningScore,
+            submission.speakingScore
+        )
+        val requested = scoresBySkill(
+            change.readingScore,
+            change.writingScore,
+            change.listeningScore,
+            change.speakingScore
+        )
+        if ((RecoverySkill.entries.toSet() - targets).any { current[it] != requested[it] }) {
+            throw ValidationException("En un recuperatorio solo pueden modificarse las categorías desaprobadas")
+        }
+    }
+
+    private fun recoveryPassed(submission: ExamSubmission): Boolean? {
+        val targets = submission.recoverySkillSet()
+        if (targets.isEmpty()) {
+            val currentSkills = scoresBySkill(
+                submission.readingScore,
+                submission.writingScore,
+                submission.listeningScore,
+                submission.speakingScore
+            )
+            if (currentSkills.values.all { it != null }) {
+                return currentSkills.values.all { requireNotNull(it) >= PASSING_SCORE }
+            }
+            return submission.score?.let { it >= BigDecimal(PASSING_SCORE) }
+        }
+        if (submission.status != SubmissionStatus.GRADED) return null
+        val scores = scoresBySkill(
+            submission.readingScore,
+            submission.writingScore,
+            submission.listeningScore,
+            submission.speakingScore
+        )
+        return targets.all { (scores[it] ?: return null) >= PASSING_SCORE }
+    }
+
+    private fun recoverySkillsForDisplay(submission: ExamSubmission): Set<RecoverySkill> {
+        val configured = submission.recoverySkillSet()
+        if (configured.isNotEmpty()) return configured
+        return if (submission.status == SubmissionStatus.GRADED) failedSkills(submission) else emptySet()
+    }
+
     private fun toGradebookRow(
         submission: ExamSubmission,
         studentProfile: StudentProfileInfo?
@@ -498,11 +617,17 @@ class ExamSubmissionService(
         val completionStatus = when {
             submission.readingScore != null &&
                 submission.writingScore != null &&
-                submission.listeningScore != null -> GradeCompletionStatus.COMPLETE
+                submission.listeningScore != null &&
+                submission.speakingScore != null -> GradeCompletionStatus.COMPLETE
+            submission.score != null &&
+                submission.readingScore != null &&
+                submission.writingScore != null &&
+                submission.listeningScore != null -> GradeCompletionStatus.LEGACY_THREE_SKILLS
             submission.score != null -> GradeCompletionStatus.LEGACY_FINAL_ONLY
             submission.readingScore != null ||
                 submission.writingScore != null ||
-                submission.listeningScore != null -> GradeCompletionStatus.INCOMPLETE
+                submission.listeningScore != null ||
+                submission.speakingScore != null -> GradeCompletionStatus.INCOMPLETE
             else -> GradeCompletionStatus.NOT_STARTED
         }
         return GradebookRowDto(
@@ -517,8 +642,10 @@ class ExamSubmissionService(
             readingScore = submission.readingScore,
             writingScore = submission.writingScore,
             listeningScore = submission.listeningScore,
+            speakingScore = submission.speakingScore,
+            skillsToRecover = recoverySkillsForDisplay(submission).map { it.name },
             finalScore = submission.score,
-            passed = submission.score?.let { it >= BigDecimal("60") },
+            passed = recoveryPassed(submission),
             feedback = submission.feedback,
             gradedBy = submission.gradedBy,
             gradedByName = submission.gradedBy?.let {
@@ -529,10 +656,34 @@ class ExamSubmissionService(
         )
     }
 
-    private fun calculateFinalScore(readingScore: Int?, writingScore: Int?, listeningScore: Int?): BigDecimal? {
-        if (readingScore == null || writingScore == null || listeningScore == null) return null
-        return ExamSubmission.calculateFinalScore(readingScore, writingScore, listeningScore)
+    private fun calculateFinalScore(
+        readingScore: Int?,
+        writingScore: Int?,
+        listeningScore: Int?,
+        speakingScore: Int?,
+        recoverySkills: Set<RecoverySkill>
+    ): BigDecimal? {
+        val scoresBySkill = scoresBySkill(readingScore, writingScore, listeningScore, speakingScore)
+        val complete = if (recoverySkills.isEmpty()) {
+            readingScore != null && writingScore != null && listeningScore != null
+        } else {
+            recoverySkills.all { scoresBySkill[it] != null }
+        }
+        if (!complete) return null
+        return ExamSubmission.calculateFinalScore(scoresBySkill.values.filterNotNull())
     }
+
+    private fun scoresBySkill(
+        readingScore: Int?,
+        writingScore: Int?,
+        listeningScore: Int?,
+        speakingScore: Int?
+    ): Map<RecoverySkill, Int?> = mapOf(
+        RecoverySkill.READING to readingScore,
+        RecoverySkill.WRITING to writingScore,
+        RecoverySkill.LISTENING to listeningScore,
+        RecoverySkill.SPEAKING to speakingScore
+    )
 
     private fun validateCourseAccess(courseId: Long, actorUserId: Long, actorRole: String?) {
         when (actorRole) {
@@ -540,6 +691,10 @@ class ExamSubmissionService(
             "TEACHER" -> if (courseAccessProvider.isTeacherAssignedToCourse(courseId, actorUserId)) return
         }
         throw ForbiddenException("Los docentes solo pueden calificar exámenes de sus cursos asignados")
+    }
+
+    companion object {
+        private const val PASSING_SCORE = 60
     }
 }
 

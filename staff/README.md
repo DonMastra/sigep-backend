@@ -101,7 +101,7 @@ staff/
 |--------|----------|-------------|-----|
 | POST | `/api/v1/staff/attendance` | Registrar asistencia | ADMIN |
 | PUT | `/api/v1/staff/attendance/{id}` | Actualizar registro | ADMIN |
-| GET | `/api/v1/staff/attendance/teaching/{staffId}` | Asistencia de docente por período | ADMIN, TEACHER |
+| GET | `/api/v1/staff/attendance/teaching/{staffId}` | Asistencia de docente por período; TEACHER solo su legajo vinculado | ADMIN, TEACHER |
 | GET | `/api/v1/staff/attendance/non-teaching/{staffId}` | Asistencia de no docente por período | ADMIN, TEACHER |
 | DELETE | `/api/v1/staff/attendance/{id}` | Eliminar registro | ADMIN |
 
