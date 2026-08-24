@@ -18,6 +18,8 @@ data class GradeHistoryDto(
     val newWritingScore: Int? = null,
     val previousListeningScore: Int? = null,
     val newListeningScore: Int? = null,
+    val previousSpeakingScore: Int? = null,
+    val newSpeakingScore: Int? = null,
     val reason: String?
 )
 

@@ -275,6 +275,11 @@ Migraciones del cierre QA:
   nivelacion y asignacion academica posterior al pago.
 - `V26__convert_teaching_staff_photo_to_bytea.sql`: reconciliacion segura de
   `teaching_staff.photo_data` desde el tipo legacy `OID` al `BYTEA` esperado por JPA.
+- `V33__create_guardian_client_profiles.sql`: perfil administrativo 1:1 para usuarios GUARDIAN.
+- `V34__add_speaking_and_recovery_exam_support.sql`: Speaking, origen del recuperatorio y
+  categorias desaprobadas por entrega.
+- `V35__enforce_unique_staff_attendance.sql`: referencia exclusiva docente/no docente y unicidad
+  diaria de asistencia por persona.
 
 Validarlas en una base descartable o transaccion revertida antes de aplicarlas al contenedor
 actual; no se ejecutan automaticamente durante esta implementacion.

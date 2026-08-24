@@ -2,12 +2,16 @@ package com.sigep.staff.application.service
 
 import com.sigep.common.application.dto.PageResponse
 import com.sigep.common.application.exception.ResourceNotFoundException
+import com.sigep.common.application.exception.DuplicateResourceException
+import com.sigep.common.application.exception.ForbiddenException
+import com.sigep.common.application.exception.ValidationException
 import com.sigep.staff.application.dto.*
 import com.sigep.staff.domain.model.StaffAttendance
 import com.sigep.staff.infrastructure.repository.NonTeachingStaffRepository
 import com.sigep.staff.infrastructure.repository.StaffAttendanceRepository
 import com.sigep.staff.infrastructure.repository.TeachingStaffRepository
 import org.slf4j.LoggerFactory
+import org.springframework.cache.annotation.CacheEvict
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
@@ -26,11 +30,15 @@ class StaffAttendanceService(
         private val log = LoggerFactory.getLogger(StaffAttendanceService::class.java)
     }
 
+    @CacheEvict(value = ["teachingStaff", "nonTeachingStaff"], allEntries = true)
     fun createAttendance(request: CreateAttendanceRequest): StaffAttendanceDto {
         log.info("Creating attendance record for date: {}", request.attendanceDate)
 
         val attendance = when {
             request.teachingStaffId != null -> {
+                if (attendanceRepository.findByTeachingStaffIdAndAttendanceDate(request.teachingStaffId, request.attendanceDate).isPresent) {
+                    throw DuplicateResourceException("La asistencia del docente ya fue registrada para esa fecha")
+                }
                 val staff = teachingStaffRepository.findById(request.teachingStaffId)
                     .orElseThrow { ResourceNotFoundException("Teaching staff not found") }
 
@@ -45,6 +53,9 @@ class StaffAttendanceService(
                 )
             }
             request.nonTeachingStaffId != null -> {
+                if (attendanceRepository.findByNonTeachingStaffIdAndAttendanceDate(request.nonTeachingStaffId, request.attendanceDate).isPresent) {
+                    throw DuplicateResourceException("La asistencia del personal no docente ya fue registrada para esa fecha")
+                }
                 val staff = nonTeachingStaffRepository.findById(request.nonTeachingStaffId)
                     .orElseThrow { ResourceNotFoundException("Non-teaching staff not found") }
 
@@ -65,15 +76,22 @@ class StaffAttendanceService(
         return toDto(saved)
     }
 
+    @CacheEvict(value = ["teachingStaff", "nonTeachingStaff"], allEntries = true)
     fun updateAttendance(id: Long, request: UpdateAttendanceRequest): StaffAttendanceDto {
         log.info("Updating attendance record with id: {}", id)
 
         val attendance = attendanceRepository.findById(id)
             .orElseThrow { ResourceNotFoundException("Attendance record not found") }
 
+        val resolvedCheckIn = request.checkInTime ?: attendance.checkInTime
+        val resolvedCheckOut = request.checkOutTime ?: attendance.checkOutTime
+        if (resolvedCheckIn != null && resolvedCheckOut != null && resolvedCheckOut.isBefore(resolvedCheckIn)) {
+            throw ValidationException("La hora de salida no puede ser anterior a la hora de entrada")
+        }
+
         val updated = attendance.copy(
-            checkInTime = request.checkInTime ?: attendance.checkInTime,
-            checkOutTime = request.checkOutTime ?: attendance.checkOutTime,
+            checkInTime = resolvedCheckIn,
+            checkOutTime = resolvedCheckOut,
             status = request.status ?: attendance.status,
             notes = request.notes ?: attendance.notes,
             hoursWorked = request.hoursWorked ?: attendance.hoursWorked
@@ -89,9 +107,20 @@ class StaffAttendanceService(
         startDate: LocalDate,
         endDate: LocalDate,
         page: Int,
-        limit: Int
+        limit: Int,
+        actorUserId: Long?,
+        actorRole: String?
     ): PageResponse<StaffAttendanceDto> {
         log.debug("Fetching attendance for teaching staff: {}", staffId)
+        if (actorRole == "TEACHER") {
+            val staff = teachingStaffRepository.findById(staffId)
+                .orElseThrow { ResourceNotFoundException("Teaching staff not found") }
+            if (staff.linkedUserId != actorUserId) {
+                throw ForbiddenException("Los docentes solo pueden consultar su propia asistencia")
+            }
+        } else if (actorRole != "ADMIN") {
+            throw ForbiddenException("No tiene permisos para consultar asistencia docente")
+        }
 
         val pageable = PageRequest.of(page, limit, Sort.by(Sort.Direction.DESC, "attendanceDate"))
         val attendancePage = attendanceRepository.findByTeachingStaffIdAndAttendanceDateBetween(
@@ -135,6 +164,7 @@ class StaffAttendanceService(
         )
     }
 
+    @CacheEvict(value = ["teachingStaff", "nonTeachingStaff"], allEntries = true)
     fun deleteAttendance(id: Long) {
         log.info("Deleting attendance record with id: {}", id)
 

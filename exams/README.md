@@ -92,6 +92,10 @@ Módulo para la gestión de exámenes presenciales y carga de calificaciones del
 
 ### Exámenes
 
+Un recuperatorio se crea enviando `sourceExamId` de un examen regular `PUBLISHED` o `CLOSED`
+del mismo curso. Su grilla incorpora solo estudiantes calificados con al menos una categoría
+menor a 60; las categorías aprobadas se conservan y no pueden modificarse.
+
 #### GET `/api/v1/exams/{id}`
 Obtener examen por ID
 
@@ -225,6 +229,9 @@ Comparar rendimiento de múltiples docentes
 3. No se pueden calificar submissions cancelados
 4. Solo se pueden cancelar submissions no calificados
 5. Cada estudiante puede tener múltiples intentos (registrados con `attempt_number`)
+6. Las nuevas grillas incluyen Reading, Writing, Listening y Speaking
+7. Las notas históricas de tres categorías se conservan sin recálculo
+8. Los resultados históricos sin categorías no se asignan automáticamente a recuperatorios
 
 ## Integración con Otros Módulos
 
@@ -290,6 +297,7 @@ Las operaciones de escritura invalidan el caché correspondiente.
 
 ### Migraciones
 - `V5__create_exams_module.sql`: Creación de tablas y estructura inicial
+- `V34__add_speaking_and_recovery_exam_support.sql`: Speaking y vínculo auditable de recuperatorios
 
 ### Tablas
 - `exams`: Información de exámenes

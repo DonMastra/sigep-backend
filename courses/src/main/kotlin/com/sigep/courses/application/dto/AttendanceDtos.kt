@@ -85,6 +85,18 @@ data class AttendanceStatisticsDto(
     val attendanceRate: Double // Percentage (present + late) / total
 )
 
+data class CourseAttendanceStatisticsDto(
+    val courseId: Long,
+    val totalRecords: Long,
+    val present: Long,
+    val absent: Long,
+    val late: Long,
+    val excusedAbsence: Long,
+    val sickLeave: Long,
+    val attendanceRate: Double,
+    val students: List<AttendanceStatisticsDto>
+)
+
 data class CourseAttendanceReportDto(
     val courseId: Long,
     val courseName: String,

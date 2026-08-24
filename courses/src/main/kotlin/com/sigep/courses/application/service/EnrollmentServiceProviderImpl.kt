@@ -83,6 +83,8 @@ class EnrollmentServiceProviderImpl(
         }
     }
 
+    override fun getActiveStudentIds(): Set<Long> = enrollmentRepository.findActiveStudentIds()
+
     override fun getActiveStudentIdsByTeacher(teacherUserId: Long): Set<Long> =
         enrollmentRepository.findActiveStudentIdsByTeacher(teacherUserId)
 

@@ -131,6 +131,11 @@ Los controladores que necesitan actor actual leen `userId` y `userRole` desde `H
   facturas, intentos, outbox y secuencias de comprobantes.
 - `V17__add_fiscal_tax_breakdown.sql` agrega domicilio del receptor y colecciones persistentes
   para `Iva` y `Tributos`.
+- `V34__add_speaking_and_recovery_exam_support.sql` agrega Speaking, examen/entrega de origen y
+  categorias a recuperar sin alterar las notas historicas existentes.
+- `V35__enforce_unique_staff_attendance.sql` exige exactamente una referencia de personal y un
+  unico registro por persona y fecha. La asistencia de cursos por fecha reutiliza
+  `course_sessions`/`course_attendance` y no requiere una migracion posterior.
 - Las migraciones SQL se validan sobre una base descartable o dentro de una transaccion
   revertida; no se deben ejecutar automaticamente sobre el contenedor actual sin backup
   y aprobacion explicita.
@@ -192,9 +197,11 @@ inscripciones `ACTIVE` y `totalEnrollments` cuenta todas. Publicar exige estado 
 docente asignado y reserva, pero no una matricula minima. El catalogo `GET /courses/published`
 esta habilitado para `GUARDIAN`.
 
-La asistencia masiva usa el contenedor `{ courseSessionId, date, records }`.
+La asistencia masiva usa el contenedor `{ courseId, date, records }`, con
+`courseSessionId` opcional cuando hay mas de una clase en la fecha. El backend reutiliza
+la unica sesion existente o la crea desde la reserva horaria asignada al curso.
 Cada registro se identifica por `enrollmentId + courseSessionId`, por lo que repetir
-el envio actualiza la fila existente. La fecha debe coincidir con la sesion seleccionada;
+el envio actualiza la fila existente. Si se envia una sesion, fecha y curso deben coincidir;
 `PRESENT` y `LATE` computan asistencia efectiva, mientras `JUSTIFIED` y licencias se
 informan por separado. `studentName` se resuelve mediante `StudentProfileProvider`.
 

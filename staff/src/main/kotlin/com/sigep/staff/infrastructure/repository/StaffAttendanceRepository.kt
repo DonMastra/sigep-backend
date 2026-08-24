@@ -9,9 +9,30 @@ import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import org.springframework.stereotype.Repository
 import java.time.LocalDate
+import java.util.Optional
 
 @Repository
 interface StaffAttendanceRepository : JpaRepository<StaffAttendance, Long> {
+
+    fun findByTeachingStaffIdAndAttendanceDate(teachingStaffId: Long, attendanceDate: LocalDate): Optional<StaffAttendance>
+
+    fun findByNonTeachingStaffIdAndAttendanceDate(nonTeachingStaffId: Long, attendanceDate: LocalDate): Optional<StaffAttendance>
+
+    @Query("""
+        SELECT a.teachingStaff.id AS staffId,
+               SUM(CASE WHEN a.status = 'PRESENT' THEN 1 ELSE 0 END) AS presentDays,
+               SUM(CASE WHEN a.status = 'ABSENT' THEN 1 ELSE 0 END) AS absentDays,
+               SUM(CASE WHEN a.status = 'LATE' THEN 1 ELSE 0 END) AS lateDays
+        FROM StaffAttendance a
+        WHERE a.teachingStaff.id IN :staffIds
+        AND a.attendanceDate BETWEEN :startDate AND :endDate
+        GROUP BY a.teachingStaff.id
+    """)
+    fun summarizeTeachingAttendance(
+        @Param("staffIds") staffIds: Collection<Long>,
+        @Param("startDate") startDate: LocalDate,
+        @Param("endDate") endDate: LocalDate
+    ): List<TeachingAttendanceStatsProjection>
 
     fun findByTeachingStaffIdAndAttendanceDateBetween(
         teachingStaffId: Long,
@@ -63,5 +84,12 @@ interface StaffAttendanceRepository : JpaRepository<StaffAttendance, Long> {
         @Param("startDate") startDate: LocalDate,
         @Param("endDate") endDate: LocalDate
     ): Double?
+}
+
+interface TeachingAttendanceStatsProjection {
+    val staffId: Long
+    val presentDays: Long
+    val absentDays: Long
+    val lateDays: Long
 }
 

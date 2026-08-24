@@ -15,7 +15,11 @@ interface EnrollmentRepository : JpaRepository<Enrollment, Long> {
     fun findByStudentIdAndCourseTeacherId(studentId: Long, teacherId: Long, pageable: Pageable): Page<Enrollment>
     fun findByStudentIdAndStatus(studentId: Long, status: EnrollmentStatus, pageable: Pageable): Page<Enrollment>
     fun findByCourseId(courseId: Long, pageable: Pageable): Page<Enrollment>
+    fun findAllByCourseIdOrderByStudentIdAsc(courseId: Long): List<Enrollment>
     fun findByStudentIdAndCourseId(studentId: Long, courseId: Long): Optional<Enrollment>
+
+    @Query("SELECT DISTINCT e.studentId FROM Enrollment e WHERE e.status = 'ACTIVE'")
+    fun findActiveStudentIds(): Set<Long>
 
     @Query("SELECT DISTINCT e.studentId FROM Enrollment e WHERE e.course.teacherId = :teacherUserId AND e.status = 'ACTIVE'")
     fun findActiveStudentIdsByTeacher(teacherUserId: Long): Set<Long>

@@ -3,12 +3,16 @@ package com.sigep.courses.application.service
 import com.sigep.common.application.dto.PageResponse
 import com.sigep.common.application.exception.ForbiddenException
 import com.sigep.common.application.service.StudentProfileProvider
+import com.sigep.common.application.service.ReservationInfoProvider
 import com.sigep.common.domain.exception.BusinessException
 import com.sigep.common.domain.exception.ResourceNotFoundException
 import com.sigep.courses.application.dto.*
 import com.sigep.courses.domain.model.Attendance
 import com.sigep.courses.domain.model.AttendanceStatus
+import com.sigep.courses.domain.model.CourseSession
+import com.sigep.courses.domain.model.SessionStatus
 import com.sigep.courses.domain.repository.AttendanceRepository
+import com.sigep.courses.domain.repository.CourseRepository
 import com.sigep.courses.domain.repository.EnrollmentRepository
 import com.sigep.courses.domain.repository.CourseSessionRepository
 import org.slf4j.LoggerFactory
@@ -18,6 +22,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.LocalTime
 
 @Service
 @Transactional
@@ -25,7 +30,9 @@ class AttendanceService(
     private val attendanceRepository: AttendanceRepository,
     private val enrollmentRepository: EnrollmentRepository,
     private val courseSessionRepository: CourseSessionRepository,
-    private val studentProfileProvider: StudentProfileProvider
+    private val studentProfileProvider: StudentProfileProvider,
+    private val courseRepository: CourseRepository,
+    private val reservationInfoProvider: ReservationInfoProvider
 ) {
 
     private val logger = LoggerFactory.getLogger(AttendanceService::class.java)
@@ -144,13 +151,8 @@ class AttendanceService(
     }
 
     fun recordBulkAttendance(request: BulkAttendanceRequest, recordedBy: Long): List<AttendanceDto> {
-        val sessionId = request.courseSessionId
-            ?: throw BusinessException("Course session ID is required")
-        val session = courseSessionRepository.findById(sessionId)
-            .orElseThrow { ResourceNotFoundException("Course session not found with id: $sessionId") }
-        if (request.date != session.sessionDate) {
-            throw BusinessException("Attendance date must match the selected course session")
-        }
+        val session = resolveBulkAttendanceSession(request)
+        val sessionId = requireNotNull(session.id)
         val resolvedCourseId = session.course.id!!
         logger.info("Recording bulk attendance for course {} on {}", resolvedCourseId, request.date)
 
@@ -192,6 +194,75 @@ class AttendanceService(
         logger.info("Bulk attendance recorded successfully for {} students", savedAttendances.size)
         return savedAttendances.map { it.toDto() }
     }
+
+    private fun resolveBulkAttendanceSession(request: BulkAttendanceRequest): CourseSession {
+        request.courseSessionId?.let { sessionId ->
+            val session = courseSessionRepository.findById(sessionId)
+                .orElseThrow { ResourceNotFoundException("Course session not found with id: $sessionId") }
+            if (request.courseId != null && request.courseId != session.course.id) {
+                throw BusinessException("Attendance course must match the selected course session")
+            }
+            if (request.date != session.sessionDate) {
+                throw BusinessException("Attendance date must match the selected course session")
+            }
+            if (session.status == SessionStatus.CANCELLED) {
+                throw BusinessException("Attendance cannot be recorded for a cancelled course session")
+            }
+            return session
+        }
+
+        val courseId = request.courseId
+            ?: throw BusinessException("Course ID is required when course session ID is omitted")
+        val sessionsOnDate = courseSessionRepository.findByCourseIdAndSessionDate(courseId, request.date)
+        val availableSessions = sessionsOnDate.filter { it.status != SessionStatus.CANCELLED }
+        if (availableSessions.size == 1) return availableSessions.single()
+        if (availableSessions.size > 1) {
+            throw BusinessException("More than one course session exists on the selected date; choose the corresponding session")
+        }
+        if (sessionsOnDate.isNotEmpty()) {
+            throw BusinessException("Attendance cannot be recorded because the course session on the selected date is cancelled")
+        }
+
+        val course = courseRepository.findById(courseId)
+            .orElseThrow { ResourceNotFoundException("Course not found with id: $courseId") }
+        if (course.startDate != null && request.date.isBefore(course.startDate)) {
+            throw BusinessException("Attendance date cannot be before the course start date")
+        }
+        if (course.endDate != null && request.date.isAfter(course.endDate)) {
+            throw BusinessException("Attendance date cannot be after the course end date")
+        }
+
+        val schedule = reservationInfoProvider.getReservationByCourse(courseId)
+            ?: throw BusinessException("The course has no assigned schedule to create the session for the selected date")
+        if (schedule.dayOfWeek != request.date.dayOfWeek.name) {
+            throw BusinessException("The selected date does not match the assigned course schedule")
+        }
+
+        val startTime = parseScheduleTime(schedule.startTime, "start")
+        val endTime = parseScheduleTime(schedule.endTime, "end")
+        return courseSessionRepository.save(
+            CourseSession(
+                course = course,
+                sessionDate = request.date,
+                startTime = startTime,
+                endTime = endTime,
+                classroomId = schedule.classroomId,
+                classroomName = schedule.classroomName,
+                status = SessionStatus.COMPLETED,
+                topic = "Registro de asistencia",
+                notes = "Sesión creada automáticamente al registrar asistencia por fecha",
+                createdAt = LocalDateTime.now(),
+                updatedAt = LocalDateTime.now()
+            )
+        )
+    }
+
+    private fun parseScheduleTime(value: String, label: String): LocalTime =
+        try {
+            LocalTime.parse(value.take(5))
+        } catch (_: RuntimeException) {
+            throw BusinessException("The assigned course schedule has an invalid $label time")
+        }
 
     fun updateAttendance(id: Long, request: UpdateAttendanceRequest, recordedBy: Long): AttendanceDto {
         logger.info("Updating attendance with id: {}", id)
@@ -255,6 +326,45 @@ class AttendanceService(
         )
     }
 
+    @Transactional(readOnly = true)
+    fun getCourseAttendanceStatistics(courseId: Long): CourseAttendanceStatisticsDto {
+        logger.info("Calculating cumulative attendance statistics for course: {}", courseId)
+
+        val enrollments = enrollmentRepository.findAllByCourseIdOrderByStudentIdAsc(courseId)
+        val attendances = attendanceRepository.findAllByCourseId(courseId)
+        val attendancesByEnrollment = attendances.groupBy { it.enrollment.id }
+        val profiles = studentProfileProvider.getStudentProfiles(enrollments.map { it.studentId })
+
+        val studentStatistics = enrollments.map { enrollment ->
+            val records = attendancesByEnrollment[enrollment.id].orEmpty()
+            buildAttendanceStatistics(
+                enrollmentId = requireNotNull(enrollment.id),
+                studentId = enrollment.studentId,
+                studentName = profiles[enrollment.studentId]?.let { "${it.firstName} ${it.lastName}".trim() },
+                records = records
+            )
+        }
+
+        val present = attendances.count { it.status == AttendanceStatus.PRESENT }.toLong()
+        val absent = attendances.count { it.status == AttendanceStatus.ABSENT }.toLong()
+        val late = attendances.count { it.status == AttendanceStatus.LATE }.toLong()
+        val excusedAbsence = attendances.count { it.status == AttendanceStatus.EXCUSED_ABSENCE }.toLong()
+        val sickLeave = attendances.count { it.status == AttendanceStatus.SICK_LEAVE }.toLong()
+        val totalRecords = attendances.size.toLong()
+
+        return CourseAttendanceStatisticsDto(
+            courseId = courseId,
+            totalRecords = totalRecords,
+            present = present,
+            absent = absent,
+            late = late,
+            excusedAbsence = excusedAbsence,
+            sickLeave = sickLeave,
+            attendanceRate = attendanceRate(present, late, totalRecords),
+            students = studentStatistics
+        )
+    }
+
     fun getCourseAttendanceReport(courseId: Long, date: LocalDate): CourseAttendanceReportDto {
         logger.info("Generating attendance report for course {} on {}", courseId, date)
 
@@ -309,5 +419,34 @@ class AttendanceService(
         createdAt = createdAt,
         updatedAt = updatedAt
     )
+
+    private fun buildAttendanceStatistics(
+        enrollmentId: Long,
+        studentId: Long,
+        studentName: String?,
+        records: List<Attendance>
+    ): AttendanceStatisticsDto {
+        val present = records.count { it.status == AttendanceStatus.PRESENT }.toLong()
+        val absent = records.count { it.status == AttendanceStatus.ABSENT }.toLong()
+        val late = records.count { it.status == AttendanceStatus.LATE }.toLong()
+        val excusedAbsence = records.count { it.status == AttendanceStatus.EXCUSED_ABSENCE }.toLong()
+        val sickLeave = records.count { it.status == AttendanceStatus.SICK_LEAVE }.toLong()
+        val totalClasses = records.size.toLong()
+        return AttendanceStatisticsDto(
+            enrollmentId = enrollmentId,
+            studentId = studentId,
+            studentName = studentName,
+            totalClasses = totalClasses,
+            present = present,
+            absent = absent,
+            late = late,
+            excusedAbsence = excusedAbsence,
+            sickLeave = sickLeave,
+            attendanceRate = attendanceRate(present, late, totalClasses)
+        )
+    }
+
+    private fun attendanceRate(present: Long, late: Long, total: Long): Double =
+        if (total > 0) ((present + late).toDouble() / total.toDouble()) * 100 else 0.0
 }
 

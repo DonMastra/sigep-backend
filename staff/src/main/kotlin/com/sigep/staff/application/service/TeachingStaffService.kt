@@ -53,7 +53,7 @@ class TeachingStaffService(
         val direction = if (order.uppercase() == "DESC") Sort.Direction.DESC else Sort.Direction.ASC
         val pageable = PageRequest.of(page, limit, Sort.by(direction, sort))
         val staffPage = teachingStaffRepository.findByIsActiveTrue(pageable)
-        val staffDtos = staffPage.content.map { toDto(it) }
+        val staffDtos = toDtosWithAttendance(staffPage.content)
 
         return PageResponse(
             content = staffDtos,
@@ -85,7 +85,7 @@ class TeachingStaffService(
 
         val pageable = PageRequest.of(page, limit, Sort.by(Sort.Direction.ASC, "lastName"))
         val staffPage = teachingStaffRepository.searchByQuery(query, pageable)
-        val staffDtos = staffPage.content.map { toDto(it) }
+        val staffDtos = toDtosWithAttendance(staffPage.content)
 
         return PageResponse(
             content = staffDtos,
@@ -371,7 +371,7 @@ class TeachingStaffService(
         ).toInt()
 
         val totalDays = presentDays + absentDays + lateDays
-        val attendanceRate = if (totalWorkingDays > 0) (presentDays.toDouble() / totalWorkingDays.toDouble()) * 100 else 0.0
+        val attendanceRate = if (totalWorkingDays > 0) ((presentDays + lateDays).toDouble() / totalWorkingDays.toDouble()) * 100 else 0.0
 
         return dto.copy(
             totalWorkingDaysInMonth = totalWorkingDays,
@@ -383,6 +383,41 @@ class TeachingStaffService(
                 attendanceRate = attendanceRate
             )
         )
+    }
+
+    private fun toDtosWithAttendance(staffMembers: List<TeachingStaff>): List<TeachingStaffDto> {
+        if (staffMembers.isEmpty()) return emptyList()
+
+        val now = LocalDate.now()
+        val startOfMonth = now.withDayOfMonth(1)
+        val endOfMonth = YearMonth.now().atEndOfMonth()
+        val totalWorkingDays = generateSequence(startOfMonth) { it.plusDays(1) }
+            .takeWhile { !it.isAfter(endOfMonth) }
+            .count { it.dayOfWeek.value in 1..5 }
+        val statisticsByStaff = attendanceRepository.summarizeTeachingAttendance(
+            staffMembers.mapNotNull { it.id },
+            startOfMonth,
+            endOfMonth
+        ).associateBy { it.staffId }
+
+        return staffMembers.map { staff ->
+            val statistics = statisticsByStaff[staff.id]
+            val presentDays = statistics?.presentDays?.toInt() ?: 0
+            val absentDays = statistics?.absentDays?.toInt() ?: 0
+            val lateDays = statistics?.lateDays?.toInt() ?: 0
+            toDto(staff).copy(
+                totalWorkingDaysInMonth = totalWorkingDays,
+                attendanceStats = AttendanceStatsDto(
+                    totalDays = presentDays + absentDays + lateDays,
+                    presentDays = presentDays,
+                    absentDays = absentDays,
+                    lateDays = lateDays,
+                    attendanceRate = if (totalWorkingDays > 0) {
+                        ((presentDays + lateDays).toDouble() / totalWorkingDays.toDouble()) * 100
+                    } else 0.0
+                )
+            )
+        }
     }
 
     private fun validateTeacherAccount(userId: Long, currentStaffId: Long?): User {

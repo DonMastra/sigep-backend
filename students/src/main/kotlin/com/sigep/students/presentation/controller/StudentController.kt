@@ -46,14 +46,15 @@ class StudentController(
         @RequestParam(defaultValue = "10") limit: Int,
         @RequestParam(defaultValue = "id") sort: String,
         @RequestParam(defaultValue = "ASC") order: String,
+        @RequestParam(required = false) hasAssignedCourse: Boolean?,
         httpRequest: HttpServletRequest
     ): ResponseEntity<ApiResponse<PageResponse<StudentDto>>> {
         val actorUserId = httpRequest.getAttribute("userId") as? Long
         val actorRole = httpRequest.getAttribute("userRole") as? String
         val students = if (actorRole == "TEACHER") {
-            studentService.getStudentsForTeacher(requireActorUserId(actorUserId), page, limit, sort, order)
+            studentService.getStudentsForTeacher(requireActorUserId(actorUserId), page, limit, sort, order, hasAssignedCourse)
         } else {
-            studentService.getAllStudents(page, limit, sort, order)
+            studentService.getAllStudents(page, limit, sort, order, hasAssignedCourse)
         }
         return ResponseEntity.ok(ApiResponse.success(students))
     }
@@ -83,14 +84,15 @@ class StudentController(
         @RequestParam(defaultValue = "10") limit: Int,
         @RequestParam(defaultValue = "lastName") sort: String,
         @RequestParam(defaultValue = "ASC") order: String,
+        @RequestParam(required = false) hasAssignedCourse: Boolean?,
         httpRequest: HttpServletRequest
     ): ResponseEntity<ApiResponse<PageResponse<StudentDto>>> {
         val actorUserId = httpRequest.getAttribute("userId") as? Long
         val actorRole = httpRequest.getAttribute("userRole") as? String
         val students = if (actorRole == "TEACHER") {
-            studentService.searchStudentsForTeacher(requireActorUserId(actorUserId), query, page, limit, sort, order)
+            studentService.searchStudentsForTeacher(requireActorUserId(actorUserId), query, page, limit, sort, order, hasAssignedCourse)
         } else {
-            studentService.searchStudents(query, page, limit, sort, order)
+            studentService.searchStudents(query, page, limit, sort, order, hasAssignedCourse)
         }
         return ResponseEntity.ok(ApiResponse.success(students))
     }
