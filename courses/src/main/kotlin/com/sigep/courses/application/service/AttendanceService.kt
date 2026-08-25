@@ -232,11 +232,18 @@ class AttendanceService(
             throw BusinessException("Attendance date cannot be after the course end date")
         }
 
-        val schedule = reservationInfoProvider.getReservationByCourse(courseId)
-            ?: throw BusinessException("The course has no assigned schedule to create the session for the selected date")
-        if (schedule.dayOfWeek != request.date.dayOfWeek.name) {
-            throw BusinessException("The selected date does not match the assigned course schedule")
+        val schedules = reservationInfoProvider.getReservationsByCourse(courseId)
+        if (schedules.isEmpty()) {
+            throw BusinessException("The course has no assigned schedule to create the session for the selected date")
         }
+        val schedulesForDate = schedules.filter { it.dayOfWeek == request.date.dayOfWeek.name }
+        if (schedulesForDate.isEmpty()) {
+            throw BusinessException("The selected date does not match any assigned course schedule")
+        }
+        if (schedulesForDate.size > 1) {
+            throw BusinessException("More than one assigned course schedule matches the selected date; create or choose the corresponding session")
+        }
+        val schedule = schedulesForDate.single()
 
         val startTime = parseScheduleTime(schedule.startTime, "start")
         val endTime = parseScheduleTime(schedule.endTime, "end")
