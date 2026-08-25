@@ -10,7 +10,6 @@ import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import org.springframework.stereotype.Repository
-import java.util.Optional
 
 @Repository
 interface ReservationRepository : JpaRepository<Reservation, Long> {
@@ -21,11 +20,11 @@ interface ReservationRepository : JpaRepository<Reservation, Long> {
         targetType: ReservationTargetType,
         pageable: Pageable
     ): Page<Reservation>
-    fun findByTargetTypeAndTargetIdAndStatus(
+    fun findAllByTargetTypeAndTargetIdAndStatus(
         targetType: ReservationTargetType,
         targetId: Long,
         status: ReservationStatus
-    ): Optional<Reservation>
+    ): List<Reservation>
     fun existsByTargetTypeAndTargetIdAndStatus(
         targetType: ReservationTargetType,
         targetId: Long,

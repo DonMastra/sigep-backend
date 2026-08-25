@@ -469,6 +469,12 @@ type CourseLevel = 'BEGINNER' | 'ELEMENTARY' | 'PRE_INTERMEDIATE' | 'INTERMEDIAT
 
 Nota: la asignacion de aula/horario se maneja con reservas en `scheduling`; los cursos pueden consumir providers de scheduling.
 
+`CourseDto.reservationSummaries` contiene todas las reservas `ASSIGNED` del curso ordenadas
+por dia y hora. `reservationSummary` conserva la primera como vista legacy para clientes
+anteriores. `POST /courses` acepta `reservationIds: number[]` y mantiene `reservationId` como
+compatibilidad; `PUT /courses/{id}` acepta `reservationIds` opcional como la seleccion completa
+que debe reconciliarse. Omitir ese campo en una actualizacion no cambia las asignaciones.
+
 `CourseDto.teacherId` puede ser `null`; `teacherName` solo se informa cuando ese id corresponde
 a personal docente activo vinculado a una cuenta activa `TEACHER` o `ADMIN`. `POST` y `PUT`
 rechazan cualquier otro `teacherId` con `INVALID_TEACHER_ASSIGNMENT`. `enrolledStudents`
@@ -955,6 +961,9 @@ interface AssignReservationRequest {
   targetId?: number;
 }
 ```
+
+Un mismo curso puede tener multiples reservas `ASSIGNED` (por ejemplo, lunes y miercoles).
+Cada reserva sigue apuntando a un unico target y cada slot mantiene una unica reserva activa.
 
 ## Admin Cache
 

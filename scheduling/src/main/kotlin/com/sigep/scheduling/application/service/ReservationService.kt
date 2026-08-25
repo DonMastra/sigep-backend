@@ -6,7 +6,6 @@ import com.sigep.common.application.exception.ForbiddenException
 import com.sigep.common.application.exception.ResourceNotFoundException
 import com.sigep.common.application.exception.ResourceConflictException
 import com.sigep.common.application.exception.ReservationAlreadyAssignedException
-import com.sigep.common.application.exception.CourseReservationLimitExceededException
 import com.sigep.common.application.exception.ReservationNotAvailableException
 import com.sigep.common.application.service.SchedulingTargetValidationProvider
 import com.sigep.scheduling.application.dto.*
@@ -183,20 +182,6 @@ class ReservationService(
             )
         }
 
-        // Enforce 1:1 for COURSE: a course can have at most 1 ASSIGNED reservation
-        if (request.targetType == ReservationTargetType.COURSE) {
-            val alreadyHasReservation = reservationRepository.existsByTargetTypeAndTargetIdAndStatus(
-                ReservationTargetType.COURSE, request.targetId, ReservationStatus.ASSIGNED
-            )
-            if (alreadyHasReservation) {
-                throw CourseReservationLimitExceededException(
-                    message = "El curso ya tiene una reserva asignada",
-                    field = "targetId",
-                    details = "Course id=${request.targetId} already has an ASSIGNED reservation. Unassign it first."
-                )
-            }
-        }
-
         val updated = reservation.copy(
             targetType = request.targetType,
             targetId = request.targetId,
@@ -206,6 +191,36 @@ class ReservationService(
         val saved = reservationRepository.save(updated)
         logger.info("Reservation id={} assigned to {}={}", id, request.targetType, request.targetId)
         return saved.toDto()
+    }
+
+    fun syncCourseReservations(courseId: Long, reservationIds: Set<Long>) {
+        validateAssignableTarget(ReservationTargetType.COURSE, courseId)
+
+        val currentReservations = reservationRepository.findAllByTargetTypeAndTargetIdAndStatus(
+            ReservationTargetType.COURSE,
+            courseId,
+            ReservationStatus.ASSIGNED
+        )
+        val currentIds = currentReservations.mapNotNull { it.id }.toSet()
+        val idsToAdd = reservationIds - currentIds
+        val reservationsToRemove = currentReservations.filter { it.id !in reservationIds }
+
+        if (reservationsToRemove.isNotEmpty()) {
+            ensureCourseNotOperationalForUnassign(courseId)
+        }
+
+        idsToAdd.forEach { reservationId ->
+            assignReservation(
+                reservationId,
+                AssignReservationRequest(
+                    targetType = ReservationTargetType.COURSE,
+                    targetId = courseId
+                )
+            )
+        }
+        reservationsToRemove.forEach { reservation ->
+            unassignReservation(reservation.id!!)
+        }
     }
 
     fun unassignReservation(id: Long): ReservationDto {
