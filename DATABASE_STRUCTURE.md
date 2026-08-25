@@ -277,7 +277,7 @@ posteriores, pero V31/V32 no están registrados en esa tabla. El registro debe c
 procedimiento de despliegue; no debe inventarse un hash Git ni insertarse desde una migración de
 dominio.
 
-## 5. Migraciones objetivo V33 a V35
+## 5. Migraciones objetivo V33 a V36
 
 ### V33: perfil administrativo de tutor/cliente
 
@@ -337,6 +337,19 @@ duplicados por persona y fecha. Luego agrega:
 La aplicación también valida duplicados antes de guardar para ofrecer un error funcional, pero los
 índices son la garantía final ante concurrencia.
 
+### V36: asignaciones multirrol y contexto activo
+
+Archivo: `scripts/migrations/V36__add_multi_role_assignments_and_context_audit.sql`.
+
+V36 es aditiva y todavía debe ejecutarse con el preflight/rollback normal del entorno objetivo.
+Crea `user_role_assignments`, única por `(user_id, role)`, con alta, revocación y actor administrativo;
+crea `user_role_context_events` para auditar login, selección inicial y cambio de espacio. El backfill
+toma `users.role`, los usuarios vinculados a `teaching_staff` y los tutores vigentes de `students`.
+
+`users.role` no se elimina en esta etapa: queda como alias/default de compatibilidad mientras todos
+los consumidores migran a `roles` y `activeRole`. Los índices parciales por usuario y rol sólo incluyen
+asignaciones no revocadas.
+
 ### Asistencia de cursos por fecha sin migración adicional
 
 `course_attendance.course_session_id` sigue vinculando cada asistencia con una clase concreta. Al
@@ -364,6 +377,7 @@ estudiante se calculan desde `course_attendance`; no almacenan porcentajes redun
 - V33: único `client_number` e índice de canal preferido.
 - V34: check 0-100 para Speaking, FKs e índices de examen y entrega de origen.
 - V35: referencia XOR de personal y unicidad parcial por persona/fecha en `staff_attendance`.
+- V36: unicidad de asignación por usuario/rol e índices parciales para asignaciones activas y auditoría.
 - `course_attendance`: unicidad por inscripción/sesión; la fecha se resuelve mediante
   `course_sessions` sin persistir porcentajes redundantes.
 
@@ -377,7 +391,7 @@ estudiante se calculan desde `course_attendance`; no almacenan porcentajes redun
 4. `billing_charges.fiscal_disposition` es `VARCHAR(30)` en producción y `length=20` en JPA.
 5. `schema_version` no registra V31/V32 pese a que sus cambios físicos están presentes.
 
-Estos puntos no forman parte de V33-V35. Deben resolverse mediante una migración de reparación separada,
+Estos puntos no forman parte de V33-V36. Deben resolverse mediante una migración de reparación separada,
 con preflight y verificación histórica.
 
 ## 8. Validaciones mínimas para promover V33-V35

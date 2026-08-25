@@ -32,9 +32,23 @@ data class ChangePasswordRequest @JsonCreator constructor(
 )
 
 data class LoginResponse(
-    val token: String,
-    val refreshToken: String,
-    val user: UserDto
+    val token: String? = null,
+    val refreshToken: String? = null,
+    val user: UserDto? = null,
+    val roleSelectionRequired: Boolean = false,
+    val roleSelectionToken: String? = null,
+    val availableRoles: List<UserRole> = emptyList()
+)
+
+data class RoleSelectionRequest(
+    @field:NotBlank(message = "Role selection token is required")
+    val roleSelectionToken: String,
+    val activeRole: UserRole
+)
+
+data class RoleContextRequest(
+    val activeRole: UserRole,
+    val currentPassword: String? = null
 )
 
 data class RegisterRequest @JsonCreator constructor(
@@ -87,6 +101,8 @@ data class UserDto(
     val firstName: String,
     val lastName: String,
     val role: UserRole,
+    val roles: List<UserRole> = listOf(role),
+    val activeRole: UserRole = role,
     val status: AccountStatus,
     val active: Boolean,
     val mustChangePassword: Boolean
@@ -111,6 +127,8 @@ data class UserProfileDto(
     val documentNumber: String?,
     val emergencyContact: String?,
     val role: UserRole,
+    val roles: List<UserRole> = listOf(role),
+    val activeRole: UserRole = role,
     val status: AccountStatus,
     val active: Boolean,
     val mustChangePassword: Boolean
@@ -154,6 +172,11 @@ data class RefreshTokenRequest @JsonCreator constructor(
     @JsonProperty("refreshToken")
     @field:NotBlank(message = "Refresh token is required")
     val refreshToken: String
+)
+
+data class UserRoleAssignmentsDto(
+    val userId: Long,
+    val roles: List<UserRole>
 )
 
 enum class AdminGuardianActivationMode { ACTIVE, INVITE }

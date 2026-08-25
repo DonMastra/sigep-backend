@@ -97,10 +97,15 @@ Estado real a considerar: `staff` y `exams` todavia dependen directamente de `co
 
 La seguridad se concentra en `security`:
 
-- JWT access token y refresh token.
+- JWT access token y refresh token con una sola autoridad efectiva (`activeRole`).
+- Seleccion inicial multirrol mediante token no funcional de cinco minutos y rotacion de tokens al
+  cambiar entre Administracion, Docencia y Familia.
 - `JwtAuthenticationFilter`.
 - `SecurityConfig`.
 - Roles `ADMIN`, `TEACHER`, `GUARDIAN`.
+- Asignaciones auditables en `user_role_assignments`; `users.role` es compatibilidad temporal y no
+  define una jerarquia entre roles.
+- Revalidacion de clave al elevar a ADMIN y comprobacion de la asignacion vigente en cada request y refresh.
 - Estado de cuenta `PENDING_APPROVAL`, `ACTIVE`, `REJECTED`.
 - Aprobacion/rechazo administrativo de registros publicos.
 - Rate limiting con Bucket4j.
@@ -136,6 +141,9 @@ Los controladores que necesitan actor actual leen `userId` y `userRole` desde `H
 - `V35__enforce_unique_staff_attendance.sql` exige exactamente una referencia de personal y un
   unico registro por persona y fecha. La asistencia de cursos por fecha reutiliza
   `course_sessions`/`course_attendance` y no requiere una migracion posterior.
+- `V36__add_multi_role_assignments_and_context_audit.sql` agrega asignaciones multirrol y eventos
+  de seleccion/cambio, hace backfill desde `users.role`, personal docente y vinculos tutor-estudiante,
+  y conserva la columna singular durante la etapa compatible.
 - Las migraciones SQL se validan sobre una base descartable o dentro de una transaccion
   revertida; no se deben ejecutar automaticamente sobre el contenedor actual sin backup
   y aprobacion explicita.

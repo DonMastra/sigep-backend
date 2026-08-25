@@ -7,6 +7,7 @@ import com.sigep.security.application.dto.ChangePasswordRequest
 import com.sigep.security.application.dto.UserDto
 import com.sigep.security.application.dto.UserProfileDto
 import com.sigep.security.application.service.AuthService
+import com.sigep.security.domain.model.UserRole
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
@@ -34,7 +35,9 @@ class UserProfileController(
         val userId = httpRequest.getAttribute("userId") as? Long
             ?: throw UnauthorizedException("Token inválido o sin userId")
 
-        val profile = authService.getMyProfile(userId)
+        val activeRole = (httpRequest.getAttribute("userRole") as? String)
+            ?.let { runCatching { UserRole.valueOf(it) }.getOrNull() }
+        val profile = authService.getMyProfile(userId, activeRole)
         return ResponseEntity.ok(ApiResponse.success(profile))
     }
 

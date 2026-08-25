@@ -1,6 +1,6 @@
 # API Contract - SiGEP Backend
 
-Contrato REST para integracion del frontend Angular SiGEP con el backend. Este documento refleja el estado del workspace al 2026-08-21.
+Contrato REST para integracion del frontend Angular SiGEP con el backend. Este documento refleja el estado del workspace al 2026-08-25.
 
 ## Informacion General
 
@@ -39,11 +39,16 @@ Flujo esperado:
 
 1. Registrar o crear usuario.
 2. Si el registro es publico, esperar aprobacion administrativa.
-3. Login para obtener `token` y `refreshToken`.
-4. Enviar el access token en endpoints protegidos.
-5. Ante expiracion, usar `POST /api/v1/auth/refresh-token`.
-6. Si el refresh falla, limpiar sesion frontend y volver a login.
-7. Si `user.mustChangePassword` es `true`, navegar a `/auth/change-password` y usar
+3. Login. Una cuenta con un rol obtiene `token` y `refreshToken`; una cuenta multirrol obtiene
+   `roleSelectionRequired`, sus roles y un `roleSelectionToken` de cinco minutos que no autentica APIs.
+4. Si se requiere seleccion, canjear ese token en `POST /api/v1/auth/role-selections`.
+5. Enviar el access token en endpoints protegidos. Contiene una sola autoridad: `activeRole`.
+6. Para cambiar de espacio, usar `PUT /api/v1/auth/role-context`; el backend rota ambos tokens.
+   Elevar desde Docencia o Familia hacia ADMIN exige `currentPassword`.
+7. Ante expiracion, usar `POST /api/v1/auth/refresh-token`. El refresh conserva `activeRole` y
+   vuelve a comprobar que su asignacion no haya sido revocada.
+8. Si el refresh falla, limpiar sesion frontend y volver a login.
+9. Si `user.mustChangePassword` es `true`, navegar a `/auth/change-password` y usar
    `PATCH /api/v1/users/me/password` antes de acceder a cualquier otra operacion protegida.
 
 Mientras el cambio obligatorio esta pendiente, el backend responde `403` con codigo
@@ -54,6 +59,10 @@ Roles:
 - `ADMIN`
 - `TEACHER`
 - `GUARDIAN`
+
+Los roles asignados no forman una jerarquia. La autorizacion efectiva combina un unico `activeRole`
+con las relaciones de dominio (docente-curso y tutor-estudiante). La columna singular `users.role`
+permanece temporalmente como compatibilidad; `user_role_assignments` es el contrato objetivo.
 
 Estados de cuenta:
 
@@ -139,6 +148,8 @@ Base: `/api/v1/auth`
 | Metodo | Ruta | Roles | Descripcion |
 |---|---|---|---|
 | POST | `/login` | Publico | Inicia sesion si la cuenta esta `ACTIVE`. |
+| POST | `/role-selections` | Publico con token de seleccion | Selecciona el espacio inicial y emite una sesion funcional. |
+| PUT | `/role-context` | Autenticado | Cambia el unico rol efectivo y rota tokens; ADMIN exige clave al elevar. |
 | POST | `/register` | Publico | Crea usuario `TEACHER` o `GUARDIAN` en `PENDING_APPROVAL`. |
 | GET | `/registration-status?username=` | Publico | Consulta estado de cuenta para flujo pre-login. |
 | POST | `/refresh-token` | Publico | Renueva token. |
@@ -157,9 +168,24 @@ interface LoginRequest {
 
 ```ts
 interface LoginResponse {
-  token: string;
-  refreshToken: string;
-  user: UserDto;
+  token?: string | null;
+  refreshToken?: string | null;
+  user?: UserDto | null;
+  roleSelectionRequired: boolean;
+  roleSelectionToken?: string | null;
+  availableRoles: Array<'ADMIN' | 'TEACHER' | 'GUARDIAN'>;
+}
+```
+
+```ts
+interface RoleSelectionRequest {
+  roleSelectionToken: string;
+  activeRole: 'ADMIN' | 'TEACHER' | 'GUARDIAN';
+}
+
+interface RoleContextRequest {
+  activeRole: 'ADMIN' | 'TEACHER' | 'GUARDIAN';
+  currentPassword?: string; // obligatorio solo al elevar a ADMIN
 }
 ```
 
@@ -191,6 +217,8 @@ interface UserDto {
   firstName: string;
   lastName: string;
   role: 'ADMIN' | 'TEACHER' | 'GUARDIAN';
+  roles: Array<'ADMIN' | 'TEACHER' | 'GUARDIAN'>;
+  activeRole: 'ADMIN' | 'TEACHER' | 'GUARDIAN';
   status: 'PENDING_APPROVAL' | 'ACTIVE' | 'REJECTED';
   active: boolean;
   mustChangePassword: boolean;
@@ -262,6 +290,14 @@ Base: `/api/v1/admin/users`
 | Metodo | Ruta | Roles | Descripcion |
 |---|---|---|---|
 | GET | `/` | ADMIN | Lista usuarios con filtros administrativos. |
+| GET | `/{userId}/roles` | ADMIN | Lista asignaciones activas. |
+| PUT | `/{userId}/roles/{role}` | ADMIN | Otorga o reactiva un rol y registra al actor. |
+| DELETE | `/{userId}/roles/{role}` | ADMIN | Revoca un rol sin permitir dejar la cuenta sin asignaciones. |
+
+Al otorgar `GUARDIAN` se provisiona el perfil tutor/cliente si falta. Otorgar `TEACHER` por este
+endpoint exige un `teaching_staff` activo vinculado; vincular personal docente también asegura la
+asignacion TEACHER. Los códigos relevantes son `ROLE_NOT_ASSIGNED`, `LAST_ROLE_CANNOT_BE_REVOKED`,
+`TEACHER_STAFF_LINK_REQUIRED`, `ROLE_SELECTION_TOKEN_INVALID` y `ADMIN_ROLE_REAUTHENTICATION_FAILED`.
 
 Query:
 
