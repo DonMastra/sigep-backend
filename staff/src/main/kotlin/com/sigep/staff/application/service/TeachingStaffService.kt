@@ -11,6 +11,7 @@ import com.sigep.security.domain.model.AccountStatus
 import com.sigep.security.domain.model.User
 import com.sigep.security.domain.model.UserRole
 import com.sigep.security.domain.repository.UserRepository
+import com.sigep.security.application.service.UserRoleAssignmentService
 import com.sigep.staff.application.dto.*
 import com.sigep.staff.domain.model.AttendanceStatus
 import com.sigep.staff.domain.model.TeachingStaff
@@ -36,7 +37,8 @@ class TeachingStaffService(
     private val courseRepository: CourseRepository,
     private val enrollmentRepository: EnrollmentRepository,
     private val userRepository: UserRepository,
-    private val passwordEncoder: PasswordEncoder
+    private val passwordEncoder: PasswordEncoder,
+    private val roleAssignmentService: UserRoleAssignmentService
 ) {
 
     companion object {
@@ -190,6 +192,7 @@ class TeachingStaffService(
         )
 
         val savedStaff = teachingStaffRepository.save(staff)
+        roleAssignmentService.ensureAssignment(user, UserRole.TEACHER)
         applyExactCourseAssignments(savedStaff, request.assignedCourseIds, request.confirmCourseReassignments)
         log.info("Teaching staff created successfully with id: {}", savedStaff.id)
 
@@ -218,7 +221,7 @@ class TeachingStaffService(
         }
 
         val linkedUserId = request.linkedUserId ?: staff.linkedUserId
-        val linkedUser = linkedUserId?.let { validateTeacherAccount(it, staff.id) }
+        val linkedUser = linkedUserId?.let { validateLinkableTeachingAccount(it, staff.id) }
 
         val updatedStaff = staff.copy(
             firstName = request.firstName ?: staff.firstName,
@@ -243,6 +246,7 @@ class TeachingStaffService(
         val savedStaff = teachingStaffRepository.save(updatedStaff)
         request.isActive?.let { savedStaff.isActive = it }
         linkedUser?.let { user ->
+            roleAssignmentService.ensureAssignment(user, UserRole.TEACHER)
             userRepository.save(
                 user.copy(
                     firstName = savedStaff.firstName,
@@ -424,7 +428,19 @@ class TeachingStaffService(
         val user = userRepository.findById(userId)
             .orElseThrow { ResourceNotFoundException("Teacher account not found with id: $userId") }
         if (!isEligibleTeachingAccount(user)) {
-            throw BusinessException("Linked account must be an active TEACHER or ADMIN assigned to teaching staff")
+            throw BusinessException("Linked account must be active and have the TEACHER role assigned")
+        }
+        teachingStaffRepository.findByLinkedUserId(userId)?.let { linked ->
+            if (linked.id != currentStaffId) throw BusinessException("Teacher account is already linked to another staff record")
+        }
+        return user
+    }
+
+    private fun validateLinkableTeachingAccount(userId: Long, currentStaffId: Long?): User {
+        val user = userRepository.findById(userId)
+            .orElseThrow { ResourceNotFoundException("Teacher account not found with id: $userId") }
+        if (user.status != AccountStatus.ACTIVE || !user.active) {
+            throw BusinessException("Linked account must be active before assigning teaching staff")
         }
         teachingStaffRepository.findByLinkedUserId(userId)?.let { linked ->
             if (linked.id != currentStaffId) throw BusinessException("Teacher account is already linked to another staff record")
@@ -461,7 +477,7 @@ class TeachingStaffService(
     }
 
     private fun isEligibleTeachingAccount(user: User): Boolean =
-        user.role in setOf(UserRole.TEACHER, UserRole.ADMIN) &&
+        roleAssignmentService.isRoleActive(user.id!!, UserRole.TEACHER) &&
             user.status == AccountStatus.ACTIVE &&
             user.active
 

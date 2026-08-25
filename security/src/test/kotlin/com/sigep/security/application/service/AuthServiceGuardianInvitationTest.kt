@@ -31,14 +31,24 @@ class AuthServiceGuardianInvitationTest {
     private val invitationRepository = mockk<GuardianInvitationRepository>()
     private val passwordEncoder = mockk<PasswordEncoder>()
     private val jwtTokenProvider = mockk<JwtTokenProvider>()
+    private val roleAssignmentService = mockk<UserRoleAssignmentService>()
     private lateinit var service: AuthService
 
     @BeforeEach
     fun setUp() {
-        service = AuthService(userRepository, registrationRepository, invitationRepository, passwordEncoder, jwtTokenProvider)
+        service = AuthService(
+            userRepository,
+            registrationRepository,
+            invitationRepository,
+            passwordEncoder,
+            jwtTokenProvider,
+            roleAssignmentService
+        )
         every { userRepository.existsByUsernameIgnoreCase(any()) } returns false
         every { userRepository.existsByEmailIgnoreCase(any()) } returns false
         every { passwordEncoder.encode(any()) } returns "encoded"
+        every { roleAssignmentService.ensureAssignment(any(), UserRole.GUARDIAN, any()) } returns listOf(UserRole.GUARDIAN)
+        every { roleAssignmentService.activeRoles(any<User>()) } returns listOf(UserRole.GUARDIAN)
     }
 
     @Test

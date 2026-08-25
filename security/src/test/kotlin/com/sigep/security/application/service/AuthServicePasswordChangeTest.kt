@@ -19,7 +19,6 @@ import java.util.Optional
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
-import kotlin.test.assertNotNull
 
 class AuthServicePasswordChangeTest {
     private val userRepository = mockk<UserRepository>()
@@ -27,11 +26,20 @@ class AuthServicePasswordChangeTest {
     private val invitationRepository = mockk<GuardianInvitationRepository>()
     private val passwordEncoder = mockk<PasswordEncoder>()
     private val jwtTokenProvider = mockk<JwtTokenProvider>()
+    private val roleAssignmentService = mockk<UserRoleAssignmentService>()
     private lateinit var service: AuthService
 
     @BeforeEach
     fun setUp() {
-        service = AuthService(userRepository, registrationRepository, invitationRepository, passwordEncoder, jwtTokenProvider)
+        service = AuthService(
+            userRepository,
+            registrationRepository,
+            invitationRepository,
+            passwordEncoder,
+            jwtTokenProvider,
+            roleAssignmentService
+        )
+        every { roleAssignmentService.activeRoles(any<User>()) } returns listOf(UserRole.ADMIN)
     }
 
     @Test

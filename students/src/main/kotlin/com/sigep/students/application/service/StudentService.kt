@@ -8,6 +8,7 @@ import com.sigep.common.application.exception.ValidationException
 import com.sigep.common.domain.exception.ResourceNotFoundException
 import com.sigep.common.domain.exception.BusinessException
 import com.sigep.common.application.service.EnrollmentServiceProvider
+import com.sigep.common.application.service.UserRoleMembershipProvider
 import com.sigep.security.domain.model.UserRole
 import com.sigep.security.domain.repository.UserRepository
 import com.sigep.students.application.dto.*
@@ -40,7 +41,8 @@ class StudentService(
     private val enrollmentServiceProvider: EnrollmentServiceProvider,  // Inyectamos la interfaz, no el repositorio
     private val userRepository: UserRepository,
     private val guardianLinkEventRepository: StudentGuardianLinkEventRepository,
-    private val identityNormalizer: StudentIdentityNormalizer
+    private val identityNormalizer: StudentIdentityNormalizer,
+    private val roleMembershipProviders: List<UserRoleMembershipProvider> = emptyList()
 ) {
 
     private val logger = LoggerFactory.getLogger(StudentService::class.java)
@@ -280,7 +282,7 @@ class StudentService(
         val guardianUser = userRepository.findById(guardianUserId)
             .orElseThrow { ResourceNotFoundException("Guardian user not found with id: $guardianUserId") }
 
-        if (guardianUser.role != UserRole.GUARDIAN) {
+        if (!hasActiveRole(guardianUser.id!!, guardianUser.role, UserRole.GUARDIAN)) {
             throw ForbiddenException("Only GUARDIAN users can self-register students")
         }
 
@@ -627,7 +629,7 @@ class StudentService(
     private fun validateActiveGuardian(guardianId: Long) {
         val guardian = userRepository.findById(guardianId)
             .orElseThrow { ResourceNotFoundException("Guardian user not found with id: $guardianId") }
-        if (guardian.role != UserRole.GUARDIAN || !guardian.active) {
+        if (!hasActiveRole(guardian.id!!, guardian.role, UserRole.GUARDIAN) || !guardian.active) {
             throw ValidationException(
                 message = "Guardian must be an active GUARDIAN account",
                 code = "GUARDIAN_NOT_ACTIVE",
@@ -651,6 +653,10 @@ class StudentService(
             )
         }
     }
+
+    private fun hasActiveRole(userId: Long, legacyRole: UserRole, requiredRole: UserRole): Boolean =
+        roleMembershipProviders.firstOrNull()?.hasActiveRole(userId, requiredRole.name)
+            ?: (legacyRole == requiredRole)
 
     private fun findByIdentity(identity: NormalizedStudentDocument): Student? {
         val normalized = identity.normalizedNumber ?: return null
