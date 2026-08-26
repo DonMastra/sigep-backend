@@ -688,6 +688,32 @@ debe reenviar indicando `courseSessionId`. Al enviarlo, su curso y fecha deben c
 La clave idempotente permanece `(enrollmentId, courseSessionId)` y las respuestas
 exponen `courseSessionId`, `attendanceDate` y `studentName` cuando existe el estudiante.
 
+### Estadisticas acumuladas de asistencia
+
+`GET /course/{courseId}/statistics` calcula las clases teoricas desde el inicio del
+curso hasta la fecha actual (o hasta el fin configurado, si ya ocurrio). Cuenta cada
+ocurrencia semanal de cada reserva asignada: lunes/miercoles aporta dos clases por
+semana y lunes/miercoles/viernes aporta tres; dos slots distintos el mismo dia tambien
+cuentan como dos clases. Para cada inscripcion, el computo comienza en la fecha posterior
+entre el inicio del curso y la fecha de inscripcion.
+
+La base `THEORETICAL_CURRENT_SCHEDULE` usa las reservas actualmente asignadas y no
+descuenta feriados ni recesos. `REGISTERED_ONLY` se devuelve si falta un horario y solo
+pueden informarse los registros existentes. `scheduledClassesTotal` representa el total
+teorico del curso y `scheduledClassesToDate` las clases transcurridas. Por estudiante,
+`registeredClasses` contiene estados cargados y `unregisteredClasses` deriva el estado
+"sin registrar"; no se persiste un nuevo valor en `AttendanceStatus`.
+
+Las tasas tienen denominadores explicitos:
+
+- `attendanceRate`: `(PRESENT + LATE) / registeredClasses`; no trata "sin registrar" como ausencia.
+- `confirmedPresenceRate`: `(PRESENT + LATE) / scheduledClassesToDate`.
+- `dataCoverageRate`: `registeredClasses / scheduledClassesToDate`.
+
+En el acumulado del curso, `expectedAttendanceRecordsToDate` suma las clases teoricas
+transcurridas de todas las inscripciones y `unregisteredRecords` suma las pendientes de
+carga. `calculationCutoff` informa la fecha efectiva usada por el calculo.
+
 ## Course Materials
 
 Base: `/api/v1/materials`

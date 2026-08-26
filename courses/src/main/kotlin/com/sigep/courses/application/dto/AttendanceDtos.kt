@@ -76,26 +76,51 @@ data class AttendanceStatisticsDto(
     val enrollmentId: Long,
     val studentId: Long,
     val studentName: String? = null,
+    /** Legacy alias for registeredClasses. */
     val totalClasses: Long,
+    val scheduledClassesTotal: Long,
+    val scheduledClassesToDate: Long,
+    val registeredClasses: Long,
+    val unregisteredClasses: Long,
     val present: Long,
     val absent: Long,
     val late: Long,
     val excusedAbsence: Long,
     val sickLeave: Long,
-    val attendanceRate: Double // Percentage (present + late) / total
+    /** Percentage of effective attendance over registered classes. */
+    val attendanceRate: Double,
+    /** Percentage of effective attendance over theoretical classes elapsed. */
+    val confirmedPresenceRate: Double,
+    /** Percentage of theoretical classes elapsed that have an attendance record. */
+    val dataCoverageRate: Double,
+    val calculationCutoff: LocalDate,
+    val calculationBasis: AttendanceCalculationBasis
 )
 
 data class CourseAttendanceStatisticsDto(
     val courseId: Long,
+    val scheduledClassesTotal: Long,
+    val scheduledClassesToDate: Long,
+    val expectedAttendanceRecordsToDate: Long,
     val totalRecords: Long,
+    val unregisteredRecords: Long,
     val present: Long,
     val absent: Long,
     val late: Long,
     val excusedAbsence: Long,
     val sickLeave: Long,
     val attendanceRate: Double,
+    val confirmedPresenceRate: Double,
+    val dataCoverageRate: Double,
+    val calculationCutoff: LocalDate,
+    val calculationBasis: AttendanceCalculationBasis,
     val students: List<AttendanceStatisticsDto>
 )
+
+enum class AttendanceCalculationBasis {
+    THEORETICAL_CURRENT_SCHEDULE,
+    REGISTERED_ONLY
+}
 
 data class CourseAttendanceReportDto(
     val courseId: Long,
