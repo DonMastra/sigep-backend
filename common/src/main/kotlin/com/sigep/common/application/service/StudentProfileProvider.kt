@@ -21,6 +21,7 @@ interface StudentProfileProvider {
 data class StudentProfileInfo(
     val id: Long,
     val guardianId: Long?,
+    val guardianIds: Set<Long> = guardianId?.let(::setOf) ?: emptySet(),
     val firstName: String,
     val lastName: String,
     val email: String,

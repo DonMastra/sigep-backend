@@ -2,6 +2,7 @@ package com.sigep.students.application.dto
 
 import com.sigep.common.application.dto.EnrollmentSummaryDto
 import com.sigep.students.domain.model.StudentDocumentType
+import com.sigep.security.domain.model.AccountStatus
 import jakarta.validation.constraints.*
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -18,6 +19,8 @@ data class StudentDto(
     val dateOfBirth: LocalDate,
     val enrollmentDate: LocalDate,
     val guardianId: Long?,
+    val guardianIds: List<Long>,
+    val guardians: List<StudentGuardianDto>,
     val currentCourseId: Long?,
     val currentCourseName: String?,
     val currentCourses: List<EnrollmentSummaryDto>,
@@ -48,6 +51,8 @@ data class StudentDetailDto(
     val emergencyContact: String,
     val enrollmentDate: LocalDate,
     val guardianId: Long?,
+    val guardianIds: List<Long>,
+    val guardians: List<StudentGuardianDto>,
     val medicalNotes: String?,
     val currentCourseId: Long?,
     val currentCourseName: String?,
@@ -58,6 +63,19 @@ data class StudentDetailDto(
     val courseHistory: List<EnrollmentSummaryDto>,  // Usar DTO de common
     val createdAt: LocalDateTime,
     val updatedAt: LocalDateTime
+)
+
+data class StudentGuardianDto(
+    val guardianId: Long,
+    val firstName: String,
+    val lastName: String,
+    val email: String,
+    val relationshipType: String?,
+    val primary: Boolean,
+    val canViewAcademic: Boolean,
+    val billingContact: Boolean,
+    val active: Boolean,
+    val accountStatus: AccountStatus
 )
 
 
@@ -99,6 +117,12 @@ data class CreateStudentRequest(
     val active: Boolean = true,
 
     val guardianId: Long? = null,
+
+    /** Additive multi-guardian contract. When present, it takes precedence over guardianId. */
+    val guardianIds: Set<Long>? = null,
+
+    /** Optional primary compatibility pointer. It must belong to guardianIds. */
+    val primaryGuardianId: Long? = null,
 
     val medicalNotes: String? = null,
 
@@ -166,6 +190,11 @@ data class UpdateStudentRequest(
 
     val guardianId: Long? = null,
 
+    /** null keeps current relationships; an empty set removes every academic guardian. */
+    val guardianIds: Set<Long>? = null,
+
+    val primaryGuardianId: Long? = null,
+
     val medicalNotes: String? = null,
 
     val active: Boolean? = null,
@@ -198,6 +227,12 @@ enum class StudentIdentityMatchOutcome {
 
 data class LinkStudentGuardianRequest(
     @field:NotNull val guardianId: Long,
+    @field:NotBlank @field:Size(max = 500) val reason: String
+)
+
+data class ReplaceStudentGuardiansRequest(
+    val guardianIds: Set<Long>,
+    val primaryGuardianId: Long? = null,
     @field:NotBlank @field:Size(max = 500) val reason: String
 )
 

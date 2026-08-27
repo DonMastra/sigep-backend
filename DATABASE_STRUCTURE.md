@@ -2,7 +2,7 @@
 
 ## 1. Alcance y fuente de verdad
 
-**Última actualización documental:** 2026-08-23
+**Última actualización documental:** 2026-08-26
 
 **Última auditoría productiva:** 2026-08-21
 
@@ -16,8 +16,7 @@ El documento distingue dos estados que no deben mezclarse:
 
 - **Snapshot productivo observado:** catálogo real de `sigep_prod` el 21/08/2026, antes de promover
   V33, V34 y V35.
-- **Esquema objetivo actual:** entidades y scripts manuales del repositorio hasta V35, coincidente
-  con el entorno local informado como actualizado con V34 y V35 el 23/08/2026.
+- **Esquema objetivo actual:** entidades y scripts manuales del repositorio hasta V36.
 
 El orden de precedencia para describir un ambiente desplegado es:
 
@@ -29,17 +28,19 @@ El orden de precedencia para describir un ambiente desplegado es:
 Los scripts SQL son migraciones manuales; el proyecto no usa Flyway ni Liquibase. QA y producción
 deben arrancar con `JPA_DDL_AUTO=validate`: Hibernate valida, pero no repara el esquema.
 
-### Esquema objetivo del repositorio hasta V35
+### Esquema objetivo del repositorio hasta V36
 
 El estado objetivo agrega sobre el snapshot productivo:
 
 1. **V33:** tabla `guardian_client_profiles`; el total pasa de 59 a 60 tablas.
 2. **V34:** soporte persistente de Speaking y recuperatorios por categoría en las tablas de exámenes.
 3. **V35:** integridad y unicidad diaria de asistencia para personal docente y no docente.
+4. **V36:** relación multirresponsable `student_guardian_relationships`; el total objetivo pasa a
+   61 tablas y `students.guardian_id` queda como principal opcional compatible.
 
 V34 y V35 no crean tablas nuevas. Los filtros de estudiantes, la visualización acumulada de
 asistencia y la toma de asistencia por fecha son cambios de consulta, servicio y UI. La asistencia
-por fecha reutiliza `course_sessions` y `course_attendance`; no requiere una V36.
+por fecha reutiliza `course_sessions` y `course_attendance`; no requirió una migración adicional.
 
 ## 2. Snapshot productivo antes de V33
 
@@ -72,14 +73,18 @@ debe exponer ambas dimensiones sin mezclarlas.
 |---|---:|---|
 | `students` | 546 | Perfil académico del estudiante. |
 | `student_guardian_link_events` | 357 | Auditoría inmutable de vínculos y reasignaciones. |
+| `student_guardian_relationships` | 504 | Vínculos académicos activos conciliados, incluidos responsables múltiples. |
 
-- `students.guardian_id -> users.id` es nullable y representa **un único tutor vigente**.
-- `student_guardian_link_events` no reemplaza ese vínculo: registra actor, origen, acción, tutor
-  anterior/nuevo, motivo y fecha.
+- `student_guardian_relationships` es la fuente de verdad del acceso académico y admite varios
+  responsables activos por estudiante.
+- `students.guardian_id -> users.id` es nullable y conserva solo el responsable principal opcional
+  para compatibilidad. Puede ser `NULL` aunque existan dos responsables válidos.
+- `student_guardian_link_events` registra actor, origen, acción, tutor anterior/nuevo, motivo y fecha.
 - Hay 357 estudiantes vinculados y 189 sin tutor; 308 estudiantes están activos.
 - 312 tutores tienen al menos un estudiante; 290 no tienen ninguno. El máximo observado es 3.
 - Los 357 eventos productivos son `LINKED` con origen `ADMIN`.
-- No se detectaron tutores inexistentes o con rol distinto de `GUARDIAN` en `students.guardian_id`.
+- V36 retrocompleta las asociaciones escalares existentes y habilita altas posteriores sin exigir
+  un `legacy_reconciliation_run`.
 
 ### Cursos, cursadas y asistencia
 
@@ -123,8 +128,8 @@ Estado exacto observado:
 
 - 211 solicitudes `APPROVED`, todas `REGULAR_PROMOTION`, origen `ADMIN` y estudiante `EXISTING`.
 - 1055 entradas de ledger `PENDING` por ARS 94.650.000 en total.
-- 180 tutores distintos tienen solicitudes; no hay discrepancias entre el tutor de la solicitud y
-  `students.guardian_id`.
+- 180 tutores distintos tienen solicitudes. La titularidad de cada solicitud se lee desde
+  `tuition_applications.guardian_user_id` y no se infiere del responsable académico principal.
 
 El ledger es deuda académica. No es un recibo, pago ni factura fiscal.
 
@@ -300,8 +305,8 @@ La migración:
 - Es reejecutable (`IF NOT EXISTS`, `ON CONFLICT DO NOTHING`).
 - Retrocompleta exactamente los usuarios con rol `GUARDIAN`; no crea perfiles para ADMIN/TEACHER.
 - Valida las dos FKs después del backfill; la migración falla si detecta un perfil huérfano.
-- No crea otra tabla de relación tutor-estudiante: `students.guardian_id` sigue siendo la fuente
-  vigente y `student_guardian_link_events` su auditoría.
+- V33 no creó otra tabla de relación tutor-estudiante; V36 la incorpora posteriormente mediante
+  `student_guardian_relationships`, sin alterar perfiles comerciales ni datos financieros.
 - No copia ni duplica ledger, cargos, pagos, recibos o facturas.
 - Llevará el total del esquema a 60 tablas cuando sea promovida.
 
@@ -352,6 +357,8 @@ estudiante se calculan desde `course_attendance`; no almacenan porcentajes redun
 
 - `users`: únicos por `username` y `email`; checks de rol y estado.
 - `students`: PK BIGINT, único `student_number`; índice de tutor e identidad normalizada creado por V27.
+- `student_guardian_relationships`: único `(student_id, guardian_user_id)` y un único principal
+  activo opcional por estudiante; índices por estudiante, responsable y contacto de facturación.
 - `student_guardian_link_events`: índices por estudiante/fecha y tutor.
 - `tuition_applications`: FKs a tutor, actor, estudiante, ciclo, nivel, plan y política; idempotencia
   opcional y unicidad parcial para solicitudes abiertas.
