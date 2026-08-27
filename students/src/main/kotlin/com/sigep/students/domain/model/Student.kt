@@ -57,7 +57,10 @@ data class Student(
     @Column(name = "normalized_document_number", length = 50)
     val normalizedDocumentNumber: String? = null,
 
-    /** Referencia al User con rol GUARDIAN. Nullable: un estudiante puede no tener tutor registrado. */
+    /**
+     * Tutor principal opcional para compatibilidad con integraciones legadas.
+     * La fuente de verdad para acceso académico es student_guardian_relationships.
+     */
     @Column(nullable = true)
     val guardianId: Long? = null,
 

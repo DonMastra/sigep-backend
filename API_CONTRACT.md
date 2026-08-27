@@ -367,12 +367,13 @@ Base: `/api/v1/students`
 | GET | `/` | ADMIN, TEACHER | Lista estudiantes paginados. |
 | GET | `/{id}` | ADMIN, TEACHER, GUARDIAN | Detalle completo del estudiante. |
 | GET | `/search?query=` | ADMIN, TEACHER | Busca por nombre, nombre completo, email, documento o matricula, con paginacion y orden. |
-| GET | `/guardian/{guardianId}` | ADMIN, TEACHER, GUARDIAN | Estudiantes asociados a guardian. |
+| GET | `/guardian/{guardianId}` | ADMIN, GUARDIAN | Estudiantes visibles para ese responsable academico. |
 | POST | `/` | ADMIN | Crea estudiante. |
 | POST | `/self-registration` | GUARDIAN | Crea estudiante vinculado al guardian autenticado. |
 | POST | `/identity-match` | ADMIN, GUARDIAN | Detecta coincidencias antes de crear; para GUARDIAN no revela datos de un estudiante ajeno. |
 | PUT | `/{id}` | ADMIN | Actualiza estudiante. |
-| PUT | `/{id}/guardian` | ADMIN | Vincula o reasigna el unico tutor vigente; exige `guardianId` y `reason` y genera auditoria. |
+| PUT | `/{id}/guardian` | ADMIN | Compatibilidad: reemplaza el conjunto por un unico responsable principal; exige `guardianId` y `reason`. |
+| PUT | `/{id}/guardians` | ADMIN | Reemplaza los responsables academicos activos; acepta varios IDs y un principal opcional. |
 | DELETE | `/{id}` | ADMIN | Elimina estudiante. |
 | POST | `/{id}/photo` | ADMIN | Sube foto multipart con parte `file`. |
 | GET | `/{id}/photo` | ADMIN, TEACHER, GUARDIAN | Descarga imagen. |
@@ -405,9 +406,9 @@ interface StudentDto {
   phoneNumber?: string;
   dateOfBirth?: string;
   address?: string;
-  guardianName?: string;
-  guardianPhone?: string;
-  guardianEmail?: string;
+  guardianId: number | null;
+  guardianIds: number[];
+  guardians: StudentGuardianDto[];
   documentNumber?: string;
   currentCourseId?: number;
   currentCourseName?: string;
@@ -418,6 +419,25 @@ interface StudentDto {
   photoUrl?: string;
   createdAt?: string;
   updatedAt?: string;
+}
+
+interface StudentGuardianDto {
+  guardianId: number;
+  firstName: string;
+  lastName: string;
+  email: string;
+  relationshipType?: string | null;
+  primary: boolean;
+  canViewAcademic: boolean;
+  billingContact: boolean;
+  active: boolean;
+  accountStatus: 'PENDING_APPROVAL' | 'ACTIVE' | 'REJECTED';
+}
+
+interface ReplaceStudentGuardiansRequest {
+  guardianIds: number[];
+  primaryGuardianId?: number | null;
+  reason: string;
 }
 ```
 
@@ -437,6 +457,18 @@ clave de identidad y puede repetirse, especialmente para menores.
 `POST /identity-match` devuelve `NONE`, `OWNED`, `UNASSIGNED` o `VERIFICATION_REQUIRED`.
 GUARDIAN solo recibe `studentId` y nombre para un estudiante ya vinculado a su propia cuenta;
 cualquier coincidencia ajena se reduce a `VERIFICATION_REQUIRED`.
+
+Un estudiante puede tener varios responsables activos. Todos los vinculos con
+`canViewAcademic=true` autorizan el seguimiento academico. `guardianId` conserva solamente el
+responsable principal opcional para clientes antiguos; no es la fuente de verdad del acceso.
+Si hay dos o mas responsables, `primaryGuardianId` puede quedar en `null` y el backend no elige
+uno de forma arbitraria. La titularidad financiera continua en la solicitud de matricula, la
+cuenta de facturacion y sus cargos; modificar responsables academicos no la reasigna.
+
+`POST /students` y `PUT /students/{id}` aceptan de forma aditiva `guardianIds` y
+`primaryGuardianId`. En una actualizacion, omitir `guardianIds` conserva las relaciones y enviar
+`[]` las desactiva. Las cuentas pendientes importadas pueden vincularse, pero una cuenta
+`REJECTED` no es asignable.
 
 ## Courses
 
