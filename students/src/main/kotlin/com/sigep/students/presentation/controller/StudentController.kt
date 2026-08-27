@@ -10,6 +10,7 @@ import com.sigep.students.application.dto.StudentDto
 import com.sigep.students.application.dto.StudentIdentityMatchDto
 import com.sigep.students.application.dto.StudentIdentityMatchRequest
 import com.sigep.students.application.dto.LinkStudentGuardianRequest
+import com.sigep.students.application.dto.ReplaceStudentGuardiansRequest
 import com.sigep.students.application.dto.UpdateStudentRequest
 import com.sigep.students.application.service.StudentService
 import com.sigep.security.application.annotation.RequireAdmin
@@ -99,7 +100,7 @@ class StudentController(
 
     @GetMapping("/guardian/{guardianId}")
     @RequireStaffOrGuardian
-    @Operation(summary = "Get students by guardian", description = "Retrieve all students assigned to a specific guardian")
+    @Operation(summary = "Get students by guardian", description = "Retrieve all students visible to a specific academic guardian")
     fun getStudentsByGuardian(
         @PathVariable guardianId: Long,
         @RequestParam(defaultValue = "0") page: Int,
@@ -174,7 +175,7 @@ class StudentController(
 
     @PutMapping("/{id}/guardian")
     @RequireAdmin
-    @Operation(summary = "Link guardian", description = "Links or reassigns the single current guardian with an audit event")
+    @Operation(summary = "Link one guardian", description = "Legacy operation that replaces the guardian set with one primary guardian")
     fun linkGuardian(
         @PathVariable id: Long,
         @Valid @RequestBody request: LinkStudentGuardianRequest,
@@ -185,6 +186,32 @@ class StudentController(
             ApiResponse.success(
                 studentService.linkGuardian(id, request.guardianId, actorUserId, request.reason),
                 "Guardian linked successfully"
+            )
+        )
+    }
+
+    @PutMapping("/{id}/guardians")
+    @RequireAdmin
+    @Operation(
+        summary = "Replace academic guardians",
+        description = "Replaces the active guardian relationships and optionally selects one primary compatibility guardian"
+    )
+    fun replaceGuardians(
+        @PathVariable id: Long,
+        @Valid @RequestBody request: ReplaceStudentGuardiansRequest,
+        httpRequest: HttpServletRequest
+    ): ResponseEntity<ApiResponse<StudentDto>> {
+        val actorUserId = requireActorUserId(httpRequest.getAttribute("userId") as? Long)
+        return ResponseEntity.ok(
+            ApiResponse.success(
+                studentService.replaceGuardians(
+                    id,
+                    request.guardianIds,
+                    request.primaryGuardianId,
+                    actorUserId,
+                    request.reason
+                ),
+                "Student guardians updated successfully"
             )
         )
     }

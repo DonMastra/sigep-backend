@@ -2,6 +2,7 @@ package com.sigep.courses.application.service
 
 import com.sigep.common.application.dto.PageResponse
 import com.sigep.common.application.exception.ForbiddenException
+import com.sigep.common.application.service.ReservationInfo
 import com.sigep.common.application.service.StudentProfileProvider
 import com.sigep.common.application.service.ReservationInfoProvider
 import com.sigep.common.domain.exception.BusinessException
@@ -10,6 +11,7 @@ import com.sigep.courses.application.dto.*
 import com.sigep.courses.domain.model.Attendance
 import com.sigep.courses.domain.model.AttendanceStatus
 import com.sigep.courses.domain.model.CourseSession
+import com.sigep.courses.domain.model.Enrollment
 import com.sigep.courses.domain.model.SessionStatus
 import com.sigep.courses.domain.repository.AttendanceRepository
 import com.sigep.courses.domain.repository.CourseRepository
@@ -20,9 +22,11 @@ import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
+import java.time.temporal.ChronoUnit
 
 @Service
 @Transactional
@@ -232,11 +236,18 @@ class AttendanceService(
             throw BusinessException("Attendance date cannot be after the course end date")
         }
 
-        val schedule = reservationInfoProvider.getReservationByCourse(courseId)
-            ?: throw BusinessException("The course has no assigned schedule to create the session for the selected date")
-        if (schedule.dayOfWeek != request.date.dayOfWeek.name) {
-            throw BusinessException("The selected date does not match the assigned course schedule")
+        val schedules = reservationInfoProvider.getReservationsByCourse(courseId)
+        if (schedules.isEmpty()) {
+            throw BusinessException("The course has no assigned schedule to create the session for the selected date")
         }
+        val schedulesForDate = schedules.filter { it.dayOfWeek == request.date.dayOfWeek.name }
+        if (schedulesForDate.isEmpty()) {
+            throw BusinessException("The selected date does not match any assigned course schedule")
+        }
+        if (schedulesForDate.size > 1) {
+            throw BusinessException("More than one assigned course schedule matches the selected date; create or choose the corresponding session")
+        }
+        val schedule = schedulesForDate.single()
 
         val startTime = parseScheduleTime(schedule.startTime, "start")
         val endTime = parseScheduleTime(schedule.endTime, "end")
@@ -294,73 +305,96 @@ class AttendanceService(
         logger.info("Attendance deleted successfully with id: {}", id)
     }
 
-    fun getAttendanceStatistics(enrollmentId: Long): AttendanceStatisticsDto {
+    fun getAttendanceStatistics(
+        enrollmentId: Long,
+        cutoffDate: LocalDate = LocalDate.now()
+    ): AttendanceStatisticsDto {
         logger.info("Calculating attendance statistics for enrollment: {}", enrollmentId)
 
         val enrollment = enrollmentRepository.findById(enrollmentId)
             .orElseThrow { ResourceNotFoundException("Enrollment not found with id: $enrollmentId") }
+        val courseId = requireNotNull(enrollment.course.id)
+        val records = attendanceRepository.findByEnrollmentId(
+            enrollmentId,
+            PageRequest.of(0, Int.MAX_VALUE)
+        ).content
 
-        val totalClasses = attendanceRepository.findByEnrollmentId(enrollmentId, PageRequest.of(0, Int.MAX_VALUE))
-            .totalElements
-        val present = attendanceRepository.countByEnrollmentIdAndStatus(enrollmentId, AttendanceStatus.PRESENT)
-        val absent = attendanceRepository.countByEnrollmentIdAndStatus(enrollmentId, AttendanceStatus.ABSENT)
-        val late = attendanceRepository.countByEnrollmentIdAndStatus(enrollmentId, AttendanceStatus.LATE)
-        val excusedAbsence = attendanceRepository.countByEnrollmentIdAndStatus(enrollmentId, AttendanceStatus.EXCUSED_ABSENCE)
-        val sickLeave = attendanceRepository.countByEnrollmentIdAndStatus(enrollmentId, AttendanceStatus.SICK_LEAVE)
-
-        val attendanceRate = if (totalClasses > 0) {
-            ((present + late).toDouble() / totalClasses.toDouble()) * 100
-        } else 0.0
-
-        return AttendanceStatisticsDto(
-            enrollmentId = enrollmentId,
-            studentId = enrollment.studentId,
-            studentName = studentProfileProvider.getStudentProfile(enrollment.studentId)?.let { "${it.firstName} ${it.lastName}".trim() },
-            totalClasses = totalClasses,
-            present = present,
-            absent = absent,
-            late = late,
-            excusedAbsence = excusedAbsence,
-            sickLeave = sickLeave,
-            attendanceRate = attendanceRate
+        return buildAttendanceStatistics(
+            enrollment = enrollment,
+            studentName = studentProfileProvider.getStudentProfile(enrollment.studentId)
+                ?.let { "${it.firstName} ${it.lastName}".trim() },
+            records = records,
+            schedules = reservationInfoProvider.getReservationsByCourse(courseId),
+            requestedCutoff = cutoffDate
         )
     }
 
     @Transactional(readOnly = true)
-    fun getCourseAttendanceStatistics(courseId: Long): CourseAttendanceStatisticsDto {
+    fun getCourseAttendanceStatistics(
+        courseId: Long,
+        cutoffDate: LocalDate = LocalDate.now()
+    ): CourseAttendanceStatisticsDto {
         logger.info("Calculating cumulative attendance statistics for course: {}", courseId)
 
+        val course = courseRepository.findById(courseId)
+            .orElseThrow { ResourceNotFoundException("Course not found with id: $courseId") }
         val enrollments = enrollmentRepository.findAllByCourseIdOrderByStudentIdAsc(courseId)
         val attendances = attendanceRepository.findAllByCourseId(courseId)
         val attendancesByEnrollment = attendances.groupBy { it.enrollment.id }
         val profiles = studentProfileProvider.getStudentProfiles(enrollments.map { it.studentId })
+        val schedules = reservationInfoProvider.getReservationsByCourse(courseId)
 
         val studentStatistics = enrollments.map { enrollment ->
             val records = attendancesByEnrollment[enrollment.id].orEmpty()
             buildAttendanceStatistics(
-                enrollmentId = requireNotNull(enrollment.id),
-                studentId = enrollment.studentId,
+                enrollment = enrollment,
                 studentName = profiles[enrollment.studentId]?.let { "${it.firstName} ${it.lastName}".trim() },
-                records = records
+                records = records,
+                schedules = schedules,
+                requestedCutoff = cutoffDate
             )
         }
 
-        val present = attendances.count { it.status == AttendanceStatus.PRESENT }.toLong()
-        val absent = attendances.count { it.status == AttendanceStatus.ABSENT }.toLong()
-        val late = attendances.count { it.status == AttendanceStatus.LATE }.toLong()
-        val excusedAbsence = attendances.count { it.status == AttendanceStatus.EXCUSED_ABSENCE }.toLong()
-        val sickLeave = attendances.count { it.status == AttendanceStatus.SICK_LEAVE }.toLong()
-        val totalRecords = attendances.size.toLong()
+        val present = studentStatistics.sumOf { it.present }
+        val absent = studentStatistics.sumOf { it.absent }
+        val late = studentStatistics.sumOf { it.late }
+        val excusedAbsence = studentStatistics.sumOf { it.excusedAbsence }
+        val sickLeave = studentStatistics.sumOf { it.sickLeave }
+        val totalRecords = studentStatistics.sumOf { it.registeredClasses }
+        val expectedRecords = studentStatistics.sumOf { it.scheduledClassesToDate }
+        val unregisteredRecords = studentStatistics.sumOf { it.unregisteredClasses }
+        val effectiveCutoff = minOf(cutoffDate, course.endDate ?: cutoffDate)
+        val courseStart = course.startDate ?: enrollments.minOfOrNull { it.enrollmentDate }
+        val courseTotalEnd = course.endDate ?: effectiveCutoff
+        val scheduledClassesTotal = courseStart?.let {
+            countScheduledOccurrences(schedules, it, courseTotalEnd)
+        } ?: 0
+        val scheduledClassesToDate = courseStart?.let {
+            countScheduledOccurrences(schedules, it, effectiveCutoff)
+        } ?: 0
+        val calculationBasis = if (schedules.isEmpty()) {
+            AttendanceCalculationBasis.REGISTERED_ONLY
+        } else {
+            AttendanceCalculationBasis.THEORETICAL_CURRENT_SCHEDULE
+        }
 
         return CourseAttendanceStatisticsDto(
             courseId = courseId,
+            scheduledClassesTotal = scheduledClassesTotal,
+            scheduledClassesToDate = scheduledClassesToDate,
+            expectedAttendanceRecordsToDate = expectedRecords,
             totalRecords = totalRecords,
+            unregisteredRecords = unregisteredRecords,
             present = present,
             absent = absent,
             late = late,
             excusedAbsence = excusedAbsence,
             sickLeave = sickLeave,
             attendanceRate = attendanceRate(present, late, totalRecords),
+            confirmedPresenceRate = confirmedPresenceRate(present, late, expectedRecords, totalRecords),
+            dataCoverageRate = dataCoverageRate(totalRecords, expectedRecords),
+            calculationCutoff = effectiveCutoff,
+            calculationBasis = calculationBasis,
             students = studentStatistics
         )
     }
@@ -421,32 +455,118 @@ class AttendanceService(
     )
 
     private fun buildAttendanceStatistics(
-        enrollmentId: Long,
-        studentId: Long,
+        enrollment: Enrollment,
         studentName: String?,
-        records: List<Attendance>
+        records: List<Attendance>,
+        schedules: List<ReservationInfo>,
+        requestedCutoff: LocalDate
     ): AttendanceStatisticsDto {
-        val present = records.count { it.status == AttendanceStatus.PRESENT }.toLong()
-        val absent = records.count { it.status == AttendanceStatus.ABSENT }.toLong()
-        val late = records.count { it.status == AttendanceStatus.LATE }.toLong()
-        val excusedAbsence = records.count { it.status == AttendanceStatus.EXCUSED_ABSENCE }.toLong()
-        val sickLeave = records.count { it.status == AttendanceStatus.SICK_LEAVE }.toLong()
-        val totalClasses = records.size.toLong()
+        val course = enrollment.course
+        val effectiveStart = maxOf(course.startDate ?: enrollment.enrollmentDate, enrollment.enrollmentDate)
+        val effectiveCutoff = listOfNotNull(
+            requestedCutoff,
+            course.endDate,
+            enrollment.completionDate
+        ).minOrNull() ?: requestedCutoff
+        val totalEnd = listOfNotNull(
+            course.endDate ?: effectiveCutoff,
+            enrollment.completionDate
+        ).minOrNull() ?: effectiveCutoff
+        val eligibleRecords = if (effectiveCutoff.isBefore(effectiveStart)) {
+            emptyList()
+        } else {
+            records.filter { !it.attendanceDate.isBefore(effectiveStart) && !it.attendanceDate.isAfter(effectiveCutoff) }
+        }
+        val present = eligibleRecords.count { it.status == AttendanceStatus.PRESENT }.toLong()
+        val absent = eligibleRecords.count { it.status == AttendanceStatus.ABSENT }.toLong()
+        val late = eligibleRecords.count { it.status == AttendanceStatus.LATE }.toLong()
+        val excusedAbsence = eligibleRecords.count { it.status == AttendanceStatus.EXCUSED_ABSENCE }.toLong()
+        val sickLeave = eligibleRecords.count { it.status == AttendanceStatus.SICK_LEAVE }.toLong()
+        val registeredClasses = eligibleRecords.size.toLong()
+        val scheduledClassesTotal = countScheduledOccurrences(schedules, effectiveStart, totalEnd)
+        val scheduledClassesToDate = countScheduledOccurrences(schedules, effectiveStart, effectiveCutoff)
+        val unregisteredClasses = (scheduledClassesToDate - registeredClasses).coerceAtLeast(0)
+        val calculationBasis = if (schedules.isEmpty()) {
+            AttendanceCalculationBasis.REGISTERED_ONLY
+        } else {
+            AttendanceCalculationBasis.THEORETICAL_CURRENT_SCHEDULE
+        }
         return AttendanceStatisticsDto(
-            enrollmentId = enrollmentId,
-            studentId = studentId,
+            enrollmentId = requireNotNull(enrollment.id),
+            studentId = enrollment.studentId,
             studentName = studentName,
-            totalClasses = totalClasses,
+            totalClasses = registeredClasses,
+            scheduledClassesTotal = scheduledClassesTotal,
+            scheduledClassesToDate = scheduledClassesToDate,
+            registeredClasses = registeredClasses,
+            unregisteredClasses = unregisteredClasses,
             present = present,
             absent = absent,
             late = late,
             excusedAbsence = excusedAbsence,
             sickLeave = sickLeave,
-            attendanceRate = attendanceRate(present, late, totalClasses)
+            attendanceRate = attendanceRate(present, late, registeredClasses),
+            confirmedPresenceRate = confirmedPresenceRate(
+                present,
+                late,
+                scheduledClassesToDate,
+                registeredClasses
+            ),
+            dataCoverageRate = dataCoverageRate(registeredClasses, scheduledClassesToDate),
+            calculationCutoff = effectiveCutoff,
+            calculationBasis = calculationBasis
         )
     }
 
     private fun attendanceRate(present: Long, late: Long, total: Long): Double =
-        if (total > 0) ((present + late).toDouble() / total.toDouble()) * 100 else 0.0
+        percentage(present + late, total)
+
+    private fun confirmedPresenceRate(
+        present: Long,
+        late: Long,
+        scheduledClasses: Long,
+        registeredClasses: Long
+    ): Double = percentage(present + late, maxOf(scheduledClasses, registeredClasses))
+
+    private fun dataCoverageRate(registeredClasses: Long, scheduledClasses: Long): Double =
+        when {
+            scheduledClasses > 0 -> percentage(registeredClasses, scheduledClasses).coerceAtMost(100.0)
+            registeredClasses > 0 -> 100.0
+            else -> 0.0
+        }
+
+    private fun percentage(numerator: Long, denominator: Long): Double =
+        if (denominator > 0) (numerator.toDouble() / denominator.toDouble()) * 100 else 0.0
+
+    /**
+     * Counts every weekly occurrence of every assigned reservation. Two distinct slots on the
+     * same weekday therefore count as two classes, as do three weekly slots on different days.
+     */
+    private fun countScheduledOccurrences(
+        schedules: List<ReservationInfo>,
+        startDate: LocalDate,
+        endDate: LocalDate
+    ): Long {
+        if (endDate.isBefore(startDate)) return 0
+
+        return schedules.sumOf { schedule ->
+            val dayOfWeek = runCatching { DayOfWeek.valueOf(schedule.dayOfWeek.uppercase()) }
+                .getOrElse {
+                    logger.warn(
+                        "Ignoring reservation {} with invalid weekday {} while calculating attendance",
+                        schedule.reservationId,
+                        schedule.dayOfWeek
+                    )
+                    return@sumOf 0L
+                }
+            val daysUntilFirst = Math.floorMod(dayOfWeek.value - startDate.dayOfWeek.value, 7).toLong()
+            val firstOccurrence = startDate.plusDays(daysUntilFirst)
+            if (firstOccurrence.isAfter(endDate)) {
+                0L
+            } else {
+                ChronoUnit.WEEKS.between(firstOccurrence, endDate) + 1
+            }
+        }
+    }
 }
 

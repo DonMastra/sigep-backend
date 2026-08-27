@@ -13,16 +13,21 @@ import com.sigep.students.domain.model.StudentDocumentType
 import com.sigep.students.domain.model.StudentGuardianLinkAction
 import com.sigep.students.domain.model.StudentGuardianLinkEvent
 import com.sigep.students.domain.model.StudentGuardianLinkOrigin
+import com.sigep.students.domain.model.StudentGuardianRelationship
 import com.sigep.students.domain.repository.StudentGuardianLinkEventRepository
+import com.sigep.students.domain.repository.StudentGuardianRelationshipRepository
 import com.sigep.students.domain.repository.StudentRepository
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDate
 import java.time.LocalDateTime
 
 @Service
+@Transactional
 class StudentProfileProviderImpl(
     private val studentRepository: StudentRepository,
     private val guardianLinkEventRepository: StudentGuardianLinkEventRepository,
+    private val guardianRelationshipRepository: StudentGuardianRelationshipRepository,
     private val identityNormalizer: StudentIdentityNormalizer
 ) : StudentProfileProvider {
 
@@ -32,14 +37,27 @@ class StudentProfileProviderImpl(
     override fun getStudentProfiles(studentIds: Collection<Long>): Map<Long, StudentProfileInfo> {
         if (studentIds.isEmpty()) return emptyMap()
 
-        return studentRepository.findAllById(studentIds.distinct())
-            .associate { student -> student.id!! to student.toInfo() }
+        val students = studentRepository.findAllById(studentIds.distinct())
+        if (students.isEmpty()) return emptyMap()
+        val relationshipIdsByStudent = guardianRelationshipRepository
+            .findByStudentIdInAndActiveTrue(students.mapNotNull { it.id })
+            .filter { it.canViewAcademic }
+            .groupBy({ it.studentId }, { it.guardianUserId })
+        return students.associate { student ->
+            val guardianIds = relationshipIdsByStudent[student.id].orEmpty().toMutableSet()
+            student.guardianId?.let(guardianIds::add)
+            student.id!! to student.toInfo(guardianIds)
+        }
     }
 
     override fun validateGuardianOwnsStudent(guardianUserId: Long, studentId: Long): Boolean {
         val student = studentRepository.findById(studentId)
             .orElseThrow { ResourceNotFoundException("Student not found with id: $studentId") }
-        return student.guardianId == guardianUserId
+        return student.guardianId == guardianUserId ||
+            guardianRelationshipRepository.existsByStudentIdAndGuardianUserIdAndActiveTrueAndCanViewAcademicTrue(
+                studentId,
+                guardianUserId
+            )
     }
 
     override fun createStudentForTuition(
@@ -139,6 +157,13 @@ class StudentProfileProviderImpl(
         )
 
         val saved = studentRepository.save(student)
+        ensureGuardianRelationship(
+            saved,
+            guardianUserId,
+            actorUserId,
+            primary = true,
+            reason = "Guardian linked during tuition application"
+        )
         guardianLinkEventRepository.save(
             StudentGuardianLinkEvent(
                 studentId = saved.id!!,
@@ -160,9 +185,10 @@ class StudentProfileProviderImpl(
         ).toInfo()
     }
 
-    private fun Student.toInfo() = StudentProfileInfo(
+    private fun Student.toInfo(guardianIds: Set<Long> = activeGuardianIds(this)) = StudentProfileInfo(
         id = id!!,
         guardianId = guardianId,
+        guardianIds = guardianIds,
         firstName = firstName,
         lastName = lastName,
         email = email,
@@ -183,7 +209,7 @@ class StudentProfileProviderImpl(
         actorUserId: Long,
         actorIsAdmin: Boolean
     ): StudentProfileResolution {
-        if (student.guardianId == guardianUserId) {
+        if (validateGuardianOwnsStudent(guardianUserId, student.id!!)) {
             return StudentProfileResolution(student.toInfo(), StudentProfileResolutionType.EXISTING)
         }
         if (!actorIsAdmin) {
@@ -192,15 +218,20 @@ class StudentProfileProviderImpl(
                 code = "STUDENT_MATCH_REQUIRES_VERIFICATION"
             )
         }
-        if (student.guardianId != null) {
-            throw ResourceConflictException(
-                message = "Student is linked to another guardian",
-                code = "STUDENT_LINKED_TO_OTHER_GUARDIAN",
-                field = "studentId"
-            )
+        val hasActiveGuardians = activeGuardianIds(student).isNotEmpty()
+        val becomesPrimary = student.guardianId == null && !hasActiveGuardians
+        val linked = if (becomesPrimary) {
+            studentRepository.save(student.copy(guardianId = guardianUserId, updatedAt = LocalDateTime.now()))
+        } else {
+            student
         }
-
-        val linked = studentRepository.save(student.copy(guardianId = guardianUserId, updatedAt = LocalDateTime.now()))
+        ensureGuardianRelationship(
+            linked,
+            guardianUserId,
+            actorUserId,
+            primary = becomesPrimary || linked.guardianId == guardianUserId,
+            reason = "Guardian linked during admin tuition application"
+        )
         guardianLinkEventRepository.save(
             StudentGuardianLinkEvent(
                 studentId = linked.id!!,
@@ -209,9 +240,51 @@ class StudentProfileProviderImpl(
                 action = StudentGuardianLinkAction.LINKED,
                 origin = StudentGuardianLinkOrigin.TUITION,
                 actorUserId = actorUserId,
-                reason = "Unassigned student linked during admin tuition application"
+                reason = "Guardian linked during admin tuition application"
             )
         )
         return StudentProfileResolution(linked.toInfo(), StudentProfileResolutionType.EXISTING)
+    }
+
+    private fun activeGuardianIds(student: Student): Set<Long> {
+        val relationshipIds = guardianRelationshipRepository
+            .findByStudentIdAndActiveTrueOrderByPrimaryDescIdAsc(student.id!!)
+            .filter { it.canViewAcademic }
+            .mapTo(linkedSetOf()) { it.guardianUserId }
+        student.guardianId?.let(relationshipIds::add)
+        return relationshipIds
+    }
+
+    private fun ensureGuardianRelationship(
+        student: Student,
+        guardianUserId: Long,
+        actorUserId: Long,
+        primary: Boolean,
+        reason: String
+    ) {
+        val now = LocalDateTime.now()
+        val existing = guardianRelationshipRepository.findByStudentIdAndGuardianUserId(student.id!!, guardianUserId)
+        guardianRelationshipRepository.save(
+            existing?.copy(
+                primary = primary,
+                canViewAcademic = true,
+                active = true,
+                verifiedBy = actorUserId,
+                verifiedAt = now,
+                updatedAt = now
+            ) ?: StudentGuardianRelationship(
+                studentId = student.id,
+                guardianUserId = guardianUserId,
+                primary = primary,
+                canViewAcademic = true,
+                active = true,
+                sourceSystem = "APPLICATION",
+                sourceReference = reason,
+                verifiedBy = actorUserId,
+                verifiedAt = now,
+                createdAt = now,
+                updatedAt = now
+            )
+        )
     }
 }
