@@ -1,4 +1,4 @@
--- V36 - Multi-role assignments with one active role per authenticated context.
+-- V37 - Multi-role assignments with one active role per authenticated context.
 -- Additive migration: users.role remains as a compatibility/default column.
 
 CREATE TABLE IF NOT EXISTS user_role_assignments (

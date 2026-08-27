@@ -403,12 +403,13 @@ Base: `/api/v1/students`
 | GET | `/` | ADMIN, TEACHER | Lista estudiantes paginados. |
 | GET | `/{id}` | ADMIN, TEACHER, GUARDIAN | Detalle completo del estudiante. |
 | GET | `/search?query=` | ADMIN, TEACHER | Busca por nombre, nombre completo, email, documento o matricula, con paginacion y orden. |
-| GET | `/guardian/{guardianId}` | ADMIN, TEACHER, GUARDIAN | Estudiantes asociados a guardian. |
+| GET | `/guardian/{guardianId}` | ADMIN, GUARDIAN | Estudiantes visibles para ese responsable academico. |
 | POST | `/` | ADMIN | Crea estudiante. |
 | POST | `/self-registration` | GUARDIAN | Crea estudiante vinculado al guardian autenticado. |
 | POST | `/identity-match` | ADMIN, GUARDIAN | Detecta coincidencias antes de crear; para GUARDIAN no revela datos de un estudiante ajeno. |
 | PUT | `/{id}` | ADMIN | Actualiza estudiante. |
-| PUT | `/{id}/guardian` | ADMIN | Vincula o reasigna el unico tutor vigente; exige `guardianId` y `reason` y genera auditoria. |
+| PUT | `/{id}/guardian` | ADMIN | Compatibilidad: reemplaza el conjunto por un unico responsable principal; exige `guardianId` y `reason`. |
+| PUT | `/{id}/guardians` | ADMIN | Reemplaza los responsables academicos activos; acepta varios IDs y un principal opcional. |
 | DELETE | `/{id}` | ADMIN | Elimina estudiante. |
 | POST | `/{id}/photo` | ADMIN | Sube foto multipart con parte `file`. |
 | GET | `/{id}/photo` | ADMIN, TEACHER, GUARDIAN | Descarga imagen. |
@@ -441,9 +442,9 @@ interface StudentDto {
   phoneNumber?: string;
   dateOfBirth?: string;
   address?: string;
-  guardianName?: string;
-  guardianPhone?: string;
-  guardianEmail?: string;
+  guardianId: number | null;
+  guardianIds: number[];
+  guardians: StudentGuardianDto[];
   documentNumber?: string;
   currentCourseId?: number;
   currentCourseName?: string;
@@ -454,6 +455,25 @@ interface StudentDto {
   photoUrl?: string;
   createdAt?: string;
   updatedAt?: string;
+}
+
+interface StudentGuardianDto {
+  guardianId: number;
+  firstName: string;
+  lastName: string;
+  email: string;
+  relationshipType?: string | null;
+  primary: boolean;
+  canViewAcademic: boolean;
+  billingContact: boolean;
+  active: boolean;
+  accountStatus: 'PENDING_APPROVAL' | 'ACTIVE' | 'REJECTED';
+}
+
+interface ReplaceStudentGuardiansRequest {
+  guardianIds: number[];
+  primaryGuardianId?: number | null;
+  reason: string;
 }
 ```
 
@@ -473,6 +493,18 @@ clave de identidad y puede repetirse, especialmente para menores.
 `POST /identity-match` devuelve `NONE`, `OWNED`, `UNASSIGNED` o `VERIFICATION_REQUIRED`.
 GUARDIAN solo recibe `studentId` y nombre para un estudiante ya vinculado a su propia cuenta;
 cualquier coincidencia ajena se reduce a `VERIFICATION_REQUIRED`.
+
+Un estudiante puede tener varios responsables activos. Todos los vinculos con
+`canViewAcademic=true` autorizan el seguimiento academico. `guardianId` conserva solamente el
+responsable principal opcional para clientes antiguos; no es la fuente de verdad del acceso.
+Si hay dos o mas responsables, `primaryGuardianId` puede quedar en `null` y el backend no elige
+uno de forma arbitraria. La titularidad financiera continua en la solicitud de matricula, la
+cuenta de facturacion y sus cargos; modificar responsables academicos no la reasigna.
+
+`POST /students` y `PUT /students/{id}` aceptan de forma aditiva `guardianIds` y
+`primaryGuardianId`. En una actualizacion, omitir `guardianIds` conserva las relaciones y enviar
+`[]` las desactiva. Las cuentas pendientes importadas pueden vincularse, pero una cuenta
+`REJECTED` no es asignable.
 
 ## Courses
 
@@ -504,6 +536,12 @@ type CourseLevel = 'BEGINNER' | 'ELEMENTARY' | 'PRE_INTERMEDIATE' | 'INTERMEDIAT
 ```
 
 Nota: la asignacion de aula/horario se maneja con reservas en `scheduling`; los cursos pueden consumir providers de scheduling.
+
+`CourseDto.reservationSummaries` contiene todas las reservas `ASSIGNED` del curso ordenadas
+por dia y hora. `reservationSummary` conserva la primera como vista legacy para clientes
+anteriores. `POST /courses` acepta `reservationIds: number[]` y mantiene `reservationId` como
+compatibilidad; `PUT /courses/{id}` acepta `reservationIds` opcional como la seleccion completa
+que debe reconciliarse. Omitir ese campo en una actualizacion no cambia las asignaciones.
 
 `CourseDto.teacherId` puede ser `null`; `teacherName` solo se informa cuando ese id corresponde
 a personal docente activo vinculado a una cuenta activa `TEACHER` o `ADMIN`. `POST` y `PUT`
@@ -717,6 +755,32 @@ el horario/aula asignados al curso. Si existen varias sesiones en la fecha, el c
 debe reenviar indicando `courseSessionId`. Al enviarlo, su curso y fecha deben coincidir.
 La clave idempotente permanece `(enrollmentId, courseSessionId)` y las respuestas
 exponen `courseSessionId`, `attendanceDate` y `studentName` cuando existe el estudiante.
+
+### Estadisticas acumuladas de asistencia
+
+`GET /course/{courseId}/statistics` calcula las clases teoricas desde el inicio del
+curso hasta la fecha actual (o hasta el fin configurado, si ya ocurrio). Cuenta cada
+ocurrencia semanal de cada reserva asignada: lunes/miercoles aporta dos clases por
+semana y lunes/miercoles/viernes aporta tres; dos slots distintos el mismo dia tambien
+cuentan como dos clases. Para cada inscripcion, el computo comienza en la fecha posterior
+entre el inicio del curso y la fecha de inscripcion.
+
+La base `THEORETICAL_CURRENT_SCHEDULE` usa las reservas actualmente asignadas y no
+descuenta feriados ni recesos. `REGISTERED_ONLY` se devuelve si falta un horario y solo
+pueden informarse los registros existentes. `scheduledClassesTotal` representa el total
+teorico del curso y `scheduledClassesToDate` las clases transcurridas. Por estudiante,
+`registeredClasses` contiene estados cargados y `unregisteredClasses` deriva el estado
+"sin registrar"; no se persiste un nuevo valor en `AttendanceStatus`.
+
+Las tasas tienen denominadores explicitos:
+
+- `attendanceRate`: `(PRESENT + LATE) / registeredClasses`; no trata "sin registrar" como ausencia.
+- `confirmedPresenceRate`: `(PRESENT + LATE) / scheduledClassesToDate`.
+- `dataCoverageRate`: `registeredClasses / scheduledClassesToDate`.
+
+En el acumulado del curso, `expectedAttendanceRecordsToDate` suma las clases teoricas
+transcurridas de todas las inscripciones y `unregisteredRecords` suma las pendientes de
+carga. `calculationCutoff` informa la fecha efectiva usada por el calculo.
 
 ## Course Materials
 
@@ -991,6 +1055,9 @@ interface AssignReservationRequest {
   targetId?: number;
 }
 ```
+
+Un mismo curso puede tener multiples reservas `ASSIGNED` (por ejemplo, lunes y miercoles).
+Cada reserva sigue apuntando a un unico target y cada slot mantiene una unica reserva activa.
 
 ## Admin Cache
 

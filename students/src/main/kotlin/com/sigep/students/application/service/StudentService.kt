@@ -10,13 +10,16 @@ import com.sigep.common.domain.exception.BusinessException
 import com.sigep.common.application.service.EnrollmentServiceProvider
 import com.sigep.common.application.service.UserRoleMembershipProvider
 import com.sigep.security.domain.model.UserRole
+import com.sigep.security.domain.model.AccountStatus
 import com.sigep.security.domain.repository.UserRepository
 import com.sigep.students.application.dto.*
 import com.sigep.students.domain.model.Student
 import com.sigep.students.domain.model.StudentGuardianLinkAction
 import com.sigep.students.domain.model.StudentGuardianLinkEvent
 import com.sigep.students.domain.model.StudentGuardianLinkOrigin
+import com.sigep.students.domain.model.StudentGuardianRelationship
 import com.sigep.students.domain.repository.StudentGuardianLinkEventRepository
+import com.sigep.students.domain.repository.StudentGuardianRelationshipRepository
 import com.sigep.students.domain.repository.StudentRepository
 import org.slf4j.LoggerFactory
 import org.springframework.cache.annotation.CacheEvict
@@ -41,6 +44,7 @@ class StudentService(
     private val enrollmentServiceProvider: EnrollmentServiceProvider,  // Inyectamos la interfaz, no el repositorio
     private val userRepository: UserRepository,
     private val guardianLinkEventRepository: StudentGuardianLinkEventRepository,
+    private val guardianRelationshipRepository: StudentGuardianRelationshipRepository,
     private val identityNormalizer: StudentIdentityNormalizer,
     private val roleMembershipProviders: List<UserRoleMembershipProvider> = emptyList()
 ) {
@@ -80,7 +84,7 @@ class StudentService(
         val studentsPage = findStudentsByCourseAssignment(pageable, hasAssignedCourse)
 
         return PageResponse(
-            content = studentsPage.content.map { it.toDto() },
+            content = mapToDtos(studentsPage.content),
             page = studentsPage.number,
             size = studentsPage.size,
             totalElements = studentsPage.totalElements,
@@ -107,7 +111,7 @@ class StudentService(
         val pageable = studentPageRequest(page, size, sortBy, sortDirection)
         val studentsPage = studentRepository.findByIdIn(studentIds, pageable)
         return PageResponse(
-            content = studentsPage.content.map { it.toDto() },
+            content = mapToDtos(studentsPage.content),
             page = studentsPage.number,
             size = studentsPage.size,
             totalElements = studentsPage.totalElements,
@@ -129,7 +133,7 @@ class StudentService(
         val studentsPage = searchStudentsByCourseAssignment(search, pageable, hasAssignedCourse)
 
         return PageResponse(
-            content = studentsPage.content.map { it.toDto() },
+            content = mapToDtos(studentsPage.content),
             page = studentsPage.number,
             size = studentsPage.size,
             totalElements = studentsPage.totalElements,
@@ -157,7 +161,7 @@ class StudentService(
         val pageable = studentPageRequest(page, size, sortBy, sortDirection)
         val studentsPage = studentRepository.searchStudentsByIds(search, studentIds, pageable)
         return PageResponse(
-            content = studentsPage.content.map { it.toDto() },
+            content = mapToDtos(studentsPage.content),
             page = studentsPage.number,
             size = studentsPage.size,
             totalElements = studentsPage.totalElements,
@@ -176,7 +180,12 @@ class StudentService(
             UserRole.GUARDIAN.name -> {
                 val student = studentRepository.findById(studentId)
                     .orElseThrow { ResourceNotFoundException("Student not found with id: $studentId") }
-                if (actorUserId == null || student.guardianId != actorUserId) {
+                val canAccess = actorUserId != null && (
+                    student.guardianId == actorUserId ||
+                        guardianRelationshipRepository
+                            .existsByStudentIdAndGuardianUserIdAndActiveTrueAndCanViewAcademicTrue(studentId, actorUserId)
+                    )
+                if (!canAccess) {
                     throw ForbiddenException("Guardians can only access their own students")
                 }
             }
@@ -243,7 +252,12 @@ class StudentService(
         logger.info("Creating new student record")
         val identity = identityNormalizer.normalize(request.documentType, request.documentCountry, request.documentNumber)
         ensureDocumentAvailable(identity)
-        request.guardianId?.let(::validateActiveGuardian)
+        val guardianSelection = resolveGuardianSelection(
+            request.guardianId,
+            request.guardianIds,
+            request.primaryGuardianId
+        )
+        guardianSelection.guardianIds.forEach(::validateAssignableGuardian)
 
         val student = Student(
             firstName = request.firstName.trim(),
@@ -257,7 +271,7 @@ class StudentService(
             dateOfBirth = request.dateOfBirth,
             address = request.address,
             emergencyContact = request.emergencyContact,
-            guardianId = request.guardianId,
+            guardianId = guardianSelection.primaryGuardianId,
             enrollmentDate = request.enrollmentDate ?: LocalDate.now(),
             medicalNotes = request.medicalNotes,
             active = request.active,
@@ -267,9 +281,13 @@ class StudentService(
         )
 
         val savedStudent = studentRepository.save(student)
-        savedStudent.guardianId?.let { guardianId ->
-            recordGuardianChange(savedStudent.id!!, null, guardianId, actorUserId, StudentGuardianLinkOrigin.ADMIN, "Guardian assigned during student creation")
-        }
+        syncGuardianRelationships(
+            savedStudent,
+            guardianSelection,
+            actorUserId,
+            StudentGuardianLinkOrigin.ADMIN,
+            "Guardians assigned during student creation"
+        )
         logger.info("Student created successfully with id: {}", savedStudent.id)
 
         return savedStudent.toDto()
@@ -301,7 +319,7 @@ class StudentService(
         val identity = identityNormalizer.normalize(request.documentType, request.documentCountry, documentNumber)
         val existing = findByIdentity(identity)
         if (existing != null) {
-            if (existing.guardianId == guardianUserId) {
+            if (guardianCanViewStudent(existing, guardianUserId)) {
                 return existing.toDto()
             }
             throw UnprocessableEntityException(
@@ -332,7 +350,13 @@ class StudentService(
         )
 
         val savedStudent = studentRepository.save(student)
-        recordGuardianChange(savedStudent.id!!, null, guardianUserId, guardianUserId, StudentGuardianLinkOrigin.GUARDIAN, "Guardian self-registration")
+        syncGuardianRelationships(
+            savedStudent,
+            GuardianSelection(setOf(guardianUserId), guardianUserId),
+            guardianUserId,
+            StudentGuardianLinkOrigin.GUARDIAN,
+            "Guardian self-registration"
+        )
         logger.info("Student self-registered successfully with id: {} for guardian: {}", savedStudent.id, guardianUserId)
 
         return savedStudent.toDto()
@@ -353,9 +377,21 @@ class StudentService(
                 request.documentNumber ?: student.documentNumber
             ).also { ensureDocumentAvailable(it, excludingStudentId = id) }
         } else null
-        val nextGuardianId = request.guardianId ?: student.guardianId
-        if (nextGuardianId != student.guardianId) {
-            nextGuardianId?.let(::validateActiveGuardian)
+        val requestedGuardianSelection = when {
+            request.guardianIds != null -> resolveGuardianSelection(
+                request.guardianId,
+                request.guardianIds,
+                request.primaryGuardianId
+            )
+            request.guardianId != null && request.guardianId != student.guardianId ->
+                GuardianSelection(setOf(request.guardianId), request.guardianId)
+            else -> null
+        }
+        requestedGuardianSelection?.guardianIds?.forEach(::validateAssignableGuardian)
+        val nextGuardianId = if (requestedGuardianSelection != null) {
+            requestedGuardianSelection.primaryGuardianId
+        } else {
+            student.guardianId
         }
 
         val updatedStudent = student.copy(
@@ -379,15 +415,14 @@ class StudentService(
             updatedAt = LocalDateTime.now()
         )
 
-        val savedStudent = studentRepository.save(updatedStudent)
-        if (savedStudent.guardianId != student.guardianId) {
-            recordGuardianChange(
-                studentId = savedStudent.id!!,
-                previousGuardianId = student.guardianId,
-                guardianId = savedStudent.guardianId,
-                actorUserId = actorUserId,
-                origin = StudentGuardianLinkOrigin.ADMIN,
-                reason = "Guardian changed from student update"
+        var savedStudent = studentRepository.save(updatedStudent)
+        if (requestedGuardianSelection != null) {
+            savedStudent = syncGuardianRelationships(
+                savedStudent,
+                requestedGuardianSelection,
+                actorUserId,
+                StudentGuardianLinkOrigin.ADMIN,
+                "Guardians changed from student update"
             )
         }
         logger.info("Student updated successfully with id: {}", savedStudent.id)
@@ -465,7 +500,7 @@ class StudentService(
         val studentsPage = studentRepository.findByGuardianId(guardianId, pageable)
 
         return PageResponse(
-            content = studentsPage.content.map { it.toDto() },
+            content = mapToDtos(studentsPage.content),
             page = studentsPage.number,
             size = studentsPage.size,
             totalElements = studentsPage.totalElements,
@@ -487,12 +522,16 @@ class StudentService(
         val student = matches.single()
         if (actorRole == UserRole.ADMIN.name) {
             return StudentIdentityMatchDto(
-                outcome = if (student.guardianId == null) StudentIdentityMatchOutcome.UNASSIGNED else StudentIdentityMatchOutcome.OWNED,
+                outcome = if (activeGuardianRelationships(student.id!!).isEmpty()) {
+                    StudentIdentityMatchOutcome.UNASSIGNED
+                } else {
+                    StudentIdentityMatchOutcome.OWNED
+                },
                 studentId = student.id,
                 displayName = "${student.firstName} ${student.lastName}"
             )
         }
-        if (actorRole == UserRole.GUARDIAN.name && student.guardianId == actorUserId) {
+        if (actorRole == UserRole.GUARDIAN.name && guardianCanViewStudent(student, actorUserId)) {
             return StudentIdentityMatchDto(
                 outcome = StudentIdentityMatchOutcome.OWNED,
                 studentId = student.id,
@@ -504,22 +543,42 @@ class StudentService(
 
     @CacheEvict(value = ["students", "students_detail"], key = "#studentId")
     fun linkGuardian(studentId: Long, guardianId: Long, actorUserId: Long, reason: String): StudentDto {
-        validateActiveGuardian(guardianId)
+        validateAssignableGuardian(guardianId)
         val student = studentRepository.findById(studentId)
             .orElseThrow { ResourceNotFoundException("Student not found with id: $studentId") }
-        if (student.guardianId == guardianId) {
+        val currentIds = activeGuardianRelationships(studentId).mapTo(linkedSetOf()) { it.guardianUserId }
+        if (student.guardianId == guardianId && currentIds == setOf(guardianId)) {
             return student.toDto()
         }
-        val saved = studentRepository.save(student.copy(guardianId = guardianId, updatedAt = LocalDateTime.now()))
-        recordGuardianChange(
-            studentId,
-            student.guardianId,
-            guardianId,
+        val saved = syncGuardianRelationships(
+            student,
+            GuardianSelection(setOf(guardianId), guardianId),
             actorUserId,
             StudentGuardianLinkOrigin.ADMIN,
             reason.trim()
         )
         return saved.toDto()
+    }
+
+    @CacheEvict(value = ["students", "students_detail"], key = "#studentId")
+    fun replaceGuardians(
+        studentId: Long,
+        guardianIds: Set<Long>,
+        primaryGuardianId: Long?,
+        actorUserId: Long,
+        reason: String
+    ): StudentDto {
+        val student = studentRepository.findById(studentId)
+            .orElseThrow { ResourceNotFoundException("Student not found with id: $studentId") }
+        val selection = resolveGuardianSelection(null, guardianIds, primaryGuardianId)
+        selection.guardianIds.forEach(::validateAssignableGuardian)
+        return syncGuardianRelationships(
+            student,
+            selection,
+            actorUserId,
+            StudentGuardianLinkOrigin.ADMIN,
+            reason.trim()
+        ).toDto()
     }
     /**
      * Obtiene el estado de pagos de un estudiante
@@ -548,12 +607,20 @@ class StudentService(
     /**
      * Convierte Student a StudentDto básico (con curso actual si existe)
      */
-    private fun Student.toDto(): StudentDto {
-        val currentEnrollments = enrollmentServiceProvider.getEnrollmentsByStudentAndStatus(this.id!!, "ACTIVE")
+    private fun mapToDtos(students: List<Student>): List<StudentDto> {
+        val guardiansByStudentId = loadGuardianDtosByStudentIds(students.mapNotNull { it.id })
+        return students.map { student -> student.toDto(guardiansByStudentId[student.id].orEmpty()) }
+    }
+
+    private fun Student.toDto(
+        guardianDtos: List<StudentGuardianDto> = loadGuardianDtos(this.id!!)
+    ): StudentDto {
+        val studentId = this.id!!
+        val currentEnrollments = enrollmentServiceProvider.getEnrollmentsByStudentAndStatus(studentId, "ACTIVE")
         val currentEnrollment = currentEnrollments.firstOrNull()
 
         return StudentDto(
-            id = id!!,
+            id = studentId,
             studentNumber = studentNumber,
             firstName = firstName,
             lastName = lastName,
@@ -564,6 +631,8 @@ class StudentService(
             dateOfBirth = dateOfBirth,
             enrollmentDate = enrollmentDate,
             guardianId = guardianId,
+            guardianIds = guardianDtos.map { it.guardianId },
+            guardians = guardianDtos,
             currentCourseId = currentEnrollment?.courseId,
             currentCourseName = currentEnrollment?.courseName,
             currentCourses = currentEnrollments,
@@ -581,12 +650,14 @@ class StudentService(
      * Convierte Student a StudentDetailDto (con toda la información + historial)
      */
     private fun Student.toDetailDto(): StudentDetailDto {
-        val currentEnrollments = enrollmentServiceProvider.getEnrollmentsByStudentAndStatus(this.id!!, "ACTIVE")
+        val studentId = this.id!!
+        val currentEnrollments = enrollmentServiceProvider.getEnrollmentsByStudentAndStatus(studentId, "ACTIVE")
         val currentEnrollment = currentEnrollments.firstOrNull()
-        val allEnrollments = enrollmentServiceProvider.getEnrollmentsByStudent(this.id!!)
+        val allEnrollments = enrollmentServiceProvider.getEnrollmentsByStudent(studentId)
+        val guardianDtos = loadGuardianDtos(studentId)
 
         return StudentDetailDto(
-            id = id!!,
+            id = studentId,
             studentNumber = studentNumber,
             firstName = firstName,
             lastName = lastName,
@@ -600,6 +671,8 @@ class StudentService(
             emergencyContact = emergencyContact,
             enrollmentDate = enrollmentDate,
             guardianId = guardianId,
+            guardianIds = guardianDtos.map { it.guardianId },
+            guardians = guardianDtos,
             medicalNotes = medicalNotes,
             currentCourseId = currentEnrollment?.courseId,
             currentCourseName = currentEnrollment?.courseName,
@@ -626,17 +699,171 @@ class StudentService(
         return resolvedValue
     }
 
-    private fun validateActiveGuardian(guardianId: Long) {
+    private fun validateAssignableGuardian(guardianId: Long) {
         val guardian = userRepository.findById(guardianId)
             .orElseThrow { ResourceNotFoundException("Guardian user not found with id: $guardianId") }
-        if (!hasActiveRole(guardian.id!!, guardian.role, UserRole.GUARDIAN) || !guardian.active) {
+        if (
+            !hasActiveRole(guardian.id!!, guardian.role, UserRole.GUARDIAN) ||
+            guardian.status == AccountStatus.REJECTED
+        ) {
             throw ValidationException(
-                message = "Guardian must be an active GUARDIAN account",
-                code = "GUARDIAN_NOT_ACTIVE",
+                message = "Guardian must be an assignable GUARDIAN account",
+                code = "GUARDIAN_NOT_ASSIGNABLE",
                 field = "guardianId"
             )
         }
     }
+
+    private fun resolveGuardianSelection(
+        legacyGuardianId: Long?,
+        guardianIds: Set<Long>?,
+        requestedPrimaryGuardianId: Long?
+    ): GuardianSelection {
+        val normalizedGuardianIds = (guardianIds ?: setOfNotNull(legacyGuardianId))
+            .filter { it > 0 }
+            .toCollection(linkedSetOf())
+        val primaryGuardianId = requestedPrimaryGuardianId
+            ?: legacyGuardianId?.takeIf(normalizedGuardianIds::contains)
+            ?: normalizedGuardianIds.singleOrNull()
+
+        if (primaryGuardianId != null && primaryGuardianId !in normalizedGuardianIds) {
+            throw ValidationException(
+                message = "Primary guardian must be included in guardianIds",
+                code = "PRIMARY_GUARDIAN_NOT_SELECTED",
+                field = "primaryGuardianId"
+            )
+        }
+        return GuardianSelection(normalizedGuardianIds, primaryGuardianId)
+    }
+
+    private fun syncGuardianRelationships(
+        student: Student,
+        selection: GuardianSelection,
+        actorUserId: Long,
+        origin: StudentGuardianLinkOrigin,
+        reason: String
+    ): Student {
+        val studentId = student.id!!
+        val now = LocalDateTime.now()
+        val before = guardianRelationshipRepository.findByStudentId(studentId)
+        val beforeActiveIds = before.filter { it.active }.mapTo(linkedSetOf()) { it.guardianUserId }
+        val beforePrimaryId = before.firstOrNull { it.active && it.primary }?.guardianUserId ?: student.guardianId
+
+        if (before.isNotEmpty()) {
+            guardianRelationshipRepository.saveAll(
+                before.map { relationship ->
+                    relationship.copy(
+                        primary = false,
+                        active = relationship.guardianUserId in selection.guardianIds,
+                        updatedAt = now
+                    )
+                }
+            )
+            guardianRelationshipRepository.flush()
+        }
+
+        val currentByGuardianId = guardianRelationshipRepository.findByStudentId(studentId)
+            .associateBy { it.guardianUserId }
+        val activeRelationships = selection.guardianIds.map { guardianId ->
+            currentByGuardianId[guardianId]?.copy(
+                primary = guardianId == selection.primaryGuardianId,
+                canViewAcademic = true,
+                active = true,
+                verifiedBy = actorUserId,
+                verifiedAt = now,
+                updatedAt = now
+            ) ?: StudentGuardianRelationship(
+                studentId = studentId,
+                guardianUserId = guardianId,
+                primary = guardianId == selection.primaryGuardianId,
+                canViewAcademic = true,
+                active = true,
+                sourceSystem = "APPLICATION",
+                sourceReference = reason.take(255),
+                verifiedBy = actorUserId,
+                verifiedAt = now,
+                createdAt = now,
+                updatedAt = now
+            )
+        }
+        if (activeRelationships.isNotEmpty()) {
+            guardianRelationshipRepository.saveAll(activeRelationships)
+            guardianRelationshipRepository.flush()
+        }
+
+        val linkedStudent = if (student.guardianId != selection.primaryGuardianId) {
+            studentRepository.save(student.copy(guardianId = selection.primaryGuardianId, updatedAt = now))
+        } else {
+            student
+        }
+
+        val removedIds = beforeActiveIds - selection.guardianIds
+        val addedIds = selection.guardianIds - beforeActiveIds
+        removedIds.forEach { guardianId ->
+            recordGuardianChange(studentId, guardianId, null, actorUserId, origin, reason)
+        }
+        addedIds.forEach { guardianId ->
+            recordGuardianChange(studentId, null, guardianId, actorUserId, origin, reason)
+        }
+        if (removedIds.isEmpty() && addedIds.isEmpty() && beforePrimaryId != selection.primaryGuardianId) {
+            recordGuardianChange(
+                studentId,
+                beforePrimaryId,
+                selection.primaryGuardianId,
+                actorUserId,
+                origin,
+                reason
+            )
+        }
+        return linkedStudent
+    }
+
+    private fun activeGuardianRelationships(studentId: Long): List<StudentGuardianRelationship> =
+        guardianRelationshipRepository.findByStudentIdAndActiveTrueOrderByPrimaryDescIdAsc(studentId)
+
+    private fun guardianCanViewStudent(student: Student, guardianUserId: Long): Boolean =
+        student.guardianId == guardianUserId ||
+            guardianRelationshipRepository.existsByStudentIdAndGuardianUserIdAndActiveTrueAndCanViewAcademicTrue(
+                student.id!!,
+                guardianUserId
+            )
+
+    private fun loadGuardianDtos(studentId: Long): List<StudentGuardianDto> {
+        return loadGuardianDtosByStudentIds(listOf(studentId))[studentId].orEmpty()
+    }
+
+    private fun loadGuardianDtosByStudentIds(studentIds: Collection<Long>): Map<Long, List<StudentGuardianDto>> {
+        if (studentIds.isEmpty()) return emptyMap()
+        val relationships = guardianRelationshipRepository.findByStudentIdInAndActiveTrue(studentIds)
+            .sortedWith(
+                compareByDescending<StudentGuardianRelationship> { it.primary }
+                    .thenBy { it.id ?: Long.MAX_VALUE }
+            )
+        if (relationships.isEmpty()) return emptyMap()
+        val usersById = userRepository.findAllById(relationships.map { it.guardianUserId }.distinct())
+            .associateBy { it.id!! }
+        return relationships.mapNotNull { relationship ->
+            usersById[relationship.guardianUserId]?.let { guardian ->
+                relationship.studentId to StudentGuardianDto(
+                    guardianId = relationship.guardianUserId,
+                    firstName = guardian.firstName,
+                    lastName = guardian.lastName,
+                    email = guardian.email,
+                    relationshipType = relationship.relationshipType,
+                    primary = relationship.primary,
+                    canViewAcademic = relationship.canViewAcademic,
+                    billingContact = relationship.billingContact,
+                    active = relationship.active,
+                    accountStatus = guardian.status
+                )
+            }
+        }.groupBy({ it.first }, { it.second })
+    }
+
+    private data class GuardianSelection(
+        val guardianIds: Set<Long>,
+        val primaryGuardianId: Long?
+    )
 
     private fun ensureDocumentAvailable(identity: NormalizedStudentDocument, excludingStudentId: Long? = null) {
         val normalized = identity.normalizedNumber ?: return

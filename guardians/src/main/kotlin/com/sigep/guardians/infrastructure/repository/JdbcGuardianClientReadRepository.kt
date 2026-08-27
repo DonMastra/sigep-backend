@@ -208,8 +208,12 @@ class JdbcGuardianClientReadRepository(
                  OR lower(g.email) LIKE :search
                  OR lower(coalesce(g.document_number, '')) LIKE :search
                  OR EXISTS (
-                     SELECT 1 FROM students sx
-                     WHERE sx.guardian_id = g.guardian_user_id
+                     SELECT 1
+                     FROM students sx
+                     JOIN student_guardian_relationships sgrx ON sgrx.student_id = sx.id
+                     WHERE sgrx.guardian_user_id = g.guardian_user_id
+                       AND sgrx.active
+                       AND sgrx.can_view_academic
                        AND (lower(sx.student_number) LIKE :search
                             OR lower(sx.first_name) LIKE :search
                             OR lower(sx.last_name) LIKE :search
@@ -281,14 +285,15 @@ class JdbcGuardianClientReadRepository(
 
         private val BASE_QUERY = """
             WITH student_summary AS (
-                SELECT s.guardian_id,
+                SELECT sgr.guardian_user_id,
                        count(DISTINCT s.id) student_count,
                        count(DISTINCT s.id) FILTER (WHERE s.active) active_student_count,
                        count(DISTINCT e.id) FILTER (WHERE e.status = 'ACTIVE') active_enrollment_count
-                FROM students s
+                FROM student_guardian_relationships sgr
+                JOIN students s ON s.id = sgr.student_id
                 LEFT JOIN enrollments e ON e.student_id = s.id
-                WHERE s.guardian_id IS NOT NULL
-                GROUP BY s.guardian_id
+                WHERE sgr.active AND sgr.can_view_academic
+                GROUP BY sgr.guardian_user_id
             ), tuition_summary AS (
                 SELECT guardian_user_id, count(*) tuition_application_count
                 FROM tuition_applications
@@ -334,7 +339,7 @@ class JdbcGuardianClientReadRepository(
                        gcp.administrative_notes, gcp.updated_at profile_updated_at
                 FROM users u
                 LEFT JOIN guardian_client_profiles gcp ON gcp.guardian_user_id = u.id
-                LEFT JOIN student_summary ss ON ss.guardian_id = u.id
+                LEFT JOIN student_summary ss ON ss.guardian_user_id = u.id
                 LEFT JOIN tuition_summary ts ON ts.guardian_user_id = u.id
                 LEFT JOIN billing_summary bs ON bs.guardian_user_id = u.id
                 LEFT JOIN payment_summary ps ON ps.guardian_user_id = u.id
@@ -379,7 +384,14 @@ class JdbcGuardianClientReadRepository(
                 FROM billing_charges bc JOIN billing_accounts ba ON ba.id = bc.account_id
                 WHERE bc.student_id = s.id AND ba.guardian_user_id = :guardianUserId
             ) cs ON true
-            WHERE s.guardian_id = :guardianUserId
+            WHERE EXISTS (
+                SELECT 1
+                FROM student_guardian_relationships sgr
+                WHERE sgr.student_id = s.id
+                  AND sgr.guardian_user_id = :guardianUserId
+                  AND sgr.active
+                  AND sgr.can_view_academic
+            )
             ORDER BY s.last_name, s.first_name, s.id
         """.trimIndent()
 

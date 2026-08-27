@@ -141,7 +141,9 @@ Los controladores que necesitan actor actual leen `userId` y `userRole` desde `H
 - `V35__enforce_unique_staff_attendance.sql` exige exactamente una referencia de personal y un
   unico registro por persona y fecha. La asistencia de cursos por fecha reutiliza
   `course_sessions`/`course_attendance` y no requiere una migracion posterior.
-- `V36__add_multi_role_assignments_and_context_audit.sql` agrega asignaciones multirrol y eventos
+- `V36__support_multiple_student_guardians.sql` agrega la relacion academica multirresponsable,
+  retrocompleta el tutor singular y conserva `students.guardian_id` como principal compatible.
+- `V37__add_multi_role_assignments_and_context_audit.sql` agrega asignaciones multirrol y eventos
   de seleccion/cambio, hace backfill desde `users.role`, personal docente y vinculos tutor-estudiante,
   y conserva la columna singular durante la etapa compatible.
 - Las migraciones SQL se validan sobre una base descartable o dentro de una transaccion

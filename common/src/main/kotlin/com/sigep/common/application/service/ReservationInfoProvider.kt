@@ -9,9 +9,15 @@ package com.sigep.common.application.service
 interface ReservationInfoProvider {
 
     /**
-     * Returns the ASSIGNED reservation summary for a given course, or null if none.
+     * Returns every ASSIGNED reservation for a course in weekly chronological order.
      */
-    fun getReservationByCourse(courseId: Long): ReservationInfo?
+    fun getReservationsByCourse(courseId: Long): List<ReservationInfo>
+
+    /**
+     * Legacy single-reservation view kept for consumers that have not migrated yet.
+     */
+    fun getReservationByCourse(courseId: Long): ReservationInfo? =
+        getReservationsByCourse(courseId).firstOrNull()
 
     /**
      * Returns true if the course has an ASSIGNED reservation.

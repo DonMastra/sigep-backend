@@ -66,18 +66,8 @@ class AttendanceServiceDateResolutionTest {
         val attendanceSlot = slot<Attendance>()
         every { courseSessionRepository.findByCourseIdAndSessionDate(21, date) } returns emptyList()
         every { courseRepository.findById(21) } returns Optional.of(course)
-        every { reservationInfoProvider.getReservationByCourse(21) } returns ReservationInfo(
-            reservationId = 9,
-            status = "ASSIGNED",
-            slotId = 7,
-            dayOfWeek = "MONDAY",
-            startTime = "18:00",
-            endTime = "20:00",
-            classroomId = 3,
-            classroomName = "Aula 3",
-            building = null,
-            floor = null,
-            classroomCapacity = 20
+        every { reservationInfoProvider.getReservationsByCourse(21) } returns listOf(
+            reservationInfo(9, "MONDAY", "18:00", "20:00")
         )
         every { courseSessionRepository.save(capture(sessionSlot)) } answers { sessionSlot.captured.copy(id = 42) }
         every { enrollmentRepository.findById(14) } returns Optional.of(enrollment)
@@ -114,7 +104,7 @@ class AttendanceServiceDateResolutionTest {
 
         assertEquals(42, result.single().courseSessionId)
         verify(exactly = 0) { courseSessionRepository.save(any()) }
-        verify(exactly = 0) { reservationInfoProvider.getReservationByCourse(any()) }
+        verify(exactly = 0) { reservationInfoProvider.getReservationsByCourse(any()) }
     }
 
     @Test
@@ -135,9 +125,50 @@ class AttendanceServiceDateResolutionTest {
         )
     }
 
-    private fun request() = BulkAttendanceRequest(
+    @Test
+    fun `bulk attendance by date selects the reservation that matches the weekday`() {
+        val wednesday = LocalDate.of(2026, 8, 26)
+        val sessionSlot = slot<CourseSession>()
+        every { courseSessionRepository.findByCourseIdAndSessionDate(21, wednesday) } returns emptyList()
+        every { courseRepository.findById(21) } returns Optional.of(course)
+        every { reservationInfoProvider.getReservationsByCourse(21) } returns listOf(
+            reservationInfo(9, "MONDAY", "18:00", "20:00"),
+            reservationInfo(10, "WEDNESDAY", "20:30", "22:00")
+        )
+        every { courseSessionRepository.save(capture(sessionSlot)) } answers { sessionSlot.captured.copy(id = 43) }
+        every { enrollmentRepository.findById(14) } returns Optional.of(enrollment)
+        every { attendanceRepository.findByEnrollmentIdAndCourseSessionId(14, 43) } returns Optional.empty()
+        every { attendanceRepository.save(any()) } answers { firstArg<Attendance>().copy(id = 101) }
+        every { studentProfileProvider.getStudentProfile(15) } returns null
+
+        service.recordBulkAttendance(request(wednesday), recordedBy = 1)
+
+        assertEquals(LocalTime.of(20, 30), sessionSlot.captured.startTime)
+        assertEquals(LocalTime.of(22, 0), sessionSlot.captured.endTime)
+    }
+
+    private fun request(requestDate: LocalDate = date) = BulkAttendanceRequest(
         courseId = 21,
-        date = date,
+        date = requestDate,
         records = listOf(StudentAttendanceRecord(14, AttendanceStatus.PRESENT))
+    )
+
+    private fun reservationInfo(
+        id: Long,
+        dayOfWeek: String,
+        startTime: String,
+        endTime: String
+    ) = ReservationInfo(
+        reservationId = id,
+        status = "ASSIGNED",
+        slotId = id,
+        dayOfWeek = dayOfWeek,
+        startTime = startTime,
+        endTime = endTime,
+        classroomId = 3,
+        classroomName = "Aula 3",
+        building = null,
+        floor = null,
+        classroomCapacity = 20
     )
 }

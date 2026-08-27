@@ -27,6 +27,7 @@ data class CourseDto(
     val isPublished: Boolean,
     val hasReservation: Boolean,
     val reservationSummary: ReservationInfo? = null,
+    val reservationSummaries: List<ReservationInfo> = emptyList(),
     val enrolledStudents: Int,
     val totalEnrollments: Int,
     val availableSeats: Int,
@@ -75,6 +76,7 @@ data class CreateCourseRequest(
     val startDate: LocalDate? = null,
     val endDate: LocalDate? = null,
     val reservationId: Long? = null,
+    val reservationIds: Set<Long> = emptySet(),
     val status: CourseStatus? = null,
     val isPublished: Boolean = false
 )
@@ -110,6 +112,7 @@ data class UpdateCourseRequest(
 
     val startDate: LocalDate?,
     val endDate: LocalDate?,
+    val reservationIds: Set<Long>? = null,
     val status: CourseStatus?,
     val isPublished: Boolean?
 )
