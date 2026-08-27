@@ -2,6 +2,7 @@ package com.sigep.scheduling.infrastructure.provider
 
 import com.sigep.common.application.service.ReservationInfo
 import com.sigep.common.application.service.ReservationInfoProvider
+import com.sigep.scheduling.domain.model.Reservation
 import com.sigep.scheduling.domain.model.ReservationStatus
 import com.sigep.scheduling.domain.model.ReservationTargetType
 import com.sigep.scheduling.domain.repository.ReservationRepository
@@ -17,12 +18,18 @@ class ReservationInfoProviderImpl(
     private val reservationRepository: ReservationRepository
 ) : ReservationInfoProvider {
 
-    override fun getReservationByCourse(courseId: Long): ReservationInfo? {
+    override fun getReservationsByCourse(courseId: Long): List<ReservationInfo> {
         return reservationRepository
-            .findByTargetTypeAndTargetIdAndStatus(
+            .findAllByTargetTypeAndTargetIdAndStatus(
                 ReservationTargetType.COURSE,
                 courseId,
                 ReservationStatus.ASSIGNED
+            )
+            .sortedWith(
+                compareBy<Reservation> { it.slot.dayOfWeek.ordinal }
+                    .thenBy { it.slot.startTime }
+                    .thenBy { it.slot.endTime }
+                    .thenBy { it.id }
             )
             .map { reservation ->
                 val slot = reservation.slot
@@ -41,7 +48,6 @@ class ReservationInfoProviderImpl(
                     classroomCapacity = classroom.capacity
                 )
             }
-            .orElse(null)
     }
 
     override fun hasReservationAssigned(courseId: Long): Boolean {

@@ -151,15 +151,11 @@ class CourseService(
 
         val savedCourse = courseRepository.save(course)
 
-        request.reservationId?.let { reservationId ->
-            val reservationAssignmentProvider = reservationAssignmentProviderProvider.getIfAvailable()
-                ?: throw BusinessException(
-                    message = "No reservation assignment provider available",
-                    code = "INTEGRATION_PROVIDER_NOT_AVAILABLE",
-                    field = "reservationId",
-                    details = "Scheduling module provider is required to assign reservation during course creation"
-                )
-            reservationAssignmentProvider.assignReservationToCourse(reservationId, savedCourse.id!!)
+        val reservationIds = normalizeReservationIds(
+            request.reservationIds + listOfNotNull(request.reservationId)
+        )
+        if (reservationIds.isNotEmpty()) {
+            reservationAssignmentProvider().syncCourseReservations(savedCourse.id!!, reservationIds)
         }
 
         logger.info("Course created successfully with id: {}", savedCourse.id)
@@ -208,6 +204,12 @@ class CourseService(
         )
 
         val savedCourse = courseRepository.save(updatedCourse)
+        request.reservationIds?.let { requestedIds ->
+            reservationAssignmentProvider().syncCourseReservations(
+                savedCourse.id!!,
+                normalizeReservationIds(requestedIds)
+            )
+        }
         logger.info("Course updated successfully with id: {}", savedCourse.id)
         return savedCourse.toDto()
     }
@@ -429,7 +431,8 @@ class CourseService(
         } }
         val totalEnrollmentCount = enrollmentRepository.countByCourseId(id).toInt()
         val availableSeats = maxStudents - enrolledCount
-        val reservationSummary = reservationInfoProvider.getReservationByCourse(id)
+        val reservationSummaries = reservationInfoProvider.getReservationsByCourse(id)
+        val reservationSummary = reservationSummaries.firstOrNull()
         val isEnrollmentOpen = isPublished &&
                                status == CourseStatus.ACTIVE &&
                                availableSeats > 0 &&
@@ -453,6 +456,7 @@ class CourseService(
             isPublished = isPublished,
             hasReservation = reservationSummary != null,
             reservationSummary = reservationSummary,
+            reservationSummaries = reservationSummaries,
             enrolledStudents = enrolledCount,
             totalEnrollments = totalEnrollmentCount,
             availableSeats = availableSeats,
@@ -483,6 +487,26 @@ class CourseService(
                 details = "Teacher must be active teaching staff linked to an eligible active account"
             )
         }
+    }
+
+    private fun reservationAssignmentProvider(): ReservationAssignmentProvider =
+        reservationAssignmentProviderProvider.getIfAvailable()
+            ?: throw BusinessException(
+                message = "No reservation assignment provider available",
+                code = "INTEGRATION_PROVIDER_NOT_AVAILABLE",
+                field = "reservationIds",
+                details = "Scheduling module provider is required to synchronize course reservations"
+            )
+
+    private fun normalizeReservationIds(reservationIds: Collection<Long>): Set<Long> {
+        if (reservationIds.any { it <= 0 }) {
+            throw BusinessException(
+                message = "Reservation IDs must be positive",
+                code = "VALIDATION_ERROR",
+                field = "reservationIds"
+            )
+        }
+        return reservationIds.toSet()
     }
 
     private fun Course.toSimpleDto(): CourseSimpleDto {

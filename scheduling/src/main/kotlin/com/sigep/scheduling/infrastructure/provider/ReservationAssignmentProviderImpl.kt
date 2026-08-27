@@ -20,5 +20,9 @@ class ReservationAssignmentProviderImpl(
             )
         )
     }
+
+    override fun syncCourseReservations(courseId: Long, reservationIds: Set<Long>) {
+        reservationService.syncCourseReservations(courseId, reservationIds)
+    }
 }
 

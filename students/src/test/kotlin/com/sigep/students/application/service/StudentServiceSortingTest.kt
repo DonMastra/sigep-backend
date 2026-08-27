@@ -4,6 +4,7 @@ import com.sigep.common.application.service.EnrollmentServiceProvider
 import com.sigep.security.domain.repository.UserRepository
 import com.sigep.students.domain.model.Student
 import com.sigep.students.domain.repository.StudentGuardianLinkEventRepository
+import com.sigep.students.domain.repository.StudentGuardianRelationshipRepository
 import com.sigep.students.domain.repository.StudentRepository
 import io.mockk.every
 import io.mockk.mockk
@@ -21,6 +22,7 @@ class StudentServiceSortingTest {
     private val enrollmentServiceProvider = mockk<EnrollmentServiceProvider>()
     private val userRepository = mockk<UserRepository>()
     private val guardianLinkEventRepository = mockk<StudentGuardianLinkEventRepository>()
+    private val guardianRelationshipRepository = mockk<StudentGuardianRelationshipRepository>()
     private val identityNormalizer = mockk<StudentIdentityNormalizer>()
     private lateinit var service: StudentService
 
@@ -31,6 +33,7 @@ class StudentServiceSortingTest {
             enrollmentServiceProvider,
             userRepository,
             guardianLinkEventRepository,
+            guardianRelationshipRepository,
             identityNormalizer
         )
     }
