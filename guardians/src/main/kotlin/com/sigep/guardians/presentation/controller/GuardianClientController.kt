@@ -8,6 +8,7 @@ import com.sigep.guardians.application.dto.GuardianClientDetailDto
 import com.sigep.guardians.application.dto.GuardianClientStatsDto
 import com.sigep.guardians.application.dto.GuardianClientSummaryDto
 import com.sigep.guardians.application.dto.UpdateGuardianClientProfileRequest
+import com.sigep.guardians.application.dto.UpdateGuardianClientAccountRequest
 import com.sigep.guardians.application.service.GuardianClientService
 import com.sigep.guardians.domain.model.GuardianBillingFilter
 import com.sigep.guardians.domain.model.GuardianClientSearchCriteria
@@ -81,6 +82,26 @@ class GuardianClientController(
         val adminId = httpRequest.getAttribute("userId") as? Long
             ?: throw UnauthorizedException("Token invalid or missing userId")
         return ResponseEntity.ok(ApiResponse.success(service.updateProfile(guardianUserId, request, adminId), "Guardian client profile updated"))
+    }
+
+    @PatchMapping("/{guardianUserId}/account")
+    @Operation(
+        summary = "Update guardian client account data",
+        description = "Updates personal and contact data only; roles, access status, relationships and financial ownership are unchanged"
+    )
+    fun updateAccount(
+        @PathVariable guardianUserId: Long,
+        @Valid @RequestBody request: UpdateGuardianClientAccountRequest,
+        httpRequest: HttpServletRequest
+    ): ResponseEntity<ApiResponse<GuardianClientDetailDto>> {
+        val adminId = httpRequest.getAttribute("userId") as? Long
+            ?: throw UnauthorizedException("Token invalid or missing userId")
+        return ResponseEntity.ok(
+            ApiResponse.success(
+                service.updateAccount(guardianUserId, request, adminId),
+                "Guardian client account updated"
+            )
+        )
     }
 
     private fun parseAccountStatus(raw: String?): String? {

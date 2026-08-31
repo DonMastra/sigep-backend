@@ -280,6 +280,12 @@ Migraciones del cierre QA:
   categorias desaprobadas por entrega.
 - `V35__enforce_unique_staff_attendance.sql`: referencia exclusiva docente/no docente y unicidad
   diaria de asistencia por persona.
+- `V36__support_multiple_student_guardians.sql`: responsables academicos multiples con principal
+  compatible, sin reasignar cuentas ni movimientos financieros.
+- `V37__add_multi_role_assignments_and_context_audit.sql`: asignaciones multirrol y auditoria del
+  contexto activo.
+- `V38__add_user_account_optimistic_lock.sql`: version optimista de `users` para editar identidad
+  y contacto desde Tutores y clientes.
 
 Validarlas en una base descartable o transaccion revertida antes de aplicarlas al contenedor
 actual; no se ejecutan automaticamente durante esta implementacion.

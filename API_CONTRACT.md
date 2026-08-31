@@ -314,7 +314,8 @@ Query:
 Base: `/api/v1/admin/guardian-clients`
 
 Este recurso es una proyeccion administrativa. `users` sigue siendo la fuente de identidad y acceso;
-`students.guardian_id` conserva el unico tutor vigente; tuition conserva solicitudes/ledger; billing
+`student_guardian_relationships` conserva los responsables academicos y `students.guardian_id` el
+principal compatible; tuition conserva solicitudes/ledger; billing
 conserva cuentas, cargos, pagos, recibos y facturas. El recurso no duplica ni sustituye esos datos.
 
 | Metodo | Ruta | Roles | Descripcion |
@@ -322,6 +323,7 @@ conserva cuentas, cargos, pagos, recibos y facturas. El recurso no duplica ni su
 | GET | `/` | ADMIN | Lista paginada con resumen de estudiantes, cursadas, matriculaciones y cobranza. |
 | GET | `/stats` | ADMIN | Indicadores globales de cartera, vinculos, cuenta de cobro, saldo y contacto. |
 | GET | `/{guardianUserId}` | ADMIN | Ficha integral con estudiantes, solicitudes, cargos y pagos asignados. |
+| PATCH | `/{guardianUserId}/account` | ADMIN | Actualiza identidad y contacto de `users` con version optimista. |
 | PATCH | `/{guardianUserId}/profile` | ADMIN | Actualiza canal preferido y notas internas con version optimista. |
 
 Query del listado:
@@ -379,9 +381,22 @@ interface UpdateGuardianClientProfileRequest {
   administrativeNotes?: string | null; // maximo 1000
   version: number;
 }
+
+interface UpdateGuardianClientAccountRequest {
+  firstName: string;              // requerido, maximo 100
+  lastName: string;               // requerido, maximo 100
+  email: string;                  // requerido, formato valido, unico sin distinguir mayusculas
+  phoneNumber?: string | null;    // maximo 50
+  address?: string | null;        // maximo 255
+  dateOfBirth?: string | null;    // YYYY-MM-DD, anterior a hoy
+  documentNumber?: string | null; // maximo 50
+  emergencyContact?: string | null; // maximo 255
+  version: number;                // accountVersion de la ficha
+}
 ```
 
-La ficha `GuardianClientDetailDto` agrega domicilio, nacimiento, contacto de emergencia, notas y:
+La ficha `GuardianClientDetailDto` agrega `accountVersion`, domicilio, nacimiento, contacto de
+emergencia, notas y:
 
 - `students[]`: estudiante, matricula, cursada activa, ultima solicitud y saldo por estudiante.
 - `tuitionApplications[]`: solicitud, origen, estado, estudiante, enrollment y curso asignado.
@@ -392,7 +407,13 @@ Errores especificos:
 
 - `404 RESOURCE_NOT_FOUND`: el ID no corresponde a un usuario GUARDIAN.
 - `409 GUARDIAN_CLIENT_VERSION_CONFLICT`: el perfil fue modificado; recargar antes de reintentar.
-- `400 VALIDATION_ERROR`: filtro, canal, version o longitud de notas invalido.
+- `409 GUARDIAN_CLIENT_ACCOUNT_VERSION_CONFLICT`: los datos de cuenta fueron modificados; recargar antes de reintentar.
+- `409 GUARDIAN_EMAIL_ALREADY_EXISTS`: el email pertenece a otra cuenta.
+- `400 VALIDATION_ERROR`: filtro, canal, version, formato o longitud invalido.
+
+`PATCH /account` no modifica `username`, contraseña, estado/actividad, roles, relaciones con estudiantes,
+responsable principal, cuentas de facturacion, cargos, pagos ni comprobantes fiscales. Esos cambios
+permanecen en sus flujos administrativos especificos.
 
 ## Students
 

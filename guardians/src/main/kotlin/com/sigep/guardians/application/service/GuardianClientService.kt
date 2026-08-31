@@ -4,6 +4,8 @@ import com.sigep.common.application.dto.PageResponse
 import com.sigep.common.application.exception.ResourceConflictException
 import com.sigep.common.application.exception.ResourceNotFoundException
 import com.sigep.common.application.service.GuardianClientProfileProvisioner
+import com.sigep.common.application.service.GuardianClientAccountUpdateCommand
+import com.sigep.common.application.service.GuardianClientAccountUpdater
 import com.sigep.guardians.application.dto.GuardianClientChargeDto
 import com.sigep.guardians.application.dto.GuardianClientDetailDto
 import com.sigep.guardians.application.dto.GuardianClientPaymentDto
@@ -12,6 +14,7 @@ import com.sigep.guardians.application.dto.GuardianClientStudentDto
 import com.sigep.guardians.application.dto.GuardianClientSummaryDto
 import com.sigep.guardians.application.dto.GuardianClientTuitionDto
 import com.sigep.guardians.application.dto.UpdateGuardianClientProfileRequest
+import com.sigep.guardians.application.dto.UpdateGuardianClientAccountRequest
 import com.sigep.guardians.domain.model.GuardianClientSearchCriteria
 import com.sigep.guardians.domain.repository.GuardianClientProfileRepository
 import com.sigep.guardians.domain.repository.GuardianClientReadRepository
@@ -23,7 +26,8 @@ import java.time.LocalDateTime
 @Transactional
 class GuardianClientService(
     private val profileRepository: GuardianClientProfileRepository,
-    private val readRepository: GuardianClientReadRepository
+    private val readRepository: GuardianClientReadRepository,
+    private val accountUpdater: GuardianClientAccountUpdater
 ) : GuardianClientProfileProvisioner {
 
     @Transactional(readOnly = true)
@@ -56,6 +60,7 @@ class GuardianClientService(
             ?: throw ResourceNotFoundException("Guardian client not found with id: $guardianUserId")
         return GuardianClientDetailDto(
             summary = detail.summary.toDto(),
+            accountVersion = detail.accountVersion,
             address = detail.address,
             dateOfBirth = detail.dateOfBirth,
             emergencyContact = detail.emergencyContact,
@@ -154,6 +159,29 @@ class GuardianClientService(
                 administrativeNotes = request.administrativeNotes?.trim()?.takeIf { it.isNotEmpty() },
                 updatedBy = updatedBy,
                 updatedAt = LocalDateTime.now()
+            )
+        )
+        return getDetail(guardianUserId)
+    }
+
+    fun updateAccount(
+        guardianUserId: Long,
+        request: UpdateGuardianClientAccountRequest,
+        updatedBy: Long
+    ): GuardianClientDetailDto {
+        accountUpdater.updateGuardianClientAccount(
+            GuardianClientAccountUpdateCommand(
+                guardianUserId = guardianUserId,
+                firstName = request.firstName,
+                lastName = request.lastName,
+                email = request.email,
+                phoneNumber = request.phoneNumber,
+                address = request.address,
+                dateOfBirth = request.dateOfBirth,
+                documentNumber = request.documentNumber,
+                emergencyContact = request.emergencyContact,
+                version = request.version,
+                updatedBy = updatedBy
             )
         )
         return getDetail(guardianUserId)
