@@ -251,6 +251,14 @@
     {
       "key": "courseCode",
       "value": "COURSE_CODE"
+    },
+    {
+      "key": "loginUsername",
+      "value": "admin"
+    },
+    {
+      "key": "loginPassword",
+      "value": "password123"
     }
   ],
   "item": [
@@ -289,9 +297,10 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"password123\"\n}"
+              "raw": "{\n  \"username\": \"{{loginUsername}}\",\n  \"password\": \"{{loginPassword}}\"\n}"
             },
-            "url": "{{baseUrl}}/api/v1/auth/login"
+            "url": "{{baseUrl}}/api/v1/auth/login",
+            "description": "En produccion, completar loginUsername y loginPassword solamente en el ambiente local de Postman y no exportarlos."
           }
         },
         {
