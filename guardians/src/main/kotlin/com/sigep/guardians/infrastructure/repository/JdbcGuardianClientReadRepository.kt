@@ -79,6 +79,7 @@ class JdbcGuardianClientReadRepository(
     ) { rs, _ ->
         GuardianClientDetailReadModel(
             summary = mapSummary(rs),
+            accountVersion = rs.getLong("account_version"),
             address = rs.getString("address"),
             dateOfBirth = rs.localDate("date_of_birth"),
             emergencyContact = rs.getString("emergency_contact"),
@@ -335,6 +336,7 @@ class JdbcGuardianClientReadRepository(
                        ps.last_payment_date,
                        (coalesce(btrim(u.phone_number), '') = '' OR coalesce(btrim(u.address), '') = '' OR coalesce(btrim(u.document_number), '') = '') missing_contact_data,
                        coalesce(gcp.version, 0) profile_version,
+                       u.version account_version,
                        u.address, u.date_of_birth, u.emergency_contact,
                        gcp.administrative_notes, gcp.updated_at profile_updated_at
                 FROM users u

@@ -55,6 +55,7 @@ data class GuardianClientStatsReadModel(
 
 data class GuardianClientDetailReadModel(
     val summary: GuardianClientSummaryReadModel,
+    val accountVersion: Long,
     val address: String?,
     val dateOfBirth: LocalDate?,
     val emergencyContact: String?,

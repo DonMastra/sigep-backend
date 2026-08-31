@@ -16,7 +16,7 @@ El documento distingue dos estados que no deben mezclarse:
 
 - **Snapshot productivo observado:** catálogo real de `sigep_prod` el 21/08/2026, antes de promover
   V33, V34 y V35.
-- **Esquema objetivo actual:** entidades y scripts manuales del repositorio hasta V37.
+- **Esquema objetivo actual:** entidades y scripts manuales del repositorio hasta V38.
 
 El orden de precedencia para describir un ambiente desplegado es:
 
@@ -28,7 +28,7 @@ El orden de precedencia para describir un ambiente desplegado es:
 Los scripts SQL son migraciones manuales; el proyecto no usa Flyway ni Liquibase. QA y producción
 deben arrancar con `JPA_DDL_AUTO=validate`: Hibernate valida, pero no repara el esquema.
 
-### Esquema objetivo del repositorio hasta V37
+### Esquema objetivo del repositorio hasta V38
 
 El estado objetivo agrega sobre el snapshot productivo:
 
@@ -38,6 +38,7 @@ El estado objetivo agrega sobre el snapshot productivo:
 4. **V36:** relación multirresponsable `student_guardian_relationships`; el total objetivo pasa a
    61 tablas y `students.guardian_id` queda como principal opcional compatible.
 5. **V37:** asignaciones multirrol y auditoría del contexto activo; el total objetivo pasa a 63 tablas.
+6. **V38:** versión optimista no negativa en `users`; no crea tablas nuevas.
 
 V34 y V35 no crean tablas nuevas. Los filtros de estudiantes, la visualización acumulada de
 asistencia y la toma de asistencia por fecha son cambios de consulta, servicio y UI. La asistencia
@@ -283,7 +284,7 @@ posteriores, pero V31/V32 no están registrados en esa tabla. El registro debe c
 procedimiento de despliegue; no debe inventarse un hash Git ni insertarse desde una migración de
 dominio.
 
-## 5. Migraciones objetivo V33 a V37
+## 5. Migraciones objetivo V33 a V38
 
 ### V33: perfil administrativo de tutor/cliente
 
@@ -365,6 +366,15 @@ toma `users.role`, los usuarios vinculados a `teaching_staff` y los tutores vige
 los consumidores migran a `roles` y `activeRole`. Los índices parciales por usuario y rol sólo incluyen
 asignaciones no revocadas.
 
+### V38: concurrencia optimista de datos de cuenta
+
+Archivo: `scripts/migrations/V38__add_user_account_optimistic_lock.sql`.
+
+V38 agrega `users.version BIGINT NOT NULL DEFAULT 0`, retrocompleta únicamente los nulos y valida
+`chk_users_version_non_negative`. La columna respalda `@Version` al editar identidad/contacto desde
+Tutores y clientes y evita sobrescribir cambios concurrentes. No cambia usuario, contraseña, estado,
+roles, responsables académicos ni titularidad financiera; tampoco crea tablas nuevas.
+
 ### Asistencia de cursos por fecha sin migración adicional
 
 `course_attendance.course_session_id` sigue vinculando cada asistencia con una clase concreta. Al
@@ -395,6 +405,7 @@ estudiante se calculan desde `course_attendance`; no almacenan porcentajes redun
 - V34: check 0-100 para Speaking, FKs e índices de examen y entrega de origen.
 - V35: referencia XOR de personal y unicidad parcial por persona/fecha en `staff_attendance`.
 - V37: unicidad de asignación por usuario/rol e índices parciales para asignaciones activas y auditoría.
+- V38: `users.version` obligatorio y no negativo para concurrencia optimista de cuenta.
 - `course_attendance`: unicidad por inscripción/sesión; la fecha se resuelve mediante
   `course_sessions` sin persistir porcentajes redundantes.
 
@@ -408,7 +419,7 @@ estudiante se calculan desde `course_attendance`; no almacenan porcentajes redun
 4. `billing_charges.fiscal_disposition` es `VARCHAR(30)` en producción y `length=20` en JPA.
 5. `schema_version` no registra V31/V32 pese a que sus cambios físicos están presentes.
 
-Estos puntos no forman parte de V33-V37. Deben resolverse mediante una migración de reparación separada,
+Estos puntos no forman parte de V33-V38. Deben resolverse mediante una migración de reparación separada,
 con preflight y verificación histórica.
 
 ## 8. Validaciones mínimas para promover V33-V35

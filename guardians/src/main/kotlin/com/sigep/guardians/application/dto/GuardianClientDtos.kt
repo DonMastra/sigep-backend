@@ -1,7 +1,10 @@
 package com.sigep.guardians.application.dto
 
 import com.sigep.guardians.domain.model.GuardianContactChannel
+import jakarta.validation.constraints.Email
+import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotNull
+import jakarta.validation.constraints.Past
 import jakarta.validation.constraints.PositiveOrZero
 import jakarta.validation.constraints.Size
 import java.math.BigDecimal
@@ -45,6 +48,7 @@ data class GuardianClientStatsDto(
 
 data class GuardianClientDetailDto(
     val summary: GuardianClientSummaryDto,
+    val accountVersion: Long,
     val address: String?,
     val dateOfBirth: LocalDate?,
     val emergencyContact: String?,
@@ -124,6 +128,39 @@ data class UpdateGuardianClientProfileRequest(
 
     @field:Size(max = 1000)
     val administrativeNotes: String? = null,
+
+    @field:PositiveOrZero
+    val version: Long
+)
+
+data class UpdateGuardianClientAccountRequest(
+    @field:NotBlank
+    @field:Size(max = 100)
+    val firstName: String,
+
+    @field:NotBlank
+    @field:Size(max = 100)
+    val lastName: String,
+
+    @field:NotBlank
+    @field:Email
+    @field:Size(max = 255)
+    val email: String,
+
+    @field:Size(max = 50)
+    val phoneNumber: String? = null,
+
+    @field:Size(max = 255)
+    val address: String? = null,
+
+    @field:Past
+    val dateOfBirth: LocalDate? = null,
+
+    @field:Size(max = 50)
+    val documentNumber: String? = null,
+
+    @field:Size(max = 255)
+    val emergencyContact: String? = null,
 
     @field:PositiveOrZero
     val version: Long
