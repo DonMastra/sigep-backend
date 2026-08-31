@@ -13,6 +13,7 @@ import com.sigep.security.domain.model.RegistrationRequest
 import com.sigep.security.domain.model.GuardianInvitation
 import com.sigep.security.domain.model.User
 import com.sigep.security.domain.model.UserRole
+import com.sigep.security.domain.model.UserRoleContextEventType
 import com.sigep.security.domain.repository.RegistrationRequestRepository
 import com.sigep.security.domain.repository.GuardianInvitationRepository
 import com.sigep.security.domain.repository.UserRepository
@@ -38,6 +39,7 @@ class AuthService(
     private val guardianInvitationRepository: GuardianInvitationRepository,
     private val passwordEncoder: PasswordEncoder,
     private val jwtTokenProvider: JwtTokenProvider,
+    private val roleAssignmentService: UserRoleAssignmentService,
     private val guardianClientProfileProvisioners: List<GuardianClientProfileProvisioner> = emptyList()
 ) {
 
@@ -55,15 +57,59 @@ class AuthService(
             throw UnauthorizedException("Invalid credentials")
         }
 
-        val token = jwtTokenProvider.generateToken(user)
-        val refreshToken = jwtTokenProvider.generateRefreshToken(user)
+        val roles = roleAssignmentService.ensureLegacyAssignmentIfMissing(user)
+        if (roles.isEmpty()) {
+            throw ForbiddenException("The account has no active role assignments", "NO_ACTIVE_ROLE_ASSIGNMENTS")
+        }
+
+        if (roles.size > 1) {
+            logger.info("Login requires role selection for user id {}", user.id)
+            return LoginResponse(
+                roleSelectionRequired = true,
+                roleSelectionToken = jwtTokenProvider.generateRoleSelectionToken(user),
+                availableRoles = roles
+            )
+        }
 
         logger.info("Login completed successfully for user id {}", user.id)
+        return issueSession(user, roles.single(), eventType = UserRoleContextEventType.LOGIN)
+    }
 
-        return LoginResponse(
-            token = token,
-            refreshToken = refreshToken,
-            user = user.toDto()
+    fun selectRole(request: RoleSelectionRequest): LoginResponse {
+        if (!jwtTokenProvider.validateToken(request.roleSelectionToken) ||
+            !jwtTokenProvider.isRoleSelectionToken(request.roleSelectionToken)
+        ) {
+            throw UnauthorizedException("Role selection token is invalid or expired", "ROLE_SELECTION_TOKEN_INVALID")
+        }
+        val user = userRepository.findByUsername(jwtTokenProvider.getUsernameFromToken(request.roleSelectionToken))
+            .orElseThrow { ResourceNotFoundException("User not found") }
+        validateActiveAccountForLogin(user)
+        requireAssignedRole(user, request.activeRole)
+        return issueSession(user, request.activeRole, eventType = UserRoleContextEventType.LOGIN_SELECTION)
+    }
+
+    fun switchRole(userId: Long, currentRole: String?, request: RoleContextRequest): LoginResponse {
+        val user = userRepository.findById(userId)
+            .orElseThrow { ResourceNotFoundException("User not found") }
+        validateActiveAccountForLogin(user)
+        requireAssignedRole(user, request.activeRole)
+
+        val previousRole = currentRole?.let { runCatching { UserRole.valueOf(it) }.getOrNull() }
+        if (request.activeRole == UserRole.ADMIN && previousRole != UserRole.ADMIN) {
+            if (request.currentPassword.isNullOrBlank() || !passwordEncoder.matches(request.currentPassword, user.password)) {
+                throw ValidationException(
+                    message = "La contrasena actual no es correcta",
+                    code = "ADMIN_ROLE_REAUTHENTICATION_FAILED",
+                    field = "currentPassword"
+                )
+            }
+        }
+
+        return issueSession(
+            user,
+            request.activeRole,
+            previousRole = previousRole,
+            eventType = UserRoleContextEventType.SWITCH
         )
     }
 
@@ -101,6 +147,7 @@ class AuthService(
         )
 
         val savedUser = userRepository.save(user)
+        roleAssignmentService.ensureAssignment(savedUser, request.role)
 
         registrationRequestRepository.save(
             RegistrationRequest(
@@ -168,6 +215,7 @@ class AuthService(
                 updatedAt = now
             )
         )
+        roleAssignmentService.ensureAssignment(user, UserRole.GUARDIAN, createdBy)
 
         guardianClientProfileProvisioners.forEach {
             it.provisionGuardianClient(user.id!!, createdBy)
@@ -216,11 +264,11 @@ class AuthService(
     }
 
     @Transactional(readOnly = true)
-    fun getMyProfile(userId: Long): UserProfileDto {
+    fun getMyProfile(userId: Long, activeRole: UserRole? = null): UserProfileDto {
         val user = userRepository.findById(userId)
             .orElseThrow { ResourceNotFoundException("User not found") }
 
-        return user.toProfileDto()
+        return user.toProfileDto(activeRole ?: user.role)
     }
 
     fun changePassword(userId: Long, request: ChangePasswordRequest): UserDto {
@@ -336,8 +384,15 @@ class AuthService(
         val filters = mutableListOf<Specification<User>>()
 
         if (role != null) {
+            val activeRoleUserIds = roleAssignmentService.activeUserIdsByRole(role)
+            val usersWithAssignments = roleAssignmentService.assignedUserIds()
             filters += Specification { root, _, criteriaBuilder ->
-                criteriaBuilder.equal(root.get<UserRole>("role"), role)
+                val assignedRole = root.get<Long>("id").`in`(activeRoleUserIds)
+                val legacyRole = criteriaBuilder.and(
+                    criteriaBuilder.equal(root.get<UserRole>("role"), role),
+                    criteriaBuilder.not(root.get<Long>("id").`in`(usersWithAssignments))
+                )
+                criteriaBuilder.or(assignedRole, legacyRole)
             }
         }
 
@@ -443,34 +498,53 @@ class AuthService(
     }
 
     fun refreshToken(request: RefreshTokenRequest): LoginResponse {
+        if (!jwtTokenProvider.validateToken(request.refreshToken) || !jwtTokenProvider.isRefreshToken(request.refreshToken)) {
+            throw UnauthorizedException("Refresh token is invalid or expired", "REFRESH_TOKEN_INVALID")
+        }
         val username = jwtTokenProvider.getUsernameFromToken(request.refreshToken)
 
         val user = userRepository.findByUsername(username)
             .orElseThrow { ResourceNotFoundException("User not found") }
 
         validateActiveAccountForLogin(user)
-
-        val newToken = jwtTokenProvider.generateToken(user)
-        val newRefreshToken = jwtTokenProvider.generateRefreshToken(user)
-
-        return LoginResponse(
-            token = newToken,
-            refreshToken = newRefreshToken,
-            user = user.toDto()
-        )
+        val activeRole = jwtTokenProvider.getRoleFromTokenOrNull(request.refreshToken)
+            ?.let { runCatching { UserRole.valueOf(it) }.getOrNull() }
+            ?: user.role
+        requireAssignedRole(user, activeRole)
+        return issueSession(user, activeRole)
     }
 
-    private fun User.toDto() = UserDto(
+    @Transactional(readOnly = true)
+    fun getUserRoleAssignments(userId: Long): UserRoleAssignmentsDto =
+        UserRoleAssignmentsDto(userId, roleAssignmentService.activeRoles(userId))
+
+    fun grantUserRole(userId: Long, role: UserRole, assignedBy: Long): UserRoleAssignmentsDto {
+        val roles = roleAssignmentService.grantRole(userId, role, assignedBy)
+        if (role == UserRole.GUARDIAN) {
+            guardianClientProfileProvisioners.forEach { it.provisionGuardianClient(userId, assignedBy) }
+        }
+        return UserRoleAssignmentsDto(userId, roles)
+    }
+
+    fun revokeUserRole(userId: Long, role: UserRole, revokedBy: Long): UserRoleAssignmentsDto =
+        UserRoleAssignmentsDto(userId, roleAssignmentService.revokeRole(userId, role, revokedBy))
+
+    private fun User.toDto(activeRole: UserRole = role): UserDto {
+        val assignedRoles = roleAssignmentService.activeRoles(this)
+        return UserDto(
         id = id!!,
         username = username,
         email = email,
         firstName = firstName,
         lastName = lastName,
-        role = role,
+        role = activeRole,
+        roles = assignedRoles,
+        activeRole = activeRole,
         status = status,
         active = active,
         mustChangePassword = mustChangePassword
-    )
+        )
+    }
 
     private fun secureToken(): String {
         val bytes = ByteArray(32)
@@ -483,7 +557,7 @@ class AuthService(
             .digest(token.toByteArray(StandardCharsets.UTF_8))
             .joinToString("") { "%02x".format(it) }
 
-    private fun User.toProfileDto() = UserProfileDto(
+    private fun User.toProfileDto(activeRole: UserRole = role) = UserProfileDto(
         id = id!!,
         username = username,
         firstName = firstName,
@@ -494,11 +568,42 @@ class AuthService(
         dateOfBirth = dateOfBirth,
         documentNumber = documentNumber,
         emergencyContact = emergencyContact,
-        role = role,
+        role = activeRole,
+        roles = roleAssignmentService.activeRoles(this),
+        activeRole = activeRole,
         status = status,
         active = active,
         mustChangePassword = mustChangePassword
     )
+
+    private fun issueSession(
+        user: User,
+        activeRole: UserRole,
+        previousRole: UserRole? = null,
+        eventType: UserRoleContextEventType? = null
+    ): LoginResponse {
+        val roles = requireAssignedRole(user, activeRole)
+        eventType?.let {
+            roleAssignmentService.recordContext(user.id!!, previousRole, activeRole, it)
+        }
+        return LoginResponse(
+            token = jwtTokenProvider.generateToken(user, activeRole),
+            refreshToken = jwtTokenProvider.generateRefreshToken(user, activeRole),
+            user = user.toDto(activeRole),
+            availableRoles = roles
+        )
+    }
+
+    private fun requireAssignedRole(user: User, activeRole: UserRole): List<UserRole> {
+        val roles = roleAssignmentService.activeRoles(user)
+        if (activeRole !in roles) {
+            throw ForbiddenException(
+                message = "The requested role is not assigned to the user",
+                code = "ROLE_NOT_ASSIGNED"
+            )
+        }
+        return roles
+    }
 
     private fun RegistrationRequest.toDto() = RegistrationRequestDto(
         id = id,

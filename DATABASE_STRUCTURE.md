@@ -2,7 +2,7 @@
 
 ## 1. Alcance y fuente de verdad
 
-**Última actualización documental:** 2026-08-26
+**Última actualización documental:** 2026-08-27
 
 **Última auditoría productiva:** 2026-08-21
 
@@ -16,7 +16,7 @@ El documento distingue dos estados que no deben mezclarse:
 
 - **Snapshot productivo observado:** catálogo real de `sigep_prod` el 21/08/2026, antes de promover
   V33, V34 y V35.
-- **Esquema objetivo actual:** entidades y scripts manuales del repositorio hasta V36.
+- **Esquema objetivo actual:** entidades y scripts manuales del repositorio hasta V37.
 
 El orden de precedencia para describir un ambiente desplegado es:
 
@@ -28,7 +28,7 @@ El orden de precedencia para describir un ambiente desplegado es:
 Los scripts SQL son migraciones manuales; el proyecto no usa Flyway ni Liquibase. QA y producción
 deben arrancar con `JPA_DDL_AUTO=validate`: Hibernate valida, pero no repara el esquema.
 
-### Esquema objetivo del repositorio hasta V36
+### Esquema objetivo del repositorio hasta V37
 
 El estado objetivo agrega sobre el snapshot productivo:
 
@@ -37,6 +37,7 @@ El estado objetivo agrega sobre el snapshot productivo:
 3. **V35:** integridad y unicidad diaria de asistencia para personal docente y no docente.
 4. **V36:** relación multirresponsable `student_guardian_relationships`; el total objetivo pasa a
    61 tablas y `students.guardian_id` queda como principal opcional compatible.
+5. **V37:** asignaciones multirrol y auditoría del contexto activo; el total objetivo pasa a 63 tablas.
 
 V34 y V35 no crean tablas nuevas. Los filtros de estudiantes, la visualización acumulada de
 asistencia y la toma de asistencia por fecha son cambios de consulta, servicio y UI. La asistencia
@@ -282,7 +283,7 @@ posteriores, pero V31/V32 no están registrados en esa tabla. El registro debe c
 procedimiento de despliegue; no debe inventarse un hash Git ni insertarse desde una migración de
 dominio.
 
-## 5. Migraciones objetivo V33 a V35
+## 5. Migraciones objetivo V33 a V37
 
 ### V33: perfil administrativo de tutor/cliente
 
@@ -342,6 +343,28 @@ duplicados por persona y fecha. Luego agrega:
 La aplicación también valida duplicados antes de guardar para ofrecer un error funcional, pero los
 índices son la garantía final ante concurrencia.
 
+### V36: responsables académicos múltiples
+
+Archivo: `scripts/migrations/V36__support_multiple_student_guardians.sql`.
+
+V36 crea `student_guardian_relationships`, retrocompleta los vínculos existentes desde
+`students.guardian_id` y mantiene esa columna como responsable principal opcional de compatibilidad.
+La relación admite varios responsables académicos activos, permisos de visualización, contacto de
+facturación y un único principal activo opcional por estudiante.
+
+### V37: asignaciones multirrol y contexto activo
+
+Archivo: `scripts/migrations/V37__add_multi_role_assignments_and_context_audit.sql`.
+
+V37 es aditiva y todavía debe ejecutarse con el preflight/rollback normal del entorno objetivo.
+Crea `user_role_assignments`, única por `(user_id, role)`, con alta, revocación y actor administrativo;
+crea `user_role_context_events` para auditar login, selección inicial y cambio de espacio. El backfill
+toma `users.role`, los usuarios vinculados a `teaching_staff` y los tutores vigentes de `students`.
+
+`users.role` no se elimina en esta etapa: queda como alias/default de compatibilidad mientras todos
+los consumidores migran a `roles` y `activeRole`. Los índices parciales por usuario y rol sólo incluyen
+asignaciones no revocadas.
+
 ### Asistencia de cursos por fecha sin migración adicional
 
 `course_attendance.course_session_id` sigue vinculando cada asistencia con una clase concreta. Al
@@ -371,6 +394,7 @@ estudiante se calculan desde `course_attendance`; no almacenan porcentajes redun
 - V33: único `client_number` e índice de canal preferido.
 - V34: check 0-100 para Speaking, FKs e índices de examen y entrega de origen.
 - V35: referencia XOR de personal y unicidad parcial por persona/fecha en `staff_attendance`.
+- V37: unicidad de asignación por usuario/rol e índices parciales para asignaciones activas y auditoría.
 - `course_attendance`: unicidad por inscripción/sesión; la fecha se resuelve mediante
   `course_sessions` sin persistir porcentajes redundantes.
 
@@ -384,7 +408,7 @@ estudiante se calculan desde `course_attendance`; no almacenan porcentajes redun
 4. `billing_charges.fiscal_disposition` es `VARCHAR(30)` en producción y `length=20` en JPA.
 5. `schema_version` no registra V31/V32 pese a que sus cambios físicos están presentes.
 
-Estos puntos no forman parte de V33-V35. Deben resolverse mediante una migración de reparación separada,
+Estos puntos no forman parte de V33-V37. Deben resolverse mediante una migración de reparación separada,
 con preflight y verificación histórica.
 
 ## 8. Validaciones mínimas para promover V33-V35

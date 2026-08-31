@@ -2,6 +2,8 @@ package com.sigep.security.infrastructure.security
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.sigep.common.application.dto.ErrorResponse
+import com.sigep.security.application.service.UserRoleAssignmentService
+import com.sigep.security.domain.model.UserRole
 import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
@@ -16,7 +18,8 @@ import org.springframework.web.filter.OncePerRequestFilter
 @Component
 class JwtAuthenticationFilter(
     private val jwtTokenProvider: JwtTokenProvider,
-    private val objectMapper: ObjectMapper
+    private val objectMapper: ObjectMapper,
+    private val roleAssignmentService: UserRoleAssignmentService
 ) : OncePerRequestFilter() {
 
     companion object {
@@ -31,11 +34,18 @@ class JwtAuthenticationFilter(
         try {
             val jwt = getJwtFromRequest(request)
 
-            if (jwt != null && jwtTokenProvider.validateToken(jwt)) {
+            if (jwt != null && jwtTokenProvider.validateToken(jwt) && jwtTokenProvider.isAccessToken(jwt)) {
                 val username = jwtTokenProvider.getUsernameFromToken(jwt)
                 val role = jwtTokenProvider.getRoleFromToken(jwt)
                 val userId = jwtTokenProvider.getUserIdFromToken(jwt)
                 val mustChangePassword = jwtTokenProvider.getMustChangePasswordFromToken(jwt)
+
+                val parsedRole = runCatching { UserRole.valueOf(role) }.getOrNull()
+                if (parsedRole == null || !roleAssignmentService.isRoleUsableForSession(userId, parsedRole)) {
+                    log.warn("Rejected token with inactive role {} for user id {}", role, userId)
+                    filterChain.doFilter(request, response)
+                    return
+                }
 
                 if (mustChangePassword && !isAllowedWhilePasswordChangeIsRequired(request)) {
                     writePasswordChangeRequired(response, request)

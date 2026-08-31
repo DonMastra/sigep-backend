@@ -18,19 +18,34 @@ class JwtTokenProvider(
     private val jwtExpiration: Long,
 
     @Value("\${jwt.refresh-expiration:604800000}") // 7 days
-    private val refreshExpiration: Long
+    private val refreshExpiration: Long,
+
+    @Value("\${jwt.role-selection-expiration:300000}") // 5 minutes
+    private val roleSelectionExpiration: Long
 ) {
+
+    companion object {
+        private const val TOKEN_TYPE = "tokenType"
+        private const val ACCESS = "ACCESS"
+        private const val REFRESH = "REFRESH"
+        private const val ROLE_SELECTION = "ROLE_SELECTION"
+    }
 
     private val key: SecretKey = Keys.hmacShaKeyFor(jwtSecret.toByteArray())
 
     fun generateToken(user: User): String {
+        return generateToken(user, user.role)
+    }
+
+    fun generateToken(user: User, activeRole: com.sigep.security.domain.model.UserRole): String {
         val now = Date()
         val expiryDate = Date(now.time + jwtExpiration)
 
         return Jwts.builder()
             .subject(user.username)
+            .claim(TOKEN_TYPE, ACCESS)
             .claim("userId", user.id)
-            .claim("role", user.role.name)
+            .claim("role", activeRole.name)
             .claim("email", user.email)
             .claim("mustChangePassword", user.mustChangePassword)
             .issuedAt(now)
@@ -40,11 +55,32 @@ class JwtTokenProvider(
     }
 
     fun generateRefreshToken(user: User): String {
+        return generateRefreshToken(user, user.role)
+    }
+
+    fun generateRefreshToken(user: User, activeRole: com.sigep.security.domain.model.UserRole): String {
         val now = Date()
         val expiryDate = Date(now.time + refreshExpiration)
 
         return Jwts.builder()
             .subject(user.username)
+            .claim(TOKEN_TYPE, REFRESH)
+            .claim("userId", user.id)
+            .claim("role", activeRole.name)
+            .issuedAt(now)
+            .expiration(expiryDate)
+            .signWith(key)
+            .compact()
+    }
+
+    fun generateRoleSelectionToken(user: User): String {
+        val now = Date()
+        val expiryDate = Date(now.time + roleSelectionExpiration)
+
+        return Jwts.builder()
+            .subject(user.username)
+            .claim(TOKEN_TYPE, ROLE_SELECTION)
+            .claim("userId", user.id)
             .issuedAt(now)
             .expiration(expiryDate)
             .signWith(key)
@@ -62,6 +98,21 @@ class JwtTokenProvider(
     fun getRoleFromToken(token: String): String {
         return getClaims(token).get("role", String::class.java)
     }
+
+    fun getRoleFromTokenOrNull(token: String): String? = getClaims(token).get("role", String::class.java)
+
+    fun isAccessToken(token: String): Boolean {
+        val tokenType = getClaims(token).get(TOKEN_TYPE, String::class.java)
+        return tokenType == null || tokenType == ACCESS
+    }
+
+    fun isRefreshToken(token: String): Boolean {
+        val tokenType = getClaims(token).get(TOKEN_TYPE, String::class.java)
+        return tokenType == null || tokenType == REFRESH
+    }
+
+    fun isRoleSelectionToken(token: String): Boolean =
+        getClaims(token).get(TOKEN_TYPE, String::class.java) == ROLE_SELECTION
 
     fun getMustChangePasswordFromToken(token: String): Boolean {
         return getClaims(token).get("mustChangePassword", Boolean::class.javaObjectType) ?: false

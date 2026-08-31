@@ -6,6 +6,7 @@ import com.sigep.security.domain.model.AccountStatus
 import com.sigep.security.domain.model.User
 import com.sigep.security.domain.model.UserRole
 import com.sigep.security.domain.repository.UserRepository
+import com.sigep.security.application.service.UserRoleAssignmentService
 import com.sigep.staff.domain.model.PaymentStatus
 import com.sigep.staff.domain.model.TeachingStaff
 import com.sigep.staff.infrastructure.repository.StaffAttendanceRepository
@@ -24,17 +25,19 @@ class TeachingStaffServiceAssignableTeachersTest {
     private val enrollmentRepository = mockk<EnrollmentRepository>()
     private val userRepository = mockk<UserRepository>()
     private val passwordEncoder = mockk<PasswordEncoder>()
+    private val roleAssignmentService = mockk<UserRoleAssignmentService>()
     private val service = TeachingStaffService(
         teachingStaffRepository,
         attendanceRepository,
         courseRepository,
         enrollmentRepository,
         userRepository,
-        passwordEncoder
+        passwordEncoder,
+        roleAssignmentService
     )
 
     @Test
-    fun `lists only active staff linked to eligible active teacher or admin accounts`() {
+    fun `lists only active staff linked to accounts with an active teacher assignment`() {
         val teacherStaff = staff(11, 101, "Agustin", "Rosado")
         val adminStaff = staff(12, 102, "Andres", "Mastracchio")
         val inactiveAccountStaff = staff(13, 103, "Docente", "Inactivo")
@@ -47,12 +50,15 @@ class TeachingStaffServiceAssignableTeachersTest {
             user(103, "inactive", UserRole.TEACHER, active = false),
             user(101, "arosado", UserRole.TEACHER)
         )
+        every { roleAssignmentService.isRoleActive(102, UserRole.TEACHER) } returns false
+        every { roleAssignmentService.isRoleActive(103, UserRole.TEACHER) } returns true
+        every { roleAssignmentService.isRoleActive(101, UserRole.TEACHER) } returns true
 
         val result = service.getAssignableTeachers()
 
-        assertEquals(listOf("amastracchio", "arosado"), result.map { it.username })
-        assertEquals(listOf(102L, 101L), result.map { it.id })
-        assertEquals(listOf(12L, 11L), result.map { it.staffId })
+        assertEquals(listOf("arosado"), result.map { it.username })
+        assertEquals(listOf(101L), result.map { it.id })
+        assertEquals(listOf(11L), result.map { it.staffId })
     }
 
     private fun staff(id: Long, linkedUserId: Long?, firstName: String, lastName: String) = TeachingStaff(

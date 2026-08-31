@@ -72,6 +72,7 @@ jwt:
   secret: mySecretKeyForJWTTokenGenerationShouldBeAtLeast256BitsLongForHS512Algorithm
   expiration: 86400000
   refresh-expiration: 604800000
+  role-selection-expiration: ${JWT_ROLE_SELECTION_EXPIRATION:300000}
 
 # Application-specific Configuration
 app:
