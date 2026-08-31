@@ -170,7 +170,28 @@ class JdbcGuardianClientReadRepository(
     }
 
     override fun existsGuardian(guardianUserId: Long): Boolean = jdbc.queryForObject(
-        "SELECT EXISTS(SELECT 1 FROM users WHERE id = :guardianUserId AND role = 'GUARDIAN')",
+        """
+        SELECT EXISTS(
+            SELECT 1
+            FROM users u
+            WHERE u.id = :guardianUserId
+              AND (
+                  EXISTS (
+                      SELECT 1
+                      FROM user_role_assignments ura
+                      WHERE ura.user_id = u.id
+                        AND ura.role = 'GUARDIAN'
+                        AND ura.revoked_at IS NULL
+                  )
+                  OR (
+                      u.role = 'GUARDIAN'
+                      AND NOT EXISTS (
+                          SELECT 1 FROM user_role_assignments any_role WHERE any_role.user_id = u.id
+                      )
+                  )
+              )
+        )
+        """.trimIndent(),
         mapOf("guardianUserId" to guardianUserId),
         Boolean::class.java
     ) == true
@@ -322,7 +343,19 @@ class JdbcGuardianClientReadRepository(
                 LEFT JOIN tuition_summary ts ON ts.guardian_user_id = u.id
                 LEFT JOIN billing_summary bs ON bs.guardian_user_id = u.id
                 LEFT JOIN payment_summary ps ON ps.guardian_user_id = u.id
-                WHERE u.role = 'GUARDIAN'
+                WHERE EXISTS (
+                    SELECT 1
+                    FROM user_role_assignments ura
+                    WHERE ura.user_id = u.id
+                      AND ura.role = 'GUARDIAN'
+                      AND ura.revoked_at IS NULL
+                )
+                   OR (
+                       u.role = 'GUARDIAN'
+                       AND NOT EXISTS (
+                           SELECT 1 FROM user_role_assignments any_role WHERE any_role.user_id = u.id
+                       )
+                   )
             )
         """.trimIndent()
 

@@ -50,6 +50,7 @@ class SecurityConfig(
                     // Public endpoints - Authentication
                     .requestMatchers(
                         "/api/v1/auth/login",
+                        "/api/v1/auth/role-selections",
                         "/api/v1/auth/register",
                         "/api/v1/auth/guardian-invitations/accept",
                         "/api/v1/auth/refresh",

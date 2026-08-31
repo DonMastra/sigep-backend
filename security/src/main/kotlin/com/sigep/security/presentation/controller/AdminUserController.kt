@@ -4,6 +4,7 @@ import com.sigep.common.application.dto.ApiResponse
 import com.sigep.common.application.exception.ValidationException
 import com.sigep.security.application.annotation.RequireAdmin
 import com.sigep.security.application.dto.AdminUserPageDto
+import com.sigep.security.application.dto.UserRoleAssignmentsDto
 import com.sigep.security.application.service.AuthService
 import com.sigep.security.domain.model.AccountStatus
 import com.sigep.security.domain.model.UserRole
@@ -11,10 +12,8 @@ import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
 import org.slf4j.LoggerFactory
 import org.springframework.http.ResponseEntity
-import org.springframework.web.bind.annotation.GetMapping
-import org.springframework.web.bind.annotation.RequestMapping
-import org.springframework.web.bind.annotation.RequestParam
-import org.springframework.web.bind.annotation.RestController
+import jakarta.servlet.http.HttpServletRequest
+import org.springframework.web.bind.annotation.*
 
 @RestController
 @RequestMapping("/api/v1/admin/users")
@@ -55,6 +54,37 @@ class AdminUserController(
         return ResponseEntity.ok(ApiResponse.success(response, "OK"))
     }
 
+    @GetMapping("/{userId}/roles")
+    @Operation(summary = "Consultar roles asignados")
+    fun getRoles(@PathVariable userId: Long): ResponseEntity<ApiResponse<UserRoleAssignmentsDto>> =
+        ResponseEntity.ok(ApiResponse.success(authService.getUserRoleAssignments(userId)))
+
+    @PutMapping("/{userId}/roles/{role}")
+    @Operation(summary = "Asignar rol", description = "La asignacion es idempotente y conserva auditoria del administrador")
+    fun grantRole(
+        @PathVariable userId: Long,
+        @PathVariable role: String,
+        httpRequest: HttpServletRequest
+    ): ResponseEntity<ApiResponse<UserRoleAssignmentsDto>> {
+        val actorUserId = requireActorUserId(httpRequest)
+        return ResponseEntity.ok(
+            ApiResponse.success(authService.grantUserRole(userId, requireRole(role), actorUserId), "Role assigned")
+        )
+    }
+
+    @DeleteMapping("/{userId}/roles/{role}")
+    @Operation(summary = "Revocar rol", description = "Nunca permite dejar una cuenta sin roles activos")
+    fun revokeRole(
+        @PathVariable userId: Long,
+        @PathVariable role: String,
+        httpRequest: HttpServletRequest
+    ): ResponseEntity<ApiResponse<UserRoleAssignmentsDto>> {
+        val actorUserId = requireActorUserId(httpRequest)
+        return ResponseEntity.ok(
+            ApiResponse.success(authService.revokeUserRole(userId, requireRole(role), actorUserId), "Role revoked")
+        )
+    }
+
     private fun parseRole(role: String?): UserRole? {
         if (
             role.isNullOrBlank() ||
@@ -72,6 +102,13 @@ class AdminUserController(
             throw ValidationException("Invalid user role: $role")
         }
     }
+
+    private fun requireRole(role: String): UserRole = parseRole(role)
+        ?: throw ValidationException("Role is required")
+
+    private fun requireActorUserId(request: HttpServletRequest): Long =
+        request.getAttribute("userId") as? Long
+            ?: throw com.sigep.common.application.exception.UnauthorizedException("Token invalido o sin userId")
 
     private fun parseStatus(status: String?): AccountStatus? {
         if (

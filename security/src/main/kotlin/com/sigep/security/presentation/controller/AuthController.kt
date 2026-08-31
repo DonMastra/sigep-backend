@@ -7,6 +7,7 @@ import com.sigep.security.application.service.AuthService
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
+import jakarta.servlet.http.HttpServletRequest
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -26,6 +27,25 @@ class AuthController(
     fun login(@Valid @RequestBody request: LoginRequest): ResponseEntity<ApiResponse<LoginResponse>> {
         val response = authService.login(request)
         return ResponseEntity.ok(ApiResponse.success(response, "Login successful"))
+    }
+
+    @PostMapping("/role-selections")
+    @Operation(summary = "Seleccionar espacio inicial", description = "Canjea un token de seleccion por una sesion limitada a un rol asignado")
+    fun selectRole(@Valid @RequestBody request: RoleSelectionRequest): ResponseEntity<ApiResponse<LoginResponse>> =
+        ResponseEntity.ok(ApiResponse.success(authService.selectRole(request), "Role selected successfully"))
+
+    @PutMapping("/role-context")
+    @Operation(summary = "Cambiar espacio activo", description = "Rota los tokens y activa un unico rol; elevar a ADMIN exige la clave actual")
+    fun switchRole(
+        @Valid @RequestBody request: RoleContextRequest,
+        httpRequest: HttpServletRequest
+    ): ResponseEntity<ApiResponse<LoginResponse>> {
+        val userId = httpRequest.getAttribute("userId") as? Long
+            ?: throw com.sigep.common.application.exception.UnauthorizedException("Token invalido o sin userId")
+        val currentRole = httpRequest.getAttribute("userRole") as? String
+        return ResponseEntity.ok(
+            ApiResponse.success(authService.switchRole(userId, currentRole, request), "Role context changed successfully")
+        )
     }
 
     @PostMapping("/register")

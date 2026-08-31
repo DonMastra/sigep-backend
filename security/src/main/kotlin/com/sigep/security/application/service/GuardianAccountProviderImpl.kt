@@ -15,12 +15,13 @@ import java.time.LocalDateTime
 @Service
 class GuardianAccountProviderImpl(
     private val userRepository: UserRepository,
-    private val registrationRequestRepository: RegistrationRequestRepository
+    private val registrationRequestRepository: RegistrationRequestRepository,
+    private val roleAssignmentService: UserRoleAssignmentService
 ) : GuardianAccountProvider {
 
     override fun getGuardianAccount(userId: Long): GuardianAccountInfo? =
         userRepository.findById(userId)
-            .filter { it.role == UserRole.GUARDIAN }
+            .filter { roleAssignmentService.isRoleActive(it.id!!, UserRole.GUARDIAN) }
             .map { it.toInfo() }
             .orElse(null)
 
@@ -32,7 +33,7 @@ class GuardianAccountProviderImpl(
         val user = userRepository.findById(userId)
             .orElseThrow { ResourceNotFoundException("Guardian user not found with id: $userId") }
 
-        if (user.role != UserRole.GUARDIAN) {
+        if (!roleAssignmentService.isRoleActive(userId, UserRole.GUARDIAN)) {
             throw ForbiddenException("Only GUARDIAN accounts can be activated by tuition")
         }
 

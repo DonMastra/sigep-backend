@@ -1,6 +1,7 @@
 package com.sigep.staff.application.service
 
 import com.sigep.common.application.service.TeacherInfoProvider
+import com.sigep.common.application.service.UserRoleMembershipProvider
 import com.sigep.security.domain.model.AccountStatus
 import com.sigep.security.domain.model.UserRole
 import com.sigep.security.domain.repository.UserRepository
@@ -10,7 +11,8 @@ import org.springframework.stereotype.Service
 @Service
 class TeacherInfoProviderImpl(
     private val teachingStaffRepository: TeachingStaffRepository,
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val roleMembershipProviders: List<UserRoleMembershipProvider> = emptyList()
 ) : TeacherInfoProvider {
 
     override fun getTeacherNamesByIds(teacherIds: Collection<Long>): Map<Long, String> {
@@ -21,7 +23,7 @@ class TeacherInfoProviderImpl(
         val activeStaff = teachingStaffRepository.findAllByLinkedUserIdInAndIsActiveTrue(teacherIds)
         val eligibleUserIds = userRepository.findAllById(activeStaff.mapNotNull { it.linkedUserId }.distinct())
             .filter { user ->
-                user.role in setOf(UserRole.TEACHER, UserRole.ADMIN) &&
+                hasTeacherRole(user.id!!, user.role) &&
                     user.status == AccountStatus.ACTIVE &&
                     user.active
             }
@@ -39,5 +41,9 @@ class TeacherInfoProviderImpl(
 
     override fun getTeacherNameById(teacherId: Long): String? =
         getTeacherNamesByIds(listOf(teacherId))[teacherId]
+
+    private fun hasTeacherRole(userId: Long, legacyRole: UserRole): Boolean =
+        roleMembershipProviders.firstOrNull()?.hasActiveRole(userId, UserRole.TEACHER.name)
+            ?: (legacyRole == UserRole.TEACHER)
 }
 
