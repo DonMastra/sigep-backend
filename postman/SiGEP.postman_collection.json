@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "SiGEP Backend API",
-    "description": "Coleccion Postman para endpoints actuales de SiGEP (modular monolith).",
+    "description": "Coleccion Postman para el contrato actual de SiGEP: autenticacion multirrol, administracion de usuarios y roles, relaciones estudiante-responsable, tutores/clientes, academia y facturacion.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "_postman_id": "c0f8f9ad-7f8f-4af8-9e89-cd2f9d7a1122"
   },
@@ -139,6 +139,118 @@
     {
       "key": "tuitionCourseId",
       "value": "18"
+    },
+    {
+      "key": "roleSelectionToken",
+      "value": ""
+    },
+    {
+      "key": "availableRoles",
+      "value": "[]"
+    },
+    {
+      "key": "selectedRole",
+      "value": "ADMIN"
+    },
+    {
+      "key": "adminPassword",
+      "value": ""
+    },
+    {
+      "key": "adminUserId",
+      "value": "604"
+    },
+    {
+      "key": "guardianUserId",
+      "value": "606"
+    },
+    {
+      "key": "userRole",
+      "value": "GUARDIAN"
+    },
+    {
+      "key": "clientSearch",
+      "value": "Mastracchio"
+    },
+    {
+      "key": "guardianProfileVersion",
+      "value": "0"
+    },
+    {
+      "key": "guardianAccountVersion",
+      "value": "0"
+    },
+    {
+      "key": "preferredContactChannel",
+      "value": "EMAIL"
+    },
+    {
+      "key": "administrativeNotes",
+      "value": "Actualizacion administrativa desde Postman"
+    },
+    {
+      "key": "guardianFirstName",
+      "value": "REPLACE_BEFORE_SEND"
+    },
+    {
+      "key": "guardianLastName",
+      "value": "REPLACE_BEFORE_SEND"
+    },
+    {
+      "key": "guardianEmail",
+      "value": "replace-before-send@example.test"
+    },
+    {
+      "key": "guardianPhoneNumberJson",
+      "value": "null"
+    },
+    {
+      "key": "guardianAddressJson",
+      "value": "null"
+    },
+    {
+      "key": "guardianDateOfBirthJson",
+      "value": "null"
+    },
+    {
+      "key": "guardianDocumentNumberJson",
+      "value": "null"
+    },
+    {
+      "key": "guardianEmergencyContactJson",
+      "value": "null"
+    },
+    {
+      "key": "guardianIdsJson",
+      "value": "[606]"
+    },
+    {
+      "key": "primaryGuardianId",
+      "value": "606"
+    },
+    {
+      "key": "guardianUpdateReason",
+      "value": "Actualizacion administrativa confirmada"
+    },
+    {
+      "key": "confirmGuardianReplacement",
+      "value": ""
+    },
+    {
+      "key": "confirmRoleRevocation",
+      "value": ""
+    },
+    {
+      "key": "confirmGuardianProfileUpdate",
+      "value": ""
+    },
+    {
+      "key": "confirmGuardianAccountUpdate",
+      "value": ""
+    },
+    {
+      "key": "courseCode",
+      "value": "COURSE_CODE"
     }
   ],
   "item": [
@@ -153,11 +265,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "const json = pm.response.json();",
-                  "if (json && json.data) {",
-                  "  pm.collectionVariables.set('token', json.data.token || '');",
-                  "  pm.collectionVariables.set('refreshToken', json.data.refreshToken || '');",
-                  "}"
+                  "const payload = pm.response.json();",
+                  "const data = payload && payload.data ? payload.data : {};",
+                  "if (data.token) pm.collectionVariables.set('token', data.token);",
+                  "if (data.refreshToken) pm.collectionVariables.set('refreshToken', data.refreshToken);",
+                  "if (data.roleSelectionToken) pm.collectionVariables.set('roleSelectionToken', data.roleSelectionToken);",
+                  "if (Array.isArray(data.availableRoles)) pm.collectionVariables.set('availableRoles', JSON.stringify(data.availableRoles));",
+                  "if (data.user && data.user.activeRole) pm.collectionVariables.set('selectedRole', data.user.activeRole);"
                 ]
               }
             }
@@ -226,6 +340,89 @@
             "method": "POST",
             "url": "{{baseUrl}}/api/v1/auth/logout"
           }
+        },
+        {
+          "name": "Select Initial Role",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/auth/role-selections",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roleSelectionToken\": \"{{roleSelectionToken}}\",\n  \"activeRole\": \"{{selectedRole}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Canjea el token temporal devuelto por Login cuando la cuenta tiene varios roles."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const payload = pm.response.json();",
+                  "const data = payload && payload.data ? payload.data : {};",
+                  "if (data.token) pm.collectionVariables.set('token', data.token);",
+                  "if (data.refreshToken) pm.collectionVariables.set('refreshToken', data.refreshToken);",
+                  "if (data.roleSelectionToken) pm.collectionVariables.set('roleSelectionToken', data.roleSelectionToken);",
+                  "if (Array.isArray(data.availableRoles)) pm.collectionVariables.set('availableRoles', JSON.stringify(data.availableRoles));",
+                  "if (data.user && data.user.activeRole) pm.collectionVariables.set('selectedRole', data.user.activeRole);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Switch Active Role",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/auth/role-context",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"activeRole\": \"{{selectedRole}}\",\n  \"currentPassword\": \"{{adminPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Rota access y refresh token. Para elevar a ADMIN, adminPassword debe contener la clave actual."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const payload = pm.response.json();",
+                  "const data = payload && payload.data ? payload.data : {};",
+                  "if (data.token) pm.collectionVariables.set('token', data.token);",
+                  "if (data.refreshToken) pm.collectionVariables.set('refreshToken', data.refreshToken);",
+                  "if (data.roleSelectionToken) pm.collectionVariables.set('roleSelectionToken', data.roleSelectionToken);",
+                  "if (Array.isArray(data.availableRoles)) pm.collectionVariables.set('availableRoles', JSON.stringify(data.availableRoles));",
+                  "if (data.user && data.user.activeRole) pm.collectionVariables.set('selectedRole', data.user.activeRole);"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -2346,6 +2543,319 @@
             "method": "DELETE",
             "url": "{{baseUrl}}/api/v1/admin/cache/clear"
           }
+        }
+      ]
+    },
+    {
+      "name": "Admin Users and Roles",
+      "item": [
+        {
+          "name": "List Assignable GUARDIAN Users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/admin/users?role=GUARDIAN&page=0&size=100&sort=username&order=ASC",
+            "description": "Catalogo usado por el formulario de estudiantes. roles[] es la fuente autoritativa en cuentas multirrol."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const payload = pm.response.json();",
+                  "const items = payload && payload.data ? (payload.data.items || payload.data.content || []) : [];",
+                  "pm.test('Every returned account has GUARDIAN assigned', () => items.forEach(user => pm.expect((user.roles || [user.role])).to.include('GUARDIAN')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Active GUARDIAN Users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/admin/users?role=GUARDIAN&status=ACTIVE&active=true&page=0&size=100&sort=username&order=ASC"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const payload = pm.response.json();",
+                  "const items = payload && payload.data ? (payload.data.items || payload.data.content || []) : [];",
+                  "pm.test('Every returned account has GUARDIAN assigned', () => items.forEach(user => pm.expect((user.roles || [user.role])).to.include('GUARDIAN')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get User Roles",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/admin/users/{{adminUserId}}/roles"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Grant Role to User",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/users/{{adminUserId}}/roles/{{userRole}}",
+            "description": "Idempotente. Por defecto configura GUARDIAN para rmainero (604). Requiere token con rol activo ADMIN."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json().data;",
+                  "pm.test('Requested role is active', () => pm.expect(data.roles).to.include(pm.collectionVariables.get('userRole')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify amastracchio 606 Roles",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/admin/users/{{guardianUserId}}/roles"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const roles = pm.response.json().data.roles;",
+                  "pm.test('amastracchio has GUARDIAN', () => pm.expect(roles).to.include('GUARDIAN'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Revoke Role from User",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/users/{{adminUserId}}/roles/{{userRole}}",
+            "description": "Operación sensible: puede quitar acceso. Exige confirmRoleRevocation=YES."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.collectionVariables.get('confirmRoleRevocation') !== 'YES') throw new Error('Set confirmRoleRevocation=YES before revoking a role');"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Student Guardian Relationships",
+      "item": [
+        {
+          "name": "Get Student and Current Guardians",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/students/{{studentId}}",
+            "description": "Ejecutar antes de reemplazar relaciones para conservar todos los responsables que correspondan."
+          }
+        },
+        {
+          "name": "Replace Student Guardians",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/students/{{studentId}}/guardians",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"guardianIds\": {{guardianIdsJson}},\n  \"primaryGuardianId\": {{primaryGuardianId}},\n  \"reason\": \"{{guardianUpdateReason}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Reemplaza el conjunto académico completo; no reasigna cuentas de facturación, cargos, pagos ni facturas. Exige confirmGuardianReplacement=YES."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.collectionVariables.get('confirmGuardianReplacement') !== 'YES') throw new Error('Review current guardians and set confirmGuardianReplacement=YES');",
+                  "const ids = JSON.parse(pm.variables.replaceIn('{{guardianIdsJson}}'));",
+                  "const primary = Number(pm.variables.replaceIn('{{primaryGuardianId}}'));",
+                  "if (!Array.isArray(ids) || !ids.includes(primary)) throw new Error('primaryGuardianId must be included in guardianIdsJson');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Guardian Clients",
+      "item": [
+        {
+          "name": "List Guardian Clients",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/admin/guardian-clients?search={{clientSearch}}&page=0&limit=20&sort=lastName&order=ASC"
+          }
+        },
+        {
+          "name": "Get Guardian Client Stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/admin/guardian-clients/stats"
+          }
+        },
+        {
+          "name": "Get Guardian Client Detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/admin/guardian-clients/{{guardianUserId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json().data;",
+                  "if (data) { pm.collectionVariables.set('guardianProfileVersion', String(data.profileVersion || 0)); pm.collectionVariables.set('guardianAccountVersion', String(data.accountVersion || 0)); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Guardian Client Profile",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/guardian-clients/{{guardianUserId}}/profile",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"preferredContactChannel\": \"{{preferredContactChannel}}\",\n  \"administrativeNotes\": \"{{administrativeNotes}}\",\n  \"version\": {{guardianProfileVersion}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Edita sólo metadatos administrativos. Exige confirmGuardianProfileUpdate=YES."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.collectionVariables.get('confirmGuardianProfileUpdate') !== 'YES') throw new Error('Set confirmGuardianProfileUpdate=YES before updating');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Guardian Client Account",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/guardian-clients/{{guardianUserId}}/account",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"{{guardianFirstName}}\",\n  \"lastName\": \"{{guardianLastName}}\",\n  \"email\": \"{{guardianEmail}}\",\n  \"phoneNumber\": {{guardianPhoneNumberJson}},\n  \"address\": {{guardianAddressJson}},\n  \"dateOfBirth\": {{guardianDateOfBirthJson}},\n  \"documentNumber\": {{guardianDocumentNumberJson}},\n  \"emergencyContact\": {{guardianEmergencyContactJson}},\n  \"version\": {{guardianAccountVersion}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Edita identidad/contacto, sin cambiar roles, estado, relaciones ni titularidad financiera. Reemplazar placeholders y establecer confirmGuardianAccountUpdate=YES."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.collectionVariables.get('confirmGuardianAccountUpdate') !== 'YES') throw new Error('Set confirmGuardianAccountUpdate=YES before updating');",
+                  "if (pm.collectionVariables.get('guardianFirstName') === 'REPLACE_BEFORE_SEND') throw new Error('Replace guardian account placeholders before sending');"
+                ]
+              }
+            }
+          ]
         }
       ]
     }
