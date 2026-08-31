@@ -146,6 +146,8 @@ Los controladores que necesitan actor actual leen `userId` y `userRole` desde `H
 - `V37__add_multi_role_assignments_and_context_audit.sql` agrega asignaciones multirrol y eventos
   de seleccion/cambio, hace backfill desde `users.role`, personal docente y vinculos tutor-estudiante,
   y conserva la columna singular durante la etapa compatible.
+- `V38__add_user_account_optimistic_lock.sql` agrega `users.version` no negativa para editar datos
+  personales y de contacto con concurrencia optimista, sin modificar roles ni titularidad financiera.
 - Las migraciones SQL se validan sobre una base descartable o dentro de una transaccion
   revertida; no se deben ejecutar automaticamente sobre el contenedor actual sin backup
   y aprobacion explicita.

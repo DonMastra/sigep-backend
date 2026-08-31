@@ -1,7 +1,11 @@
 package com.sigep.guardians.application.service
 
 import com.sigep.common.application.exception.ResourceConflictException
+import com.sigep.common.application.service.GuardianClientAccountUpdateCommand
+import com.sigep.common.application.service.GuardianClientAccountUpdater
+import com.sigep.guardians.application.dto.UpdateGuardianClientAccountRequest
 import com.sigep.guardians.application.dto.UpdateGuardianClientProfileRequest
+import com.sigep.guardians.domain.model.GuardianClientDetailReadModel
 import com.sigep.guardians.domain.model.GuardianClientProfile
 import com.sigep.guardians.domain.model.GuardianClientSearchCriteria
 import com.sigep.guardians.domain.model.GuardianClientSummaryReadModel
@@ -17,12 +21,14 @@ import org.junit.jupiter.api.Test
 import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.PageRequest
 import java.math.BigDecimal
+import java.time.LocalDate
 import java.util.Optional
 
 class GuardianClientServiceTest {
     private val profileRepository = mockk<GuardianClientProfileRepository>()
     private val readRepository = mockk<GuardianClientReadRepository>()
-    private val service = GuardianClientService(profileRepository, readRepository)
+    private val accountUpdater = mockk<GuardianClientAccountUpdater>()
+    private val service = GuardianClientService(profileRepository, readRepository, accountUpdater)
 
     @Test
     fun `lists the cross-domain summary with standard pagination`() {
@@ -63,6 +69,56 @@ class GuardianClientServiceTest {
 
         verify {
             profileRepository.insertIfMissing(42, "CLI-000000000042", 1)
+        }
+    }
+
+    @Test
+    fun `delegates account updates and returns the refreshed detail`() {
+        val request = UpdateGuardianClientAccountRequest(
+            firstName = " Lucia ",
+            lastName = " Tutor ",
+            email = "LUCIA@EXAMPLE.TEST",
+            phoneNumber = " 111 ",
+            address = " Calle 1 ",
+            dateOfBirth = LocalDate.of(1985, 3, 20),
+            documentNumber = " 123 ",
+            emergencyContact = " Ana ",
+            version = 4
+        )
+        every { accountUpdater.updateGuardianClientAccount(any()) } returns Unit
+        every { readRepository.findDetail(10) } returns GuardianClientDetailReadModel(
+            summary = summary(),
+            accountVersion = 5,
+            address = "Calle 1",
+            dateOfBirth = request.dateOfBirth,
+            emergencyContact = "Ana",
+            administrativeNotes = null,
+            updatedAt = null
+        )
+        every { readRepository.findStudents(10) } returns emptyList()
+        every { readRepository.findTuitionApplications(10) } returns emptyList()
+        every { readRepository.findCharges(10) } returns emptyList()
+        every { readRepository.findPayments(10) } returns emptyList()
+
+        val result = service.updateAccount(10, request, updatedBy = 1)
+
+        assertEquals(5, result.accountVersion)
+        verify {
+            accountUpdater.updateGuardianClientAccount(
+                GuardianClientAccountUpdateCommand(
+                    guardianUserId = 10,
+                    firstName = " Lucia ",
+                    lastName = " Tutor ",
+                    email = "LUCIA@EXAMPLE.TEST",
+                    phoneNumber = " 111 ",
+                    address = " Calle 1 ",
+                    dateOfBirth = LocalDate.of(1985, 3, 20),
+                    documentNumber = " 123 ",
+                    emergencyContact = " Ana ",
+                    version = 4,
+                    updatedBy = 1
+                )
+            )
         }
     }
 

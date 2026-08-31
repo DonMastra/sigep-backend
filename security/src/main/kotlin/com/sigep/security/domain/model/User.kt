@@ -60,6 +60,10 @@ data class User(
     @Column(name = "password_changed_at")
     val passwordChangedAt: LocalDateTime? = null,
 
+    @Version
+    @Column(nullable = false)
+    val version: Long = 0,
+
     @Column(name = "created_at", nullable = false)
     val createdAt: LocalDateTime = LocalDateTime.now(),
 
