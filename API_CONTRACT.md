@@ -40,7 +40,7 @@ Flujo esperado:
 1. Registrar o crear usuario.
 2. Si el registro es publico, esperar aprobacion administrativa.
 3. Login. Una cuenta con un rol obtiene `token` y `refreshToken`; una cuenta multirrol obtiene
-   `roleSelectionRequired`, sus roles y un `roleSelectionToken` de cinco minutos que no autentica APIs.
+   `roleSelectionRequired`, sus roles y un `roleSelectionToken` de diez minutos que no autentica APIs.
 4. Si se requiere seleccion, canjear ese token en `POST /api/v1/auth/role-selections`.
 5. Enviar el access token en endpoints protegidos. Contiene una sola autoridad: `activeRole`.
 6. Para cambiar de espacio, usar `PUT /api/v1/auth/role-context`; el backend rota ambos tokens.

@@ -20,7 +20,7 @@ class JwtTokenProvider(
     @Value("\${jwt.refresh-expiration:604800000}") // 7 days
     private val refreshExpiration: Long,
 
-    @Value("\${jwt.role-selection-expiration:300000}") // 5 minutes
+    @Value("\${jwt.role-selection-expiration:600000}") // 10 minutes
     private val roleSelectionExpiration: Long
 ) {
 

@@ -98,7 +98,7 @@ Estado real a considerar: `staff` y `exams` todavia dependen directamente de `co
 La seguridad se concentra en `security`:
 
 - JWT access token y refresh token con una sola autoridad efectiva (`activeRole`).
-- Seleccion inicial multirrol mediante token no funcional de cinco minutos y rotacion de tokens al
+- Seleccion inicial multirrol mediante token no funcional de diez minutos y rotacion de tokens al
   cambiar entre Administracion, Docencia y Familia.
 - `JwtAuthenticationFilter`.
 - `SecurityConfig`.
