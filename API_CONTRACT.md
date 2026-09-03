@@ -476,6 +476,18 @@ interface StudentDto {
   photoUrl?: string;
   createdAt?: string;
   updatedAt?: string;
+  tuitionBenefits: StudentTuitionBenefitDto[];
+}
+
+interface StudentTuitionBenefitDto {
+  id: number;
+  type: 'SCHOLARSHIP' | 'DISCOUNT';
+  percentage: number | null;
+  amount: number;
+  validFrom: string;
+  validTo: string | null;
+  reason: string;
+  active: boolean;
 }
 
 interface StudentGuardianDto {
@@ -504,6 +516,9 @@ legacy conserva `Matricula`; para altas nuevas el backend genera un valor `SIGEP
 `currentCourseId` y `currentCourseName` se conservan temporalmente por compatibilidad y
 representan el primer curso activo en orden estable. Un alumno puede estar activo en varios
 cursos distintos; solo se rechaza duplicar el mismo par alumno-curso.
+`tuitionBenefits` contiene solamente descuentos o becas asignados de forma directa al
+estudiante. Incluye beneficios vigentes, futuros, vencidos e inactivos para que las pantallas
+puedan mostrar su estado; no incorpora reglas generales por segmento o nivel.
 
 La identidad documental se compara por `(documentCountry, documentType, normalizedDocumentNumber)`.
 Para `AR + DNI` se eliminan separadores y se completa a 8 digitos; pasaporte y documento
@@ -633,6 +648,9 @@ cuotas se crean juntos cuando ADMIN asigna una solicitud ya matriculada y nivela
 | PUT/DELETE | `/enrollment-fee-policies/{id}` | ADMIN | Actualiza o elimina una politica; solo puede existir una predeterminada. |
 | GET/POST | `/discounts` | ADMIN | Lista o crea descuentos/becas. |
 | PUT/DELETE | `/discounts/{id}` | ADMIN | Actualiza o elimina descuento/beca. |
+
+Cada descuento con `studentId` devuelve tambien `studentFirstName` y `studentLastName` para
+presentar una identificacion legible. Al crear o actualizar se valida que el estudiante exista.
 
 Enums principales:
 
