@@ -3,6 +3,8 @@ package com.sigep.security.infrastructure.security
 import com.sigep.security.domain.model.AccountStatus
 import com.sigep.security.domain.model.User
 import com.sigep.security.domain.model.UserRole
+import io.jsonwebtoken.Jwts
+import io.jsonwebtoken.security.Keys
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -10,11 +12,13 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class JwtTokenProviderRoleContextTest {
+    private val jwtSecret = "a-local-test-secret-that-is-long-enough-for-hmac-sha-256"
+    private val roleSelectionExpiration = 600_000L
     private val provider = JwtTokenProvider(
-        jwtSecret = "a-local-test-secret-that-is-long-enough-for-hmac-sha-256",
+        jwtSecret = jwtSecret,
         jwtExpiration = 60_000,
         refreshExpiration = 120_000,
-        roleSelectionExpiration = 300_000
+        roleSelectionExpiration = roleSelectionExpiration
     )
     private val user = User(
         id = 81,
@@ -37,6 +41,18 @@ class JwtTokenProviderRoleContextTest {
         assertFalse(provider.isAccessToken(token))
         assertFalse(provider.isRefreshToken(token))
         assertNull(provider.getRoleFromTokenOrNull(token))
+    }
+
+    @Test
+    fun `selection token uses the configured ten minute lifetime`() {
+        val token = provider.generateRoleSelectionToken(user)
+        val claims = Jwts.parser()
+            .verifyWith(Keys.hmacShaKeyFor(jwtSecret.toByteArray()))
+            .build()
+            .parseSignedClaims(token)
+            .payload
+
+        assertEquals(roleSelectionExpiration, claims.expiration.time - claims.issuedAt.time)
     }
 
     @Test
