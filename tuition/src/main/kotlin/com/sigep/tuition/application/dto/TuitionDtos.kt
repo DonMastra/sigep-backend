@@ -237,7 +237,9 @@ data class TuitionDiscountDto(
     val reason: String,
     val active: Boolean,
     val createdAt: LocalDateTime,
-    val updatedAt: LocalDateTime
+    val updatedAt: LocalDateTime,
+    val studentFirstName: String? = null,
+    val studentLastName: String? = null
 )
 
 data class CreateTuitionDiscountRequest(

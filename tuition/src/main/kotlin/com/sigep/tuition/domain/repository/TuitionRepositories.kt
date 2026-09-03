@@ -83,6 +83,8 @@ interface TuitionEnrollmentFeePolicyRepository : JpaRepository<TuitionEnrollment
 
 @Repository
 interface TuitionDiscountRepository : JpaRepository<TuitionDiscount, Long> {
+    fun findByStudentIdInOrderByCreatedAtDesc(studentIds: Collection<Long>): List<TuitionDiscount>
+
     @Query(
         """
         SELECT d FROM TuitionDiscount d

@@ -5,6 +5,8 @@ import com.sigep.common.application.exception.BusinessException
 import com.sigep.common.application.exception.DuplicateResourceException
 import com.sigep.common.application.exception.ResourceNotFoundException
 import com.sigep.common.application.exception.ValidationException
+import com.sigep.common.application.service.StudentProfileInfo
+import com.sigep.common.application.service.StudentProfileProvider
 import com.sigep.tuition.application.dto.CreateTuitionAcademicYearRequest
 import com.sigep.tuition.application.dto.CreateTuitionDiscountRequest
 import com.sigep.tuition.application.dto.CreateTuitionFeePlanRequest
@@ -38,6 +40,7 @@ import com.sigep.tuition.domain.repository.TuitionLevelProgressionRepository
 import com.sigep.tuition.domain.repository.TuitionLevelRepository
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
+import org.springframework.cache.annotation.CacheEvict
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
@@ -51,7 +54,8 @@ class TuitionCatalogService(
     private val progressionRepository: TuitionLevelProgressionRepository,
     private val feePlanRepository: TuitionFeePlanRepository,
     private val enrollmentFeePolicyRepository: TuitionEnrollmentFeePolicyRepository,
-    private val discountRepository: TuitionDiscountRepository
+    private val discountRepository: TuitionDiscountRepository,
+    private val studentProfileProvider: StudentProfileProvider
 ) {
 
     fun listAcademicYears(status: TuitionAcademicYearStatus?, page: Int, size: Int): PageResponse<TuitionAcademicYearDto> {
@@ -370,12 +374,16 @@ class TuitionCatalogService(
 
     fun listDiscounts(page: Int, size: Int): PageResponse<TuitionDiscountDto> {
         val pageable = PageRequest.of(page.coerceAtLeast(0), size.coerceIn(1, 100), Sort.by(Sort.Direction.DESC, "createdAt"))
-        return discountRepository.findAll(pageable).toPageResponse { it.toDto() }
+        val discounts = discountRepository.findAll(pageable)
+        val profiles = studentProfileProvider.getStudentProfiles(discounts.content.mapNotNull { it.studentId })
+        return discounts.toPageResponse { discount -> discount.toDto(discount.studentId?.let(profiles::get)) }
     }
 
+    @CacheEvict(value = ["students", "students_detail"], allEntries = true)
     fun createDiscount(request: CreateTuitionDiscountRequest): TuitionDiscountDto {
         validateDiscount(request.percentage, request.amount, request.validFrom, request.validTo)
         val level = request.levelId?.let { getLevel(it) }
+        val studentProfile = request.studentId?.let(::getStudentProfile)
         val now = LocalDateTime.now()
         return discountRepository.save(
             TuitionDiscount(
@@ -392,9 +400,10 @@ class TuitionCatalogService(
                 createdAt = now,
                 updatedAt = now
             )
-        ).toDto()
+        ).toDto(studentProfile)
     }
 
+    @CacheEvict(value = ["students", "students_detail"], allEntries = true)
     fun updateDiscount(id: Long, request: UpdateTuitionDiscountRequest): TuitionDiscountDto {
         val existing = discountRepository.findById(id)
             .orElseThrow { ResourceNotFoundException("Tuition discount not found with id: $id") }
@@ -404,10 +413,12 @@ class TuitionCatalogService(
         val amount = request.amount ?: existing.amount
         validateDiscount(percentage, amount, validFrom, validTo)
         val level = request.levelId?.let { getLevel(it) } ?: existing.level
+        val studentId = request.studentId ?: existing.studentId
+        val studentProfile = studentId?.let(::getStudentProfile)
 
         return discountRepository.save(
             existing.copy(
-                studentId = request.studentId ?: existing.studentId,
+                studentId = studentId,
                 segment = request.segment ?: existing.segment,
                 level = level,
                 type = request.type ?: existing.type,
@@ -419,9 +430,10 @@ class TuitionCatalogService(
                 active = request.active ?: existing.active,
                 updatedAt = LocalDateTime.now()
             )
-        ).toDto()
+        ).toDto(studentProfile)
     }
 
+    @CacheEvict(value = ["students", "students_detail"], allEntries = true)
     fun deleteDiscount(id: Long) {
         if (!discountRepository.existsById(id)) {
             throw ResourceNotFoundException("Tuition discount not found with id: $id")
@@ -436,6 +448,10 @@ class TuitionCatalogService(
     private fun getLevel(id: Long): TuitionLevel =
         levelRepository.findById(id)
             .orElseThrow { ResourceNotFoundException("Tuition level not found with id: $id") }
+
+    private fun getStudentProfile(id: Long): StudentProfileInfo =
+        studentProfileProvider.getStudentProfile(id)
+            ?: throw ResourceNotFoundException("Student not found with id: $id")
 
     private fun validateAcademicYearDates(
         startDate: java.time.LocalDate,
@@ -565,7 +581,7 @@ class TuitionCatalogService(
         updatedAt = updatedAt
     )
 
-    private fun TuitionDiscount.toDto() = TuitionDiscountDto(
+    private fun TuitionDiscount.toDto(studentProfile: StudentProfileInfo? = null) = TuitionDiscountDto(
         id = id!!,
         studentId = studentId,
         segment = segment,
@@ -579,6 +595,8 @@ class TuitionCatalogService(
         reason = reason,
         active = active,
         createdAt = createdAt,
-        updatedAt = updatedAt
+        updatedAt = updatedAt,
+        studentFirstName = studentProfile?.firstName,
+        studentLastName = studentProfile?.lastName
     )
 }

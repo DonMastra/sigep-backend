@@ -9,6 +9,8 @@ import com.sigep.common.domain.exception.ResourceNotFoundException
 import com.sigep.common.domain.exception.BusinessException
 import com.sigep.common.application.service.EnrollmentServiceProvider
 import com.sigep.common.application.service.UserRoleMembershipProvider
+import com.sigep.common.application.service.StudentTuitionBenefitInfo
+import com.sigep.common.application.service.StudentTuitionBenefitProvider
 import com.sigep.security.domain.model.UserRole
 import com.sigep.security.domain.model.AccountStatus
 import com.sigep.security.domain.repository.UserRepository
@@ -46,7 +48,8 @@ class StudentService(
     private val guardianLinkEventRepository: StudentGuardianLinkEventRepository,
     private val guardianRelationshipRepository: StudentGuardianRelationshipRepository,
     private val identityNormalizer: StudentIdentityNormalizer,
-    private val roleMembershipProviders: List<UserRoleMembershipProvider> = emptyList()
+    private val roleMembershipProviders: List<UserRoleMembershipProvider> = emptyList(),
+    private val tuitionBenefitProviders: List<StudentTuitionBenefitProvider> = emptyList()
 ) {
 
     private val logger = LoggerFactory.getLogger(StudentService::class.java)
@@ -609,11 +612,18 @@ class StudentService(
      */
     private fun mapToDtos(students: List<Student>): List<StudentDto> {
         val guardiansByStudentId = loadGuardianDtosByStudentIds(students.mapNotNull { it.id })
-        return students.map { student -> student.toDto(guardiansByStudentId[student.id].orEmpty()) }
+        val benefitsByStudentId = loadTuitionBenefitDtosByStudentIds(students.mapNotNull { it.id })
+        return students.map { student ->
+            student.toDto(
+                guardiansByStudentId[student.id].orEmpty(),
+                benefitsByStudentId[student.id].orEmpty()
+            )
+        }
     }
 
     private fun Student.toDto(
-        guardianDtos: List<StudentGuardianDto> = loadGuardianDtos(this.id!!)
+        guardianDtos: List<StudentGuardianDto> = loadGuardianDtos(this.id!!),
+        tuitionBenefits: List<StudentTuitionBenefitDto> = loadTuitionBenefitDtos(this.id!!)
     ): StudentDto {
         val studentId = this.id!!
         val currentEnrollments = enrollmentServiceProvider.getEnrollmentsByStudentAndStatus(studentId, "ACTIVE")
@@ -642,7 +652,8 @@ class StudentService(
             phoneNumber = phoneNumber,
             address = address,
             createdAt = createdAt,
-            updatedAt = updatedAt
+            updatedAt = updatedAt,
+            tuitionBenefits = tuitionBenefits
         )
     }
 
@@ -655,6 +666,7 @@ class StudentService(
         val currentEnrollment = currentEnrollments.firstOrNull()
         val allEnrollments = enrollmentServiceProvider.getEnrollmentsByStudent(studentId)
         val guardianDtos = loadGuardianDtos(studentId)
+        val tuitionBenefits = loadTuitionBenefitDtos(studentId)
 
         return StudentDetailDto(
             id = studentId,
@@ -682,9 +694,34 @@ class StudentService(
             photoUrl = photoUrl,
             courseHistory = allEnrollments,  // Ya son EnrollmentSummaryDto
             createdAt = createdAt,
-            updatedAt = updatedAt
+            updatedAt = updatedAt,
+            tuitionBenefits = tuitionBenefits
         )
     }
+
+    private fun loadTuitionBenefitDtos(studentId: Long): List<StudentTuitionBenefitDto> =
+        loadTuitionBenefitDtosByStudentIds(listOf(studentId))[studentId].orEmpty()
+
+    private fun loadTuitionBenefitDtosByStudentIds(
+        studentIds: Collection<Long>
+    ): Map<Long, List<StudentTuitionBenefitDto>> {
+        if (studentIds.isEmpty()) return emptyMap()
+        val provider = tuitionBenefitProviders.firstOrNull() ?: return emptyMap()
+        return provider.getBenefitsByStudentIds(studentIds).mapValues { (_, benefits) ->
+            benefits.map { it.toDto() }
+        }
+    }
+
+    private fun StudentTuitionBenefitInfo.toDto() = StudentTuitionBenefitDto(
+        id = id,
+        type = type,
+        percentage = percentage,
+        amount = amount,
+        validFrom = validFrom,
+        validTo = validTo,
+        reason = reason,
+        active = active
+    )
 
     private fun resolveRequiredField(
         fieldName: String,

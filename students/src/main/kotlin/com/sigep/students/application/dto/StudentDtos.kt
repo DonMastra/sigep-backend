@@ -4,6 +4,7 @@ import com.sigep.common.application.dto.EnrollmentSummaryDto
 import com.sigep.students.domain.model.StudentDocumentType
 import com.sigep.security.domain.model.AccountStatus
 import jakarta.validation.constraints.*
+import java.math.BigDecimal
 import java.time.LocalDate
 import java.time.LocalDateTime
 
@@ -30,7 +31,8 @@ data class StudentDto(
     val phoneNumber: String,
     val address: String,
     val createdAt: LocalDateTime,
-    val updatedAt: LocalDateTime
+    val updatedAt: LocalDateTime,
+    val tuitionBenefits: List<StudentTuitionBenefitDto> = emptyList()
 )
 
 /**
@@ -62,7 +64,19 @@ data class StudentDetailDto(
     val photoUrl: String?,
     val courseHistory: List<EnrollmentSummaryDto>,  // Usar DTO de common
     val createdAt: LocalDateTime,
-    val updatedAt: LocalDateTime
+    val updatedAt: LocalDateTime,
+    val tuitionBenefits: List<StudentTuitionBenefitDto> = emptyList()
+)
+
+data class StudentTuitionBenefitDto(
+    val id: Long,
+    val type: String,
+    val percentage: BigDecimal?,
+    val amount: BigDecimal,
+    val validFrom: LocalDate,
+    val validTo: LocalDate?,
+    val reason: String,
+    val active: Boolean
 )
 
 data class StudentGuardianDto(
