@@ -39,6 +39,9 @@ data class CreateScheduleSlotRequest(
 )
 
 data class UpdateScheduleSlotRequest(
+    @field:Min(value = 1, message = "Classroom ID must be greater than 0")
+    val classroomId: Long? = null,
+
     val dayOfWeek: SlotDayOfWeek? = null,
 
     @field:Pattern(regexp = "^([01]\\d|2[0-3]):[0-5]\\d$", message = "Start time must be in HH:mm format")

@@ -145,6 +145,9 @@ class CourseSessionService(
         if (request.endDate.isBefore(request.startDate)) {
             throw BusinessException("End date must be after start date")
         }
+        if (!request.startTime.isBefore(request.endTime)) {
+            throw BusinessException("End time must be after start time")
+        }
 
         val sessions = mutableListOf<CourseSession>()
         var currentDate = request.startDate
@@ -341,6 +344,10 @@ class CourseSessionService(
     ): ConflictDto {
         logger.info("Checking conflicts for request")
 
+        if (!request.startTime.isBefore(request.endTime)) {
+            throw BusinessException("End time must be after start time")
+        }
+
         if (actorRole == "TEACHER" && request.teacherId != null && request.teacherId != actorUserId) {
             throw ForbiddenException("Teachers can only check conflicts for their own schedule")
         }
@@ -355,7 +362,7 @@ class CourseSessionService(
         if (effectiveRequest.teacherId != null) {
             val teacherConflicts = sessionRepository.findTeacherConflicts(
                 effectiveRequest.teacherId, effectiveRequest.date, effectiveRequest.startTime, effectiveRequest.endTime
-            )
+            ).filter { effectiveRequest.excludeSessionId == null || it.id != effectiveRequest.excludeSessionId }
             if (teacherConflicts.isNotEmpty()) {
                 conflicts.addAll(teacherConflicts)
                 conflictType = "TEACHER"
@@ -366,7 +373,7 @@ class CourseSessionService(
         if (effectiveRequest.classroomId != null) {
             val classroomConflicts = sessionRepository.findClassroomConflicts(
                 effectiveRequest.classroomId, effectiveRequest.date, effectiveRequest.startTime, effectiveRequest.endTime
-            )
+            ).filter { effectiveRequest.excludeSessionId == null || it.id != effectiveRequest.excludeSessionId }
             if (classroomConflicts.isNotEmpty()) {
                 conflicts.addAll(classroomConflicts)
                 conflictType = if (conflictType.isEmpty()) "CLASSROOM" else "$conflictType, CLASSROOM"
@@ -377,7 +384,7 @@ class CourseSessionService(
         if (effectiveRequest.studentId != null) {
             val studentConflicts = sessionRepository.findStudentConflicts(
                 effectiveRequest.studentId, effectiveRequest.date, effectiveRequest.startTime, effectiveRequest.endTime
-            )
+            ).filter { effectiveRequest.excludeSessionId == null || it.id != effectiveRequest.excludeSessionId }
             if (studentConflicts.isNotEmpty()) {
                 conflicts.addAll(studentConflicts)
                 conflictType = if (conflictType.isEmpty()) "STUDENT" else "$conflictType, STUDENT"
