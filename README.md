@@ -286,6 +286,8 @@ Migraciones del cierre QA:
   contexto activo.
 - `V38__add_user_account_optimistic_lock.sql`: version optimista de `users` para editar identidad
   y contacto desde Tutores y clientes.
+- `V39__preserve_non_teaching_rate_history.sql`: moneda explicita del personal y snapshot de
+  tarifa/moneda para conservar importes historicos no docentes sin inventar valores retroactivos.
 
 Validarlas en una base descartable o transaccion revertida antes de aplicarlas al contenedor
 actual; no se ejecutan automaticamente durante esta implementacion.

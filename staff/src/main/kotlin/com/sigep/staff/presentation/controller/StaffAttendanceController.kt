@@ -6,6 +6,7 @@ import com.sigep.security.application.annotation.RequireAdmin
 import com.sigep.security.application.annotation.RequireAdminOrTeacher
 import com.sigep.staff.application.dto.CreateAttendanceRequest
 import com.sigep.staff.application.dto.StaffAttendanceDto
+import com.sigep.staff.application.dto.StaffMonthlySummaryDto
 import com.sigep.staff.application.dto.UpdateAttendanceRequest
 import com.sigep.staff.application.service.StaffAttendanceService
 import io.swagger.v3.oas.annotations.Operation
@@ -18,6 +19,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 import java.time.LocalDate
+import java.time.YearMonth
 
 @RestController
 @RequestMapping("/api/v1/staff/attendance")
@@ -73,8 +75,25 @@ class StaffAttendanceController(
         return ResponseEntity.ok(ApiResponse.success(attendance))
     }
 
-    @GetMapping("/non-teaching/{staffId}")
+    @GetMapping("/teaching/{staffId}/monthly-summary")
     @RequireAdminOrTeacher
+    @Operation(summary = "Get teaching staff monthly summary", description = "Retrieve a period-explicit attendance summary; teachers can only access their own record")
+    fun getTeachingStaffMonthlySummary(
+        @PathVariable staffId: Long,
+        @RequestParam @DateTimeFormat(pattern = "yyyy-MM") month: YearMonth,
+        httpRequest: HttpServletRequest
+    ): ResponseEntity<ApiResponse<StaffMonthlySummaryDto>> {
+        val summary = attendanceService.getTeachingStaffMonthlySummary(
+            staffId,
+            month,
+            httpRequest.getAttribute("userId") as? Long,
+            httpRequest.getAttribute("userRole") as? String
+        )
+        return ResponseEntity.ok(ApiResponse.success(summary))
+    }
+
+    @GetMapping("/non-teaching/{staffId}")
+    @RequireAdmin
     @Operation(summary = "Get non-teaching staff attendance", description = "Retrieve attendance records for a non-teaching staff member within a date range")
     fun getNonTeachingStaffAttendance(
         @PathVariable staffId: Long,
@@ -85,6 +104,17 @@ class StaffAttendanceController(
     ): ResponseEntity<ApiResponse<PageResponse<StaffAttendanceDto>>> {
         val attendance = attendanceService.getNonTeachingStaffAttendance(staffId, startDate, endDate, page, limit)
         return ResponseEntity.ok(ApiResponse.success(attendance))
+    }
+
+    @GetMapping("/non-teaching/{staffId}/monthly-summary")
+    @RequireAdmin
+    @Operation(summary = "Get non-teaching staff monthly summary", description = "Retrieve administrative attendance, worked-hours and estimated-amount indicators for a selected month")
+    fun getNonTeachingStaffMonthlySummary(
+        @PathVariable staffId: Long,
+        @RequestParam @DateTimeFormat(pattern = "yyyy-MM") month: YearMonth
+    ): ResponseEntity<ApiResponse<StaffMonthlySummaryDto>> {
+        val summary = attendanceService.getNonTeachingStaffMonthlySummary(staffId, month)
+        return ResponseEntity.ok(ApiResponse.success(summary))
     }
 
     @DeleteMapping("/{id}")

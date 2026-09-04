@@ -23,7 +23,7 @@ El módulo **Staff** proporciona funcionalidades completas para la gestión del 
 
 - **Datos Personales**: Nombre, email, teléfono, documento, fecha de nacimiento, dirección
 - **Información Laboral**: Fecha de contratación, tarifa por hora, rol, empresa
-- **Gestión de Tareas**: Tareas asignadas, horas trabajadas en el mes, ganancia estimada mensual
+- **Gestión de actividad**: Tareas asignadas, historial mensual de horas e importe administrativo estimado
 - **Asistencia**: Estadísticas mensuales calculadas sobre días laborales reales (L-V)
 - **Contacto de Emergencia**: Dos campos separados o string único (se acepta cualquier formato)
 - **Soft Delete**: Desactivación lógica
@@ -76,11 +76,13 @@ staff/
 | Método | Endpoint | Descripción | Rol |
 |--------|----------|-------------|-----|
 | GET | `/api/v1/staff/teaching` | Listar docentes (paginado) | ADMIN |
-| GET | `/api/v1/staff/teaching/{id}` | Detalle con asistencia del mes | ADMIN, TEACHER |
+| GET | `/api/v1/staff/teaching/{id}` | Detalle administrativo con asistencia del mes | ADMIN |
 | GET | `/api/v1/staff/teaching/search?query=` | Buscar por nombre/email/documento | ADMIN |
 | GET | `/api/v1/staff/teaching/assignable` | Cuentas activas enlazadas a docentes; el `id` es de `users` | ADMIN |
 | POST | `/api/v1/staff/teaching` | Crear docente | ADMIN |
 | PUT | `/api/v1/staff/teaching/{id}` | Actualizar docente | ADMIN |
+| POST | `/api/v1/staff/teaching/{id}/photo` | Cargar foto de legajo | ADMIN |
+| GET | `/api/v1/staff/teaching/{id}/photo` | Consultar foto; TEACHER solo la propia | ADMIN, TEACHER |
 | DELETE | `/api/v1/staff/teaching/{id}` | Desactivar docente (soft delete) | ADMIN |
 
 ### Personal No Docente — `/api/v1/staff/non-teaching`
@@ -88,7 +90,7 @@ staff/
 | Método | Endpoint | Descripción | Rol |
 |--------|----------|-------------|-----|
 | GET | `/api/v1/staff/non-teaching` | Listar no docentes (paginado) | ADMIN |
-| GET | `/api/v1/staff/non-teaching/{id}` | Detalle con horas y asistencia del mes | ADMIN, TEACHER |
+| GET | `/api/v1/staff/non-teaching/{id}` | Detalle administrativo con horas y asistencia del mes | ADMIN |
 | GET | `/api/v1/staff/non-teaching/by-role/{role}` | Filtrar por rol | ADMIN |
 | GET | `/api/v1/staff/non-teaching/search?query=` | Buscar por nombre/email/doc/empresa | ADMIN |
 | POST | `/api/v1/staff/non-teaching` | Crear no docente | ADMIN |
@@ -102,7 +104,9 @@ staff/
 | POST | `/api/v1/staff/attendance` | Registrar asistencia | ADMIN |
 | PUT | `/api/v1/staff/attendance/{id}` | Actualizar registro | ADMIN |
 | GET | `/api/v1/staff/attendance/teaching/{staffId}` | Asistencia de docente por período; TEACHER solo su legajo vinculado | ADMIN, TEACHER |
-| GET | `/api/v1/staff/attendance/non-teaching/{staffId}` | Asistencia de no docente por período | ADMIN, TEACHER |
+| GET | `/api/v1/staff/attendance/teaching/{staffId}/monthly-summary?month=YYYY-MM` | Resumen mensual docente; TEACHER solo su legajo vinculado | ADMIN, TEACHER |
+| GET | `/api/v1/staff/attendance/non-teaching/{staffId}` | Asistencia de no docente por período | ADMIN |
+| GET | `/api/v1/staff/attendance/non-teaching/{staffId}/monthly-summary?month=YYYY-MM` | Resumen mensual de actividad e importe estimado | ADMIN |
 | DELETE | `/api/v1/staff/attendance/{id}` | Eliminar registro | ADMIN |
 
 ---
@@ -124,6 +128,7 @@ staff/
   "address": "Calle Principal 123, CDMX",
   "hireDate": "2020-01-15",
   "monthlySalary": 15000.00,
+  "currency": "ARS",
   "paymentStatus": "UP_TO_DATE",
   "status": "ACTIVE",
   "assignedStudentsCount": 24,
@@ -162,6 +167,7 @@ staff/
   "address": "Av. Reforma 456, CDMX",
   "hireDate": "2021-06-01",
   "hourlyRate": 80.00,
+  "currency": "ARS",
   "role": "CLEANING",
   "position": "CLEANING",
   "companyName": "Servicios de Limpieza SA",
@@ -333,7 +339,7 @@ Los servicios usan Redis Cache para optimizar lecturas:
 ## Seguridad y Validaciones
 
 - **Solo ADMIN**: crear, actualizar, eliminar personal y asistencias; ver listados
-- **ADMIN + TEACHER**: ver detalles individuales y consultar asistencias
+- **ADMIN + TEACHER**: consultar únicamente la asistencia del propio docente cuando el actor es TEACHER
 - Email único por tipo de personal
 - Número de documento único por tipo de personal
 - En asistencia: exactamente uno de `teachingStaffId` o `nonTeachingStaffId` debe estar presente
@@ -351,6 +357,8 @@ Los servicios usan Redis Cache para optimizar lecturas:
 ## Notas de Implementación
 
 1. **Soft Delete**: `DELETE` solo marca `isActive = false`. El registro permanece en la base de datos.
-2. **`totalWorkingDaysInMonth`**: Se calcula dinámicamente en el endpoint de detalle como la cantidad de días de lunes a viernes del mes en curso.
-3. **`attendanceRate`**: Se calcula como `(presentDays / totalWorkingDaysInMonth) * 100`, no sobre el total de registros.
-4. **`estimatedEarningsThisMonth`**: `hoursWorkedThisMonth × hourlyRate`, calculado en tiempo real desde los registros de asistencia.
+2. **`totalWorkingDaysInMonth`**: Se calcula dinámicamente como la cantidad de días de lunes a viernes del mes en curso desde la fecha de contratación.
+3. **`attendanceRate`**: tanto el campo compatible del mes actual como `monthly-summary` miden presencia sobre registros. El resumen mensual expone por separado `dataCoverageRate` sobre días hábiles transcurridos.
+4. **`estimatedEarningsThisMonth`**: campo compatible del mes actual. Para consulta histórica usar `monthly-summary`, que conserva la tarifa y moneda aplicadas a cada nuevo registro desde V39.
+5. **Historial mensual**: `staff_attendance` conserva la fecha de cada registro para docentes y no docentes. El resumen separa presencia sobre registros de cobertura de carga sobre días hábiles transcurridos.
+6. **Importe estimado**: es una referencia administrativa (`horas × tarifa`), no una liquidación de haberes ni un estado de pago.

@@ -16,7 +16,7 @@ El documento distingue dos estados que no deben mezclarse:
 
 - **Snapshot productivo observado:** catálogo real de `sigep_prod` el 21/08/2026, antes de promover
   V33, V34 y V35.
-- **Esquema objetivo actual:** entidades y scripts manuales del repositorio hasta V38.
+- **Esquema objetivo actual:** entidades y scripts manuales del repositorio hasta V39.
 
 El orden de precedencia para describir un ambiente desplegado es:
 
@@ -28,7 +28,7 @@ El orden de precedencia para describir un ambiente desplegado es:
 Los scripts SQL son migraciones manuales; el proyecto no usa Flyway ni Liquibase. QA y producción
 deben arrancar con `JPA_DDL_AUTO=validate`: Hibernate valida, pero no repara el esquema.
 
-### Esquema objetivo del repositorio hasta V38
+### Esquema objetivo del repositorio hasta V39
 
 El estado objetivo agrega sobre el snapshot productivo:
 
@@ -39,6 +39,7 @@ El estado objetivo agrega sobre el snapshot productivo:
    61 tablas y `students.guardian_id` queda como principal opcional compatible.
 5. **V37:** asignaciones multirrol y auditoría del contexto activo; el total objetivo pasa a 63 tablas.
 6. **V38:** versión optimista no negativa en `users`; no crea tablas nuevas.
+7. **V39:** moneda explícita de personal y snapshot de tarifa/moneda en asistencia no docente.
 
 V34 y V35 no crean tablas nuevas. Los filtros de estudiantes, la visualización acumulada de
 asistencia y la toma de asistencia por fecha son cambios de consulta, servicio y UI. La asistencia
@@ -284,7 +285,7 @@ posteriores, pero V31/V32 no están registrados en esa tabla. El registro debe c
 procedimiento de despliegue; no debe inventarse un hash Git ni insertarse desde una migración de
 dominio.
 
-## 5. Migraciones objetivo V33 a V38
+## 5. Migraciones objetivo V33 a V39
 
 ### V33: perfil administrativo de tutor/cliente
 
@@ -375,6 +376,17 @@ V38 agrega `users.version BIGINT NOT NULL DEFAULT 0`, retrocompleta únicamente 
 Tutores y clientes y evita sobrescribir cambios concurrentes. No cambia usuario, contraseña, estado,
 roles, responsables académicos ni titularidad financiera; tampoco crea tablas nuevas.
 
+### V39: contexto histórico de importes del personal
+
+Archivo: `scripts/migrations/V39__preserve_non_teaching_rate_history.sql`.
+
+V39 agrega `currency` nullable a los legajos docentes y no docentes, y agrega
+`hourly_rate_snapshot`/`currency_snapshot` a `staff_attendance`. No asigna una moneda ni una tarifa
+retroactiva a registros existentes porque esos valores no pueden inferirse con seguridad. Los nuevos
+registros de presencia o tardanza no docente conservan la tarifa y moneda vigentes para que una
+modificación posterior del legajo no cambie su importe histórico. Los checks limitan monedas a
+`ARS|USD`, exigen que ambos snapshots estén presentes o ausentes y rechazan horas/tarifas negativas.
+
 ### Asistencia de cursos por fecha sin migración adicional
 
 `course_attendance.course_session_id` sigue vinculando cada asistencia con una clase concreta. Al
@@ -406,6 +418,7 @@ estudiante se calculan desde `course_attendance`; no almacenan porcentajes redun
 - V35: referencia XOR de personal y unicidad parcial por persona/fecha en `staff_attendance`.
 - V37: unicidad de asignación por usuario/rol e índices parciales para asignaciones activas y auditoría.
 - V38: `users.version` obligatorio y no negativo para concurrencia optimista de cuenta.
+- V39: moneda explícita en legajos y par tarifa/moneda histórico en asistencia no docente.
 - `course_attendance`: unicidad por inscripción/sesión; la fecha se resuelve mediante
   `course_sessions` sin persistir porcentajes redundantes.
 
@@ -419,7 +432,7 @@ estudiante se calculan desde `course_attendance`; no almacenan porcentajes redun
 4. `billing_charges.fiscal_disposition` es `VARCHAR(30)` en producción y `length=20` en JPA.
 5. `schema_version` no registra V31/V32 pese a que sus cambios físicos están presentes.
 
-Estos puntos no forman parte de V33-V38. Deben resolverse mediante una migración de reparación separada,
+Estos puntos no forman parte de V33-V39. Deben resolverse mediante una migración de reparación separada,
 con preflight y verificación histórica.
 
 ## 8. Validaciones mínimas para promover V33-V35

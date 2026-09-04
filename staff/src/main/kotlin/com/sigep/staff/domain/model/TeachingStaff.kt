@@ -42,6 +42,10 @@ data class TeachingStaff(
     val monthlySalary: Double,
 
     @Enumerated(EnumType.STRING)
+    @Column(length = 3)
+    val currency: StaffCurrency? = null,
+
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     val paymentStatus: PaymentStatus = PaymentStatus.UP_TO_DATE,
 

@@ -2,6 +2,7 @@ package com.sigep.staff.application.dto
 
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.sigep.staff.domain.model.PaymentStatus
+import com.sigep.staff.domain.model.StaffCurrency
 import java.time.LocalDate
 import java.time.LocalDateTime
 import jakarta.validation.constraints.NotBlank
@@ -21,6 +22,7 @@ data class TeachingStaffDto(
     val address: String,
     val hireDate: LocalDate,
     val monthlySalary: Double,
+    val currency: StaffCurrency?,
     val paymentStatus: PaymentStatus,
     /** Estado derivado de isActive — compatible con frontend: ACTIVE | INACTIVE */
     val status: String,
@@ -76,6 +78,7 @@ data class CreateTeachingStaffRequest(
     val address: String,
     val hireDate: LocalDate,
     val monthlySalary: Double,
+    val currency: StaffCurrency,
     val paymentStatus: PaymentStatus = PaymentStatus.UP_TO_DATE,
     val specialization: String? = null,
     val observations: String? = null,
@@ -110,6 +113,7 @@ data class UpdateTeachingStaffRequest(
     val hireDate: LocalDate? = null,
     val address: String? = null,
     val monthlySalary: Double? = null,
+    val currency: StaffCurrency? = null,
     val paymentStatus: PaymentStatus? = null,
     val specialization: String? = null,
     val observations: String? = null,

@@ -15,6 +15,7 @@ import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
+import jakarta.servlet.http.HttpServletRequest
 import org.springframework.http.HttpStatus
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
@@ -44,7 +45,7 @@ class TeachingStaffController(
     }
 
     @GetMapping("/{id}")
-    @RequireAdminOrTeacher
+    @RequireAdmin
     @Operation(summary = "Get teaching staff by ID", description = "Retrieve detailed information of a teaching staff member including students, courses and attendance")
     fun getTeachingStaffById(@PathVariable id: Long): ResponseEntity<ApiResponse<TeachingStaffDto>> {
         val staff = teachingStaffService.getTeachingStaffById(id)
@@ -114,8 +115,12 @@ class TeachingStaffController(
     @GetMapping("/{id}/photo")
     @RequireAdminOrTeacher
     @Operation(summary = "Download teaching staff photo")
-    fun getPhoto(@PathVariable id: Long): ResponseEntity<ByteArray> {
-        val photo = teachingStaffService.getPhoto(id)
+    fun getPhoto(@PathVariable id: Long, httpRequest: HttpServletRequest): ResponseEntity<ByteArray> {
+        val photo = teachingStaffService.getPhoto(
+            id,
+            httpRequest.getAttribute("userId") as? Long,
+            httpRequest.getAttribute("userRole") as? String
+        )
         return ResponseEntity.ok()
             .contentType(MediaType.parseMediaType(photo.contentType))
             .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"${photo.filename ?: "teacher-$id"}\"")

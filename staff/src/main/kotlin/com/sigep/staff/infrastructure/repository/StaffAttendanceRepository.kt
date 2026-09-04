@@ -48,6 +48,29 @@ interface StaffAttendanceRepository : JpaRepository<StaffAttendance, Long> {
         pageable: Pageable
     ): Page<StaffAttendance>
 
+    fun findAllByTeachingStaffIdAndAttendanceDateBetween(
+        teachingStaffId: Long,
+        startDate: LocalDate,
+        endDate: LocalDate
+    ): List<StaffAttendance>
+
+    fun findAllByNonTeachingStaffIdAndAttendanceDateBetween(
+        nonTeachingStaffId: Long,
+        startDate: LocalDate,
+        endDate: LocalDate
+    ): List<StaffAttendance>
+
+    @Query("""
+        SELECT a FROM StaffAttendance a
+        WHERE a.nonTeachingStaff.id IN :staffIds
+        AND a.attendanceDate BETWEEN :startDate AND :endDate
+    """)
+    fun findAllByNonTeachingStaffIdsAndAttendanceDateBetween(
+        @Param("staffIds") staffIds: Collection<Long>,
+        @Param("startDate") startDate: LocalDate,
+        @Param("endDate") endDate: LocalDate
+    ): List<StaffAttendance>
+
     @Query("""
         SELECT COUNT(a) FROM StaffAttendance a 
         WHERE a.teachingStaff.id = :staffId 

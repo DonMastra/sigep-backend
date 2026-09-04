@@ -2,6 +2,9 @@ package com.sigep.staff.application.dto
 
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.sigep.staff.domain.model.NonTeachingRole
+import com.sigep.staff.domain.model.StaffCurrency
+import jakarta.validation.constraints.DecimalMin
+import java.math.BigDecimal
 import java.time.LocalDate
 import java.time.LocalDateTime
 
@@ -17,6 +20,7 @@ data class NonTeachingStaffDto(
     val address: String,
     val hireDate: LocalDate,
     val hourlyRate: Double,
+    val currency: StaffCurrency?,
     /** Rol en formato backend — ej: IT_SUPPORT, CLEANING, etc. */
     val role: NonTeachingRole,
     /** Alias de `role` para compatibilidad con frontend que usa `position` */
@@ -32,7 +36,8 @@ data class NonTeachingStaffDto(
     val status: String,
     val attendanceStats: AttendanceStatsDto? = null,
     val hoursWorkedThisMonth: Double? = null,
-    val estimatedEarningsThisMonth: Double? = null,
+    val estimatedEarningsThisMonth: BigDecimal? = null,
+    val totalWorkingDaysInMonth: Int? = null,
     val photoUrl: String? = null,
     val createdAt: LocalDateTime? = null,
     val updatedAt: LocalDateTime? = null
@@ -47,7 +52,9 @@ data class CreateNonTeachingStaffRequest(
     val birthDate: LocalDate,
     val address: String,
     val hireDate: LocalDate,
+    @field:DecimalMin(value = "0.00", inclusive = true, message = "La tarifa por hora no puede ser negativa")
     val hourlyRate: Double,
+    val currency: StaffCurrency,
     /** Puede recibirse como `role` o como `position` (alias frontend) */
     val role: NonTeachingRole? = null,
     val position: NonTeachingRole? = null,
@@ -83,8 +90,13 @@ data class UpdateNonTeachingStaffRequest(
     val lastName: String? = null,
     val email: String? = null,
     val phoneNumber: String? = null,
+    val documentNumber: String? = null,
+    val birthDate: LocalDate? = null,
+    val hireDate: LocalDate? = null,
     val address: String? = null,
+    @field:DecimalMin(value = "0.00", inclusive = true, message = "La tarifa por hora no puede ser negativa")
     val hourlyRate: Double? = null,
+    val currency: StaffCurrency? = null,
     val role: NonTeachingRole? = null,
     val position: NonTeachingRole? = null,
     val companyName: String? = null,
@@ -93,7 +105,8 @@ data class UpdateNonTeachingStaffRequest(
     val observations: String? = null,
     val emergencyContactName: String? = null,
     val emergencyContactPhone: String? = null,
-    val emergencyContact: String? = null
+    val emergencyContact: String? = null,
+    val isActive: Boolean? = null
 ) {
     @get:JsonIgnore
     val resolvedRole: NonTeachingRole?
