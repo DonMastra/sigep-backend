@@ -148,6 +148,9 @@ Los controladores que necesitan actor actual leen `userId` y `userRole` desde `H
   y conserva la columna singular durante la etapa compatible.
 - `V38__add_user_account_optimistic_lock.sql` agrega `users.version` no negativa para editar datos
   personales y de contacto con concurrencia optimista, sin modificar roles ni titularidad financiera.
+- `V39__preserve_non_teaching_rate_history.sql` agrega moneda nullable a los legajos y snapshots
+  de tarifa/moneda a nuevas asistencias no docentes; no infiere moneda ni tarifa historica para filas
+  existentes.
 - Las migraciones SQL se validan sobre una base descartable o dentro de una transaccion
   revertida; no se deben ejecutar automaticamente sobre el contenedor actual sin backup
   y aprobacion explicita.
@@ -231,6 +234,13 @@ El alta de docente (`POST /staff/teaching`) crea en una transaccion una cuenta a
 aplica `assignedCourseIds`. La edicion no acepta credenciales; puede cambiar datos
 personales/laborales, vinculo y asignaciones. Las fotos se cargan por multipart y se
 persisten en PostgreSQL.
+
+La asistencia de docentes y no docentes se conserva por fecha y expone resumenes con periodo
+`YYYY-MM`. Administracion gestiona ambos historiales; un docente solo puede consultar el propio.
+Los importes no docentes son referencias administrativas, no liquidaciones. Cada registro nuevo con
+horas conserva tarifa y moneda; los legajos legacy sin moneda requieren confirmacion administrativa.
+En docentes, `monthlySalary` y `paymentStatus` siguen siendo datos vigentes del legajo y no un
+historial de liquidaciones; cualquier nomina historica debe modelarse como un recurso separado.
 
 ### Exams
 

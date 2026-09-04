@@ -872,14 +872,14 @@ Base: `/api/v1/staff/teaching`
 | Metodo | Ruta | Roles | Descripcion |
 |---|---|---|---|
 | GET | `/` | ADMIN | Lista docentes. |
-| GET | `/{id}` | ADMIN, TEACHER | Detalle de docente. |
+| GET | `/{id}` | ADMIN | Detalle administrativo del docente, incluido salario y contacto. |
 | GET | `/search?query=` | ADMIN | Busca docentes. |
 | GET | `/assignable` | ADMIN | Lista personal activo enlazado a cuentas activas `TEACHER` o `ADMIN`; `id` pertenece a `users`. |
 | POST | `/resolve` | ADMIN, TEACHER | Resuelve ids a nombres. |
 | POST | `/` | ADMIN | Crea docente. |
 | PUT | `/{id}` | ADMIN | Actualiza docente. |
-| POST | `/{id}/photo` | ADMIN | Sube foto multipart (`file`); valida tipo y tamaño. |
-| GET | `/{id}/photo` | ADMIN, TEACHER | Descarga foto binaria si existe. |
+| POST | `/{id}/photo` | ADMIN | Sube foto multipart (parte `photo`); valida tipo y tamaño. |
+| GET | `/{id}/photo` | ADMIN, TEACHER | Descarga foto binaria si existe; TEACHER solo puede consultar la propia. |
 | DELETE | `/{id}` | ADMIN | Soft delete. |
 
 `CreateTeachingStaffRequest` requiere `username` e `initialPassword` (minimo 8 caracteres)
@@ -900,7 +900,7 @@ Base: `/api/v1/staff/non-teaching`
 | Metodo | Ruta | Roles | Descripcion |
 |---|---|---|---|
 | GET | `/` | ADMIN | Lista personal no docente. |
-| GET | `/{id}` | ADMIN, TEACHER | Detalle. |
+| GET | `/{id}` | ADMIN | Detalle administrativo. |
 | GET | `/by-role/{role}` | ADMIN | Filtra por rol. |
 | GET | `/search?query=` | ADMIN | Busca no docentes. |
 | POST | `/` | ADMIN | Crea no docente. |
@@ -916,7 +916,9 @@ Base: `/api/v1/staff/attendance`
 | POST | `/` | ADMIN | Registra asistencia de personal. |
 | PUT | `/{id}` | ADMIN | Actualiza asistencia. |
 | GET | `/teaching/{staffId}?startDate=&endDate=` | ADMIN, TEACHER | Asistencia docente; TEACHER solo puede consultar su propio legajo vinculado. |
-| GET | `/non-teaching/{staffId}?startDate=&endDate=` | ADMIN, TEACHER | Asistencia no docente. |
+| GET | `/teaching/{staffId}/monthly-summary?month=YYYY-MM` | ADMIN, TEACHER | Resumen mensual docente; TEACHER solo puede consultar su propio legajo vinculado. |
+| GET | `/non-teaching/{staffId}?startDate=&endDate=` | ADMIN | Historial de actividad no docente por rango. |
+| GET | `/non-teaching/{staffId}/monthly-summary?month=YYYY-MM` | ADMIN | Resumen mensual administrativo de horas, asistencia, cobertura e importe estimado. |
 | DELETE | `/{id}` | ADMIN | Elimina asistencia. |
 
 Enums relevantes:
@@ -924,8 +926,20 @@ Enums relevantes:
 ```ts
 type StaffType = 'TEACHING' | 'NON_TEACHING';
 type AttendanceStatus = 'PRESENT' | 'ABSENT' | 'LATE' | 'EXCUSED' | 'SICK_LEAVE' | 'VACATION';
-type PaymentStatus = 'PENDING' | 'PAID' | 'PARTIAL' | 'OVERDUE';
+type PaymentStatus = 'UP_TO_DATE' | 'PENDING' | 'OVERDUE' | 'PARTIALLY_PAID';
+type StaffCurrency = 'ARS' | 'USD';
 ```
+
+`currency` es obligatoria en las altas docentes y no docentes. Puede aparecer `null` al consultar
+legajos creados antes de V39 hasta que Administración confirme la moneda vigente.
+
+Los endpoints `monthly-summary` hacen explícito el período y no sobrescriben meses anteriores.
+`businessDaysInMonth` y `elapsedBusinessDays` cuentan lunes a viernes desde la fecha de
+contratación; no descuentan feriados institucionales. `attendanceRate` mide presencia sobre los
+registros cargados y `dataCoverageRate` separa la cobertura de carga sobre días hábiles transcurridos.
+Para no docentes, cada asistencia nueva conserva `hourlyRateSnapshot` y `currencySnapshot`. Los
+registros anteriores a V39 no se retrocompletan con valores inventados y el resumen informa
+`usesCurrentRateFallback=true` cuando debe utilizar la tarifa vigente.
 
 ## Exams
 

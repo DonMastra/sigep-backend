@@ -1,6 +1,7 @@
 package com.sigep.staff.domain.model
 
 import jakarta.persistence.*
+import java.math.BigDecimal
 import java.time.LocalDate
 import java.time.LocalTime
 
@@ -43,7 +44,14 @@ data class StaffAttendance(
     val notes: String? = null,
 
     @Column(name = "hours_worked")
-    val hoursWorked: Double? = null
+    val hoursWorked: Double? = null,
+
+    @Column(name = "hourly_rate_snapshot", precision = 19, scale = 2)
+    val hourlyRateSnapshot: BigDecimal? = null,
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "currency_snapshot", length = 3)
+    val currencySnapshot: StaffCurrency? = null
 ) {
     init {
         require(teachingStaff != null || nonTeachingStaff != null) {

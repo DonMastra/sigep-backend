@@ -39,6 +39,10 @@ data class NonTeachingStaff(
     val hourlyRate: Double,
 
     @Enumerated(EnumType.STRING)
+    @Column(length = 3)
+    val currency: StaffCurrency? = null,
+
+    @Enumerated(EnumType.STRING)
     @Column(nullable = true)
     val role: NonTeachingRole? = null,
 
@@ -71,5 +75,10 @@ enum class NonTeachingRole {
     SECURITY,
     ADMINISTRATION,
     OTHER
+}
+
+enum class StaffCurrency {
+    ARS,
+    USD
 }
 

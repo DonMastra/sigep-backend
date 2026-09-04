@@ -3,7 +3,6 @@ package com.sigep.staff.presentation.controller
 import com.sigep.common.application.dto.ApiResponse
 import com.sigep.common.application.dto.PageResponse
 import com.sigep.security.application.annotation.RequireAdmin
-import com.sigep.security.application.annotation.RequireAdminOrTeacher
 import com.sigep.staff.application.dto.CreateNonTeachingStaffRequest
 import com.sigep.staff.application.dto.NonTeachingStaffDto
 import com.sigep.staff.application.dto.UpdateNonTeachingStaffRequest
@@ -39,8 +38,8 @@ class NonTeachingStaffController(
     }
 
     @GetMapping("/{id}")
-    @RequireAdminOrTeacher
-    @Operation(summary = "Get non-teaching staff by ID", description = "Retrieve detailed information of a non-teaching staff member including hours worked and earnings")
+    @RequireAdmin
+    @Operation(summary = "Get non-teaching staff by ID", description = "Retrieve administrative details and current-period activity indicators for a non-teaching staff member")
     fun getNonTeachingStaffById(@PathVariable id: Long): ResponseEntity<ApiResponse<NonTeachingStaffDto>> {
         val staff = nonTeachingStaffService.getNonTeachingStaffById(id)
         return ResponseEntity.ok(ApiResponse.success(staff))

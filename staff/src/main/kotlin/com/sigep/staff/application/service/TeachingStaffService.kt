@@ -4,6 +4,7 @@ import com.sigep.common.application.dto.PageResponse
 import com.sigep.common.application.exception.ResourceNotFoundException
 import com.sigep.common.application.exception.BusinessException
 import com.sigep.common.application.exception.ValidationException
+import com.sigep.common.application.exception.ForbiddenException
 import com.sigep.courses.domain.model.Course
 import com.sigep.courses.domain.repository.CourseRepository
 import com.sigep.courses.domain.repository.EnrollmentRepository
@@ -182,6 +183,7 @@ class TeachingStaffService(
             address = request.address,
             hireDate = request.hireDate,
             monthlySalary = request.monthlySalary,
+            currency = request.currency,
             paymentStatus = request.paymentStatus,
             specialization = request.specialization,
             qualifications = request.qualifications,
@@ -234,6 +236,7 @@ class TeachingStaffService(
             address = request.address ?: staff.address,
             linkedUserId = linkedUserId,
             monthlySalary = request.monthlySalary ?: staff.monthlySalary,
+            currency = request.currency ?: staff.currency,
             paymentStatus = request.paymentStatus ?: staff.paymentStatus,
             specialization = request.specialization ?: staff.specialization,
             qualifications = request.qualifications ?: staff.qualifications,
@@ -289,9 +292,15 @@ class TeachingStaffService(
     }
 
     @Transactional(readOnly = true)
-    fun getPhoto(id: Long): TeachingStaffPhoto {
+    fun getPhoto(id: Long, actorUserId: Long?, actorRole: String?): TeachingStaffPhoto {
         val staff = teachingStaffRepository.findById(id)
             .orElseThrow { ResourceNotFoundException("Teaching staff not found with id: $id") }
+        if (actorRole == "TEACHER" && staff.linkedUserId != actorUserId) {
+            throw ForbiddenException("Los docentes solo pueden consultar su propia foto de legajo")
+        }
+        if (actorRole != "ADMIN" && actorRole != "TEACHER") {
+            throw ForbiddenException("No tiene permisos para consultar la foto de legajo")
+        }
         return TeachingStaffPhoto(
             data = staff.photoData ?: throw ResourceNotFoundException("Teaching staff photo not found for id: $id"),
             contentType = staff.photoContentType ?: "application/octet-stream",
@@ -332,6 +341,7 @@ class TeachingStaffService(
             address = staff.address,
             hireDate = staff.hireDate,
             monthlySalary = staff.monthlySalary,
+            currency = staff.currency,
             paymentStatus = staff.paymentStatus,
             status = if (staff.isActive) "ACTIVE" else "INACTIVE",
             assignedStudentsCount = activeStudents,
@@ -356,26 +366,24 @@ class TeachingStaffService(
         val now = LocalDate.now()
         val startOfMonth = now.withDayOfMonth(1)
         val endOfMonth = YearMonth.now().atEndOfMonth()
+        val attendanceEnd = now.coerceAtMost(endOfMonth)
 
-        // Calcular días laborales reales del mes (lunes a viernes)
-        val totalWorkingDays = generateSequence(startOfMonth) { it.plusDays(1) }
-            .takeWhile { !it.isAfter(endOfMonth) }
-            .count { it.dayOfWeek.value in 1..5 }
+        val totalWorkingDays = countBusinessDays(YearMonth.now(), staff.hireDate)
 
         val presentDays = attendanceRepository.countTeachingStaffAttendanceByStatus(
-            staff.id!!, AttendanceStatus.PRESENT, startOfMonth, endOfMonth
+            staff.id!!, AttendanceStatus.PRESENT, startOfMonth, attendanceEnd
         ).toInt()
 
         val absentDays = attendanceRepository.countTeachingStaffAttendanceByStatus(
-            staff.id, AttendanceStatus.ABSENT, startOfMonth, endOfMonth
+            staff.id, AttendanceStatus.ABSENT, startOfMonth, attendanceEnd
         ).toInt()
 
         val lateDays = attendanceRepository.countTeachingStaffAttendanceByStatus(
-            staff.id, AttendanceStatus.LATE, startOfMonth, endOfMonth
+            staff.id, AttendanceStatus.LATE, startOfMonth, attendanceEnd
         ).toInt()
 
         val totalDays = presentDays + absentDays + lateDays
-        val attendanceRate = if (totalWorkingDays > 0) ((presentDays + lateDays).toDouble() / totalWorkingDays.toDouble()) * 100 else 0.0
+        val attendanceRate = if (totalDays > 0) ((presentDays + lateDays).toDouble() / totalDays.toDouble()) * 100 else 0.0
 
         return dto.copy(
             totalWorkingDaysInMonth = totalWorkingDays,
@@ -395,13 +403,11 @@ class TeachingStaffService(
         val now = LocalDate.now()
         val startOfMonth = now.withDayOfMonth(1)
         val endOfMonth = YearMonth.now().atEndOfMonth()
-        val totalWorkingDays = generateSequence(startOfMonth) { it.plusDays(1) }
-            .takeWhile { !it.isAfter(endOfMonth) }
-            .count { it.dayOfWeek.value in 1..5 }
+        val attendanceEnd = now.coerceAtMost(endOfMonth)
         val statisticsByStaff = attendanceRepository.summarizeTeachingAttendance(
             staffMembers.mapNotNull { it.id },
             startOfMonth,
-            endOfMonth
+            attendanceEnd
         ).associateBy { it.staffId }
 
         return staffMembers.map { staff ->
@@ -409,19 +415,28 @@ class TeachingStaffService(
             val presentDays = statistics?.presentDays?.toInt() ?: 0
             val absentDays = statistics?.absentDays?.toInt() ?: 0
             val lateDays = statistics?.lateDays?.toInt() ?: 0
+            val totalDays = presentDays + absentDays + lateDays
+            val totalWorkingDays = countBusinessDays(YearMonth.now(), staff.hireDate)
             toDto(staff).copy(
                 totalWorkingDaysInMonth = totalWorkingDays,
                 attendanceStats = AttendanceStatsDto(
-                    totalDays = presentDays + absentDays + lateDays,
+                    totalDays = totalDays,
                     presentDays = presentDays,
                     absentDays = absentDays,
                     lateDays = lateDays,
-                    attendanceRate = if (totalWorkingDays > 0) {
-                        ((presentDays + lateDays).toDouble() / totalWorkingDays.toDouble()) * 100
+                    attendanceRate = if (totalDays > 0) {
+                        ((presentDays + lateDays).toDouble() / totalDays.toDouble()) * 100
                     } else 0.0
                 )
             )
         }
+    }
+
+    private fun countBusinessDays(month: YearMonth, hireDate: LocalDate): Int {
+        val start = if (hireDate.isAfter(month.atDay(1))) hireDate else month.atDay(1)
+        return generateSequence(start) { it.plusDays(1) }
+            .takeWhile { !it.isAfter(month.atEndOfMonth()) }
+            .count { it.dayOfWeek.value in 1..5 }
     }
 
     private fun validateTeacherAccount(userId: Long, currentStaffId: Long?): User {

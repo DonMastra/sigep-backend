@@ -17,6 +17,8 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDate
 import java.time.YearMonth
+import java.math.BigDecimal
+import java.math.RoundingMode
 
 @Service
 @Transactional
@@ -37,7 +39,7 @@ class NonTeachingStaffService(
         val direction = if (order.uppercase() == "DESC") Sort.Direction.DESC else Sort.Direction.ASC
         val pageable = PageRequest.of(page, limit, Sort.by(direction, sort))
         val staffPage = nonTeachingStaffRepository.findByIsActiveTrue(pageable)
-        val staffDtos = staffPage.content.map { toDto(it) }
+        val staffDtos = toDtosWithCurrentMetrics(staffPage.content)
 
         return PageResponse(
             content = staffDtos,
@@ -69,7 +71,7 @@ class NonTeachingStaffService(
 
         val pageable = PageRequest.of(page, limit, Sort.by(Sort.Direction.ASC, "lastName"))
         val staffPage = nonTeachingStaffRepository.findByRoleAndIsActiveTrue(role, pageable)
-        val staffDtos = staffPage.content.map { toDto(it) }
+        val staffDtos = toDtosWithCurrentMetrics(staffPage.content)
 
         return PageResponse(
             content = staffDtos,
@@ -86,7 +88,7 @@ class NonTeachingStaffService(
 
         val pageable = PageRequest.of(page, limit, Sort.by(Sort.Direction.ASC, "lastName"))
         val staffPage = nonTeachingStaffRepository.searchByQuery(query, pageable)
-        val staffDtos = staffPage.content.map { toDto(it) }
+        val staffDtos = toDtosWithCurrentMetrics(staffPage.content)
 
         return PageResponse(
             content = staffDtos,
@@ -119,6 +121,7 @@ class NonTeachingStaffService(
             address = request.address,
             hireDate = request.hireDate,
             hourlyRate = request.hourlyRate,
+            currency = request.currency,
             role = request.resolvedRole,
             companyName = request.resolvedCompanyName,
             assignedTasks = request.assignedTasks,
@@ -147,14 +150,25 @@ class NonTeachingStaffService(
                 }
             }
         }
+        request.documentNumber?.let { newDocument ->
+            if (newDocument != staff.documentNumber) {
+                nonTeachingStaffRepository.findByDocumentNumber(newDocument)?.let {
+                    throw IllegalArgumentException("Document number already exists: $newDocument")
+                }
+            }
+        }
 
         val updatedStaff = staff.copy(
             firstName = request.firstName ?: staff.firstName,
             lastName = request.lastName ?: staff.lastName,
             email = request.email ?: staff.email,
             phoneNumber = request.phoneNumber ?: staff.phoneNumber,
+            documentNumber = request.documentNumber ?: staff.documentNumber,
+            birthDate = request.birthDate ?: staff.birthDate,
+            hireDate = request.hireDate ?: staff.hireDate,
             address = request.address ?: staff.address,
             hourlyRate = request.hourlyRate ?: staff.hourlyRate,
+            currency = request.currency ?: staff.currency,
             role = request.resolvedRole ?: staff.role,
             companyName = request.resolvedCompanyName ?: staff.companyName,
             assignedTasks = request.assignedTasks ?: staff.assignedTasks,
@@ -164,6 +178,7 @@ class NonTeachingStaffService(
         )
 
         val savedStaff = nonTeachingStaffRepository.save(updatedStaff)
+        request.isActive?.let { savedStaff.isActive = it }
         log.info("Non-teaching staff updated successfully with id: {}", savedStaff.id)
 
         return toDto(savedStaff)
@@ -196,6 +211,7 @@ class NonTeachingStaffService(
             address = staff.address,
             hireDate = staff.hireDate,
             hourlyRate = staff.hourlyRate,
+            currency = staff.currency,
             role = resolvedRole,
             position = resolvedRole.name,
             companyName = staff.companyName ?: "",
@@ -207,48 +223,59 @@ class NonTeachingStaffService(
             status = if (staff.isActive) "ACTIVE" else "INACTIVE",
             attendanceStats = AttendanceStatsDto.EMPTY,
             hoursWorkedThisMonth = 0.0,
-            estimatedEarningsThisMonth = 0.0,
+            estimatedEarningsThisMonth = BigDecimal.ZERO.setScale(2),
+            totalWorkingDaysInMonth = countBusinessDays(YearMonth.now(), staff.hireDate),
             createdAt = staff.createdAt,
             updatedAt = staff.updatedAt
         )
     }
 
     private fun toDtoWithDetails(staff: NonTeachingStaff): NonTeachingStaffDto {
-        val dto = toDto(staff)
-
         val now = LocalDate.now()
         val startOfMonth = now.withDayOfMonth(1)
         val endOfMonth = YearMonth.now().atEndOfMonth()
-
-        // Calcular días laborales reales del mes (lunes a viernes)
-        val totalWorkingDays = generateSequence(startOfMonth) { it.plusDays(1) }
-            .takeWhile { !it.isAfter(endOfMonth) }
-            .count { it.dayOfWeek.value in 1..5 }
-
-        val hoursWorked = attendanceRepository.sumHoursWorkedByNonTeachingStaff(
+        val records = attendanceRepository.findAllByNonTeachingStaffIdAndAttendanceDateBetween(
             staff.id!!, startOfMonth, endOfMonth
-        ) ?: 0.0
+        )
+        return toDtoForMonth(staff, records, YearMonth.now())
+    }
 
-        val estimatedEarnings = hoursWorked * staff.hourlyRate
+    private fun toDtosWithCurrentMetrics(staff: List<NonTeachingStaff>): List<NonTeachingStaffDto> {
+        if (staff.isEmpty()) return emptyList()
+        val month = YearMonth.now()
+        val recordsByStaff = attendanceRepository.findAllByNonTeachingStaffIdsAndAttendanceDateBetween(
+            staff.mapNotNull { it.id }, month.atDay(1), month.atEndOfMonth()
+        ).groupBy { it.nonTeachingStaff?.id }
+        return staff.map { member -> toDtoForMonth(member, recordsByStaff[member.id].orEmpty(), month) }
+    }
 
-        val presentDays = attendanceRepository.countNonTeachingStaffAttendanceByStatus(
-            staff.id, AttendanceStatus.PRESENT, startOfMonth, endOfMonth
-        ).toInt()
+    private fun toDtoForMonth(
+        staff: NonTeachingStaff,
+        records: List<com.sigep.staff.domain.model.StaffAttendance>,
+        month: YearMonth
+    ): NonTeachingStaffDto {
+        val dto = toDto(staff)
+        val totalWorkingDays = countBusinessDays(month, staff.hireDate)
+        val today = LocalDate.now()
+        val eligibleRecords = records.filter {
+            !it.attendanceDate.isBefore(staff.hireDate) && !it.attendanceDate.isAfter(today)
+        }
+        val hoursWorked = eligibleRecords.sumOf { it.hoursWorked ?: 0.0 }
 
-        val absentDays = attendanceRepository.countNonTeachingStaffAttendanceByStatus(
-            staff.id, AttendanceStatus.ABSENT, startOfMonth, endOfMonth
-        ).toInt()
+        val estimatedEarnings = BigDecimal.valueOf(staff.hourlyRate)
+            .multiply(BigDecimal.valueOf(hoursWorked))
+            .setScale(2, RoundingMode.HALF_EVEN)
 
-        val lateDays = attendanceRepository.countNonTeachingStaffAttendanceByStatus(
-            staff.id, AttendanceStatus.LATE, startOfMonth, endOfMonth
-        ).toInt()
-
-        val totalDays = presentDays + absentDays + lateDays
-        val attendanceRate = if (totalWorkingDays > 0) ((presentDays + lateDays).toDouble() / totalWorkingDays.toDouble()) * 100 else 0.0
+        val presentDays = eligibleRecords.count { it.status == AttendanceStatus.PRESENT }
+        val absentDays = eligibleRecords.count { it.status == AttendanceStatus.ABSENT }
+        val lateDays = eligibleRecords.count { it.status == AttendanceStatus.LATE }
+        val totalDays = eligibleRecords.size
+        val attendanceRate = if (totalDays > 0) ((presentDays + lateDays).toDouble() / totalDays.toDouble()) * 100 else 0.0
 
         return dto.copy(
             hoursWorkedThisMonth = hoursWorked,
             estimatedEarningsThisMonth = estimatedEarnings,
+            totalWorkingDaysInMonth = totalWorkingDays,
             attendanceStats = AttendanceStatsDto(
                 totalDays = totalDays,
                 presentDays = presentDays,
@@ -257,6 +284,13 @@ class NonTeachingStaffService(
                 attendanceRate = attendanceRate
             )
         )
+    }
+
+    private fun countBusinessDays(month: YearMonth, hireDate: LocalDate): Int {
+        val start = if (hireDate.isAfter(month.atDay(1))) hireDate else month.atDay(1)
+        return generateSequence(start) { it.plusDays(1) }
+            .takeWhile { !it.isAfter(month.atEndOfMonth()) }
+            .count { it.dayOfWeek.value in 1..5 }
     }
 }
 
