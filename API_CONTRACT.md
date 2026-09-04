@@ -752,6 +752,9 @@ Base: `/api/v1/sessions`
 | GET | `/{id}/attendance-summary` | ADMIN, TEACHER | Resumen de asistencia de sesion. |
 | GET | `/calendar?startDate=&endDate=&courseId=` | ADMIN, TEACHER | Calendario de sesiones. |
 
+`POST /check-conflicts` acepta `excludeSessionId?: number` para que la edicion omita la
+propia sesion al verificar solapamientos. La hora de fin debe ser posterior a la de inicio.
+
 ## Attendance
 
 Base: `/api/v1/attendance`
@@ -1055,6 +1058,9 @@ Query:
 - `limit?: number`
 - `size?: number`
 - `classroomId?: number`
+
+La actualizacion permite cambiar `classroomId`, dia, horas, notas y estado. Al mover un slot,
+el aula destino debe existir, estar activa y no superponerse con otro slot del mismo dia.
 
 ```ts
 type SlotDayOfWeek = 'MONDAY' | 'TUESDAY' | 'WEDNESDAY' | 'THURSDAY' | 'FRIDAY' | 'SATURDAY' | 'SUNDAY';

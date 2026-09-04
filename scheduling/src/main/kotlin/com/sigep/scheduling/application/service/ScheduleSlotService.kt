@@ -75,13 +75,25 @@ class ScheduleSlotService(
         val slot = slotRepository.findById(id)
             .orElseThrow { ResourceNotFoundException("Schedule slot not found with id: $id") }
 
+        val newClassroom = request.classroomId
+            ?.takeIf { it != slot.classroom.id }
+            ?.let { classroomId ->
+                classroomRepository.findById(classroomId)
+                    .orElseThrow { ResourceNotFoundException("Classroom not found with id: $classroomId") }
+                    .also { classroom ->
+                        if (!classroom.active) {
+                            throw BusinessException("Cannot move slot to an inactive classroom")
+                        }
+                    }
+            }
+            ?: slot.classroom
         val newDay = request.dayOfWeek ?: slot.dayOfWeek
         val newStart = request.startTime ?: slot.startTime
         val newEnd = request.endTime ?: slot.endTime
 
         validateTimeOrder(newStart, newEnd)
-        if (request.dayOfWeek != null || request.startTime != null || request.endTime != null) {
-            checkOverlap(slot.classroom.id!!, newDay, newStart, newEnd, excludeSlotId = id)
+        if (request.classroomId != null || request.dayOfWeek != null || request.startTime != null || request.endTime != null) {
+            checkOverlap(newClassroom.id!!, newDay, newStart, newEnd, excludeSlotId = id)
         }
 
         if (request.active == false && slot.active) {
@@ -89,6 +101,7 @@ class ScheduleSlotService(
         }
 
         val updated = slot.copy(
+            classroom = newClassroom,
             dayOfWeek = newDay,
             startTime = newStart,
             endTime = newEnd,

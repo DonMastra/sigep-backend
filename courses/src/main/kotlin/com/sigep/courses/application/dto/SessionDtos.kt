@@ -122,7 +122,10 @@ data class ConflictCheckRequest(
     val startTime: LocalTime,
 
     @field:NotNull(message = "End time is required")
-    val endTime: LocalTime
+    val endTime: LocalTime,
+
+    @field:Min(value = 1, message = "Excluded session ID must be greater than 0")
+    val excludeSessionId: Long? = null
 )
 
 data class ConflictDto(
