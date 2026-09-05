@@ -15,7 +15,7 @@ El módulo **Staff** proporciona funcionalidades completas para la gestión del 
 - **Datos Personales**: Nombre, email, teléfono, documento, fecha de nacimiento, dirección
 - **Información Laboral**: Fecha de contratación, salario mensual, estado de pago, especialización
 - **Gestión Académica**: Contador de estudiantes asignados, cursos asignados (integración con módulo courses)
-- **Asistencia**: Estadísticas mensuales calculadas sobre días laborales reales (L-V)
+- **Actividad mensual**: Historial fechado de asistencia y horas, con salario mensual vigente como importe administrativo de referencia
 - **Contacto de Emergencia**: Nombre y teléfono (se aceptan como dos campos separados o como string único `"Nombre / Teléfono"`)
 - **Soft Delete**: Desactivación lógica (no borrado físico)
 
@@ -32,7 +32,7 @@ El módulo **Staff** proporciona funcionalidades completas para la gestión del 
 
 - Registro de entrada/salida (check-in / check-out)
 - Estados: `PRESENT`, `ABSENT`, `LATE`, `EXCUSED`, `SICK_LEAVE`, `VACATION`
-- Horas trabajadas por registro (especialmente útil para no docentes)
+- Horas trabajadas por registro para docentes y no docentes
 - Reportes por período con estadísticas automáticas
 
 ---
@@ -359,6 +359,7 @@ Los servicios usan Redis Cache para optimizar lecturas:
 1. **Soft Delete**: `DELETE` solo marca `isActive = false`. El registro permanece en la base de datos.
 2. **`totalWorkingDaysInMonth`**: Se calcula dinámicamente como la cantidad de días de lunes a viernes del mes en curso desde la fecha de contratación.
 3. **`attendanceRate`**: tanto el campo compatible del mes actual como `monthly-summary` miden presencia sobre registros. El resumen mensual expone por separado `dataCoverageRate` sobre días hábiles transcurridos.
-4. **`estimatedEarningsThisMonth`**: campo compatible del mes actual. Para consulta histórica usar `monthly-summary`, que conserva la tarifa y moneda aplicadas a cada nuevo registro desde V39.
+4. **`estimatedEarningsThisMonth`**: campo compatible del mes actual no docente. Para consulta histórica usar `monthly-summary`, que conserva la tarifa y moneda aplicadas a cada nuevo registro desde V39.
 5. **Historial mensual**: `staff_attendance` conserva la fecha de cada registro para docentes y no docentes. El resumen separa presencia sobre registros de cobertura de carga sobre días hábiles transcurridos.
-6. **Importe estimado**: es una referencia administrativa (`horas × tarifa`), no una liquidación de haberes ni un estado de pago.
+6. **Importe no docente**: es una referencia administrativa (`horas × tarifa`), no una liquidación de haberes ni un estado de pago. `amountIsHistorical` solo es verdadero cuando todo el importe usa valores preservados en los registros.
+7. **Importe docente**: el resumen devuelve el salario mensual vigente del legajo con `compensationBasis=MONTHLY_SALARY` y `amountIsHistorical=false`. No multiplica horas ni representa una liquidación o el salario histórico del período seleccionado.
