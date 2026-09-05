@@ -62,7 +62,7 @@ class StaffAttendanceService(
                     checkOutTime = request.checkOutTime.takeIf { workedStatus },
                     status = request.status,
                     notes = request.notes,
-                    hoursWorked = resolveHoursWorked(request.status, request.checkInTime, request.checkOutTime, request.hoursWorked, false)
+                    hoursWorked = resolveHoursWorked(request.status, request.checkInTime, request.checkOutTime, request.hoursWorked, true)
                 )
             }
             request.nonTeachingStaffId != null -> {
@@ -133,7 +133,7 @@ class StaffAttendanceService(
             finalCheckIn,
             finalCheckOut,
             hoursCandidate,
-            attendance.nonTeachingStaff != null
+            true
         )
         val currentNonTeachingStaff = attendance.nonTeachingStaff
         if (currentNonTeachingStaff != null && (resolvedHours ?: 0.0) > 0.0 &&
@@ -252,7 +252,9 @@ class StaffAttendanceService(
             staffType = StaffType.TEACHING,
             hireDate = staff.hireDate,
             month = month,
-            records = records
+            records = records,
+            currentMonthlyAmount = BigDecimal.valueOf(staff.monthlySalary),
+            currentCurrency = staff.currency
         )
     }
 
@@ -325,6 +327,7 @@ class StaffAttendanceService(
         month: YearMonth,
         records: List<StaffAttendance>,
         currentHourlyRate: BigDecimal? = null,
+        currentMonthlyAmount: BigDecimal? = null,
         currentCurrency: com.sigep.staff.domain.model.StaffCurrency? = null
     ): StaffMonthlySummaryDto {
         val start = month.atDay(1)
@@ -361,19 +364,28 @@ class StaffAttendanceService(
         val currencies = rates.mapNotNull { it.third }.distinct()
         val hasMixedCurrencies = currencies.size > 1
         val usesFallback = currentHourlyRate != null && elapsedRecords.any {
-            (it.hoursWorked ?: 0.0) > 0.0 && it.hourlyRateSnapshot == null
+            (it.hoursWorked ?: 0.0) > 0.0 &&
+                (it.hourlyRateSnapshot == null || it.currencySnapshot == null)
         }
         val summaryCurrency = if (hasMixedCurrencies) null else currencies.singleOrNull() ?: currentCurrency
-        val estimatedAmount = if (
-            staffType == StaffType.NON_TEACHING &&
-            !hasMixedCurrencies &&
-            summaryCurrency != null &&
-            rates.all { it.second != null && it.third != null }
-        ) {
-            rates.fold(BigDecimal.ZERO) { total, (hours, rate, _) ->
-                total + rate!!.multiply(BigDecimal.valueOf(hours))
-            }.setScale(2, RoundingMode.HALF_EVEN)
-        } else null
+        val estimatedAmount = when (staffType) {
+            StaffType.NON_TEACHING -> if (
+                !hasMixedCurrencies &&
+                summaryCurrency != null &&
+                rates.all { it.second != null && it.third != null }
+            ) {
+                rates.fold(BigDecimal.ZERO) { total, (hours, rate, _) ->
+                    total + rate!!.multiply(BigDecimal.valueOf(hours))
+                }.setScale(2, RoundingMode.HALF_EVEN)
+            } else null
+            StaffType.TEACHING -> currentMonthlyAmount
+                ?.takeIf { summaryCurrency != null }
+                ?.setScale(2, RoundingMode.HALF_EVEN)
+        }
+        val compensationBasis = when (staffType) {
+            StaffType.NON_TEACHING -> StaffCompensationBasis.HOURLY_RATE
+            StaffType.TEACHING -> StaffCompensationBasis.MONTHLY_SALARY
+        }
 
         return StaffMonthlySummaryDto(
             staffId = staffId,
@@ -398,6 +410,8 @@ class StaffAttendanceService(
             hoursWorked = BigDecimal.valueOf(hoursWorked).setScale(2, RoundingMode.HALF_EVEN).toDouble(),
             estimatedAmount = estimatedAmount,
             currency = summaryCurrency,
+            compensationBasis = compensationBasis,
+            amountIsHistorical = staffType == StaffType.NON_TEACHING && estimatedAmount != null && !usesFallback,
             usesCurrentRateFallback = usesFallback,
             hasMixedCurrencies = hasMixedCurrencies
         )
@@ -450,7 +464,7 @@ class StaffAttendanceService(
         } else null
         val resolved = derived ?: providedHours
         if (requireForPresence && (resolved == null || resolved <= 0.0)) {
-            throw ValidationException("Para una asistencia no docente debe indicar entrada y salida u horas trabajadas")
+            throw ValidationException("Para Presente o Tardanza debe indicar entrada y salida u horas trabajadas")
         }
         if (resolved != null && (resolved < 0.0 || resolved > 24.0)) {
             throw ValidationException("Las horas trabajadas deben estar entre 0 y 24")

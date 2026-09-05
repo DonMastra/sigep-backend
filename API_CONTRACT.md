@@ -928,6 +928,7 @@ type StaffType = 'TEACHING' | 'NON_TEACHING';
 type AttendanceStatus = 'PRESENT' | 'ABSENT' | 'LATE' | 'EXCUSED' | 'SICK_LEAVE' | 'VACATION';
 type PaymentStatus = 'UP_TO_DATE' | 'PENDING' | 'OVERDUE' | 'PARTIALLY_PAID';
 type StaffCurrency = 'ARS' | 'USD';
+type StaffCompensationBasis = 'HOURLY_RATE' | 'MONTHLY_SALARY';
 ```
 
 `currency` es obligatoria en las altas docentes y no docentes. Puede aparecer `null` al consultar
@@ -937,9 +938,15 @@ Los endpoints `monthly-summary` hacen explícito el período y no sobrescriben m
 `businessDaysInMonth` y `elapsedBusinessDays` cuentan lunes a viernes desde la fecha de
 contratación; no descuentan feriados institucionales. `attendanceRate` mide presencia sobre los
 registros cargados y `dataCoverageRate` separa la cobertura de carga sobre días hábiles transcurridos.
+`hoursWorked` suma las horas de los registros del período para ambos tipos de personal. En docentes,
+`estimatedAmount` expone el salario mensual vigente del legajo como referencia administrativa,
+`compensationBasis=MONTHLY_SALARY` y `amountIsHistorical=false`: no multiplica horas, no liquida
+haberes y no afirma que ese importe haya sido el vigente durante el mes consultado.
 Para no docentes, cada asistencia nueva conserva `hourlyRateSnapshot` y `currencySnapshot`. Los
 registros anteriores a V39 no se retrocompletan con valores inventados y el resumen informa
-`usesCurrentRateFallback=true` cuando debe utilizar la tarifa vigente.
+`usesCurrentRateFallback=true` cuando debe utilizar la tarifa vigente. En ese caso
+`compensationBasis=HOURLY_RATE`; `amountIsHistorical` solo es verdadero cuando todo el importe se
+obtiene de valores conservados en los registros.
 
 ## Exams
 

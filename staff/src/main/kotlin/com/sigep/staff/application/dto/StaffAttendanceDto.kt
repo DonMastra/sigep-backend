@@ -30,6 +30,11 @@ enum class StaffType {
     NON_TEACHING
 }
 
+enum class StaffCompensationBasis {
+    HOURLY_RATE,
+    MONTHLY_SALARY
+}
+
 data class CreateAttendanceRequest(
     val teachingStaffId: Long? = null,
     val nonTeachingStaffId: Long? = null,
@@ -87,6 +92,8 @@ data class StaffMonthlySummaryDto(
     val hoursWorked: Double,
     val estimatedAmount: BigDecimal? = null,
     val currency: StaffCurrency? = null,
+    val compensationBasis: StaffCompensationBasis? = null,
+    val amountIsHistorical: Boolean = false,
     val usesCurrentRateFallback: Boolean = false,
     val hasMixedCurrencies: Boolean = false
 )

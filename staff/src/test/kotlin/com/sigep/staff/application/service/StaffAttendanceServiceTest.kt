@@ -4,6 +4,8 @@ import com.sigep.common.application.exception.DuplicateResourceException
 import com.sigep.common.application.exception.ForbiddenException
 import com.sigep.common.application.exception.ValidationException
 import com.sigep.staff.application.dto.CreateAttendanceRequest
+import com.sigep.staff.application.dto.StaffCompensationBasis
+import com.sigep.staff.application.dto.UpdateAttendanceRequest
 import com.sigep.staff.domain.model.AttendanceStatus
 import com.sigep.staff.domain.model.NonTeachingStaff
 import com.sigep.staff.domain.model.StaffCurrency
@@ -80,6 +82,41 @@ class StaffAttendanceServiceTest {
                     status = AttendanceStatus.PRESENT
                 )
             )
+        }
+    }
+
+    @Test
+    fun `requires worked hours for teaching presence`() {
+        val date = LocalDate.now().minusDays(1)
+        val staff = mockk<TeachingStaff>()
+        every { attendanceRepository.findByTeachingStaffIdAndAttendanceDate(7, date) } returns Optional.empty()
+        every { teachingStaffRepository.findById(7) } returns Optional.of(staff)
+        every { staff.hireDate } returns date.minusYears(1)
+
+        assertThrows(ValidationException::class.java) {
+            service.createAttendance(
+                CreateAttendanceRequest(
+                    teachingStaffId = 7,
+                    attendanceDate = date,
+                    status = AttendanceStatus.PRESENT
+                )
+            )
+        }
+    }
+
+    @Test
+    fun `requires worked hours when updating teaching presence`() {
+        val staff = mockk<TeachingStaff>()
+        val attendance = StaffAttendance(
+            id = 12,
+            teachingStaff = staff,
+            attendanceDate = LocalDate.now().minusDays(1),
+            status = AttendanceStatus.PRESENT
+        )
+        every { attendanceRepository.findById(12) } returns Optional.of(attendance)
+
+        assertThrows(ValidationException::class.java) {
+            service.updateAttendance(12, UpdateAttendanceRequest(status = AttendanceStatus.PRESENT))
         }
     }
 
@@ -170,5 +207,54 @@ class StaffAttendanceServiceTest {
         assertEquals(BigDecimal("800.00"), summary.estimatedAmount)
         assertEquals(StaffCurrency.ARS, summary.currency)
         assertEquals(false, summary.usesCurrentRateFallback)
+        assertEquals(StaffCompensationBasis.HOURLY_RATE, summary.compensationBasis)
+        assertEquals(true, summary.amountIsHistorical)
+    }
+
+    @Test
+    fun `builds teaching hours with the current monthly salary as a non historical reference`() {
+        val staff = mockk<TeachingStaff>()
+        every { staff.id } returns 7
+        every { staff.fullName } returns "Andres Docente"
+        every { staff.linkedUserId } returns 70
+        every { staff.hireDate } returns LocalDate.of(2026, 1, 1)
+        every { staff.monthlySalary } returns 750000.0
+        every { staff.currency } returns StaffCurrency.ARS
+        every { teachingStaffRepository.findById(7) } returns Optional.of(staff)
+        every {
+            attendanceRepository.findAllByTeachingStaffIdAndAttendanceDateBetween(
+                7,
+                LocalDate.of(2026, 8, 1),
+                LocalDate.of(2026, 8, 31)
+            )
+        } returns listOf(
+            StaffAttendance(
+                id = 1,
+                teachingStaff = staff,
+                attendanceDate = LocalDate.of(2026, 8, 3),
+                status = AttendanceStatus.PRESENT,
+                hoursWorked = 1.5
+            ),
+            StaffAttendance(
+                id = 2,
+                teachingStaff = staff,
+                attendanceDate = LocalDate.of(2026, 8, 4),
+                status = AttendanceStatus.PRESENT,
+                hoursWorked = 2.0
+            )
+        )
+
+        val summary = service.getTeachingStaffMonthlySummary(
+            7,
+            java.time.YearMonth.of(2026, 8),
+            actorUserId = 1,
+            actorRole = "ADMIN"
+        )
+
+        assertEquals(3.5, summary.hoursWorked)
+        assertEquals(BigDecimal("750000.00"), summary.estimatedAmount)
+        assertEquals(StaffCurrency.ARS, summary.currency)
+        assertEquals(StaffCompensationBasis.MONTHLY_SALARY, summary.compensationBasis)
+        assertEquals(false, summary.amountIsHistorical)
     }
 }
